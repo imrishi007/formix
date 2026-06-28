@@ -5,38 +5,37 @@ import { useEffect, useRef, useState } from "react";
 const steps = [
   {
     number: "I",
-    title: "Connect your tools",
-    description: "Integrate with your existing stack in minutes. We support 200+ data sources out of the box.",
-    code: `import { optimus } from '@optimus/core'
-
-optimus.connect({
-  source: 'your-database',
-  sync: true
-})`,
+    title: "Write your form",
+    description: "Define structure using .forml DSL.",
+    code: `form Login {
+  email: text
+  password: password
+  rememberMe: checkbox
+  
+  submit: "Sign in"
+}`,
   },
   {
     number: "II",
-    title: "Build your workflow",
-    description: "Design powerful automations with our visual builder or write code directly.",
-    code: `optimus.workflow('process', {
-  trigger: 'event',
-  actions: [
-    'validate',
-    'transform', 
-    'deliver'
-  ]
-})`,
+    title: "Parse & preview",
+    description: "Zero server calls, compiled via WASM.",
+    code: `import { compile } from 'formix'
+
+const form = compile(dslCode)
+const Component = form.render()
+
+// Preview in browser instantly`,
   },
   {
     number: "III",
-    title: "Ship to production",
-    description: "Deploy globally with zero configuration. Your app goes live in under 30 seconds.",
-    code: `optimus.deploy({
-  target: 'production',
-  regions: 'auto'
-})
+    title: "Ship it",
+    description: "Embed anywhere.",
+    code: `<FormixComponent 
+  schema={form}
+  onSubmit={handleData}
+/>
 
-// Deployed to 12 regions`,
+// Works in React, Vue, vanilla JS`,
   },
 ];
 
@@ -97,7 +96,7 @@ export function HowItWorksSection() {
           >
             Three steps.
             <br />
-            <span className="text-background/50">Infinite possibilities.</span>
+            <span className="text-background/50">One form.</span>
           </h2>
         </div>
 

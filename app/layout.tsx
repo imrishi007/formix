@@ -21,8 +21,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Optimus - Platform to Create',
-  description: 'The creative platform for teams who ship. Build, deploy, and scale with unprecedented velocity.',
+  title: 'Formix - Build Forms with Code',
+  description: 'Define forms in a custom DSL. Render live interactive UIs in the browser — powered by a C++ to WASM compiler and AI.',
   generator: 'v0.app',
 }
 
