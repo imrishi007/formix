@@ -1,172 +1,120 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
-import { AnimatedSphere } from "./animated-sphere";
+import { ASTVisualizer } from "./ast-visualizer";
 
-const words = ["create", "build", "scale", "ship"];
+const statusItems = [
+  "v1.1 GRAMMAR",
+  "100% CLIENT-SIDE WASM",
+  "0 NETWORK LATENCY",
+  "HAND-WRITTEN PARSER",
+  "JSON AST OUTPUT",
+];
 
 export function HeroSection() {
   const [isVisible, setIsVisible] = useState(false);
-  const [wordIndex, setWordIndex] = useState(0);
 
   useEffect(() => {
     setIsVisible(true);
   }, []);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setWordIndex((prev) => (prev + 1) % words.length);
-    }, 2500);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
     <section className="relative min-h-screen flex flex-col justify-center overflow-hidden">
-      {/* Animated sphere background */}
-      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] lg:w-[800px] lg:h-[800px] opacity-40 pointer-events-none">
-        <AnimatedSphere />
-      </div>
-      
-      {/* Subtle grid lines */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30">
-        {[...Array(8)].map((_, i) => (
-          <div
-            key={`h-${i}`}
-            className="absolute h-px bg-foreground/10"
-            style={{
-              top: `${12.5 * (i + 1)}%`,
-              left: 0,
-              right: 0,
-            }}
-          />
-        ))}
-        {[...Array(12)].map((_, i) => (
-          <div
-            key={`v-${i}`}
-            className="absolute w-px bg-foreground/10"
-            style={{
-              left: `${8.33 * (i + 1)}%`,
-              top: 0,
-              bottom: 0,
-            }}
-          />
-        ))}
-      </div>
-      
-      <div className="relative z-10 max-w-[1400px] mx-auto px-6 lg:px-12 py-32 lg:py-40">
-        {/* Eyebrow */}
-        <div 
-          className={`mb-8 transition-all duration-700 ${
-            isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-          }`}
-        >
-          <span className="inline-flex items-center gap-3 text-sm font-mono text-muted-foreground">
-            <span className="w-8 h-px bg-foreground/30" />
-            The platform for modern teams
-          </span>
-        </div>
-        
-        {/* Main headline */}
-        <div className="mb-12">
-          <h1 
-            className={`text-[clamp(3rem,12vw,10rem)] font-display leading-[0.9] tracking-tight transition-all duration-1000 ${
-              isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
-            }`}
-          >
-            <span className="block">The platform</span>
-            <span className="block">
-              to{" "}
-              <span className="relative inline-block">
-                <span 
-                  key={wordIndex}
-                  className="inline-flex"
-                >
-                  {words[wordIndex].split("").map((char, i) => (
-                    <span
-                      key={`${wordIndex}-${i}`}
-                      className="inline-block animate-char-in"
-                      style={{
-                        animationDelay: `${i * 50}ms`,
-                      }}
-                    >
-                      {char}
-                    </span>
-                  ))}
-                </span>
-                <span className="absolute -bottom-2 left-0 right-0 h-3 bg-foreground/10" />
+      <div className="relative z-10 max-w-[1400px] mx-auto px-6 lg:px-12 py-32 lg:py-40 w-full">
+
+        {/* Two-column grid: copy left, visualizer right */}
+        <div className="grid lg:grid-cols-2 gap-16 lg:gap-24 items-center">
+
+          {/* ── Left: Text content ── */}
+          <div>
+            {/* Eyebrow */}
+            <div
+              className={`mb-8 transition-all duration-700 ${
+                isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+              }`}
+            >
+              <span className="inline-flex items-center gap-3 text-sm font-mono text-muted-foreground">
+                <span className="w-8 h-px bg-foreground/30" />
+                Forms as Code
               </span>
-            </span>
-          </h1>
-        </div>
-        
-        {/* Description */}
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-24 items-end">
-          <p 
-            className={`text-xl lg:text-2xl text-muted-foreground leading-relaxed max-w-xl transition-all duration-700 delay-200 ${
-              isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+            </div>
+
+            {/* Main headline */}
+            <div className="mb-10">
+              <h1 className="text-[clamp(2.8rem,8vw,7rem)] font-display leading-[0.9] tracking-tight text-[#080503] opacity-100 blur-none select-text bg-none bg-transparent !text-[#080503]">
+                <span className="block text-[#080503] opacity-100 blur-none">Forms that live</span>
+                <span className="block text-[#080503] opacity-100 blur-none">in code</span>
+              </h1>
+            </div>
+
+            {/* Description */}
+            <p
+              className={`text-lg lg:text-xl text-muted-foreground leading-relaxed max-w-md mb-10 transition-all duration-700 delay-200 ${
+                isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+              }`}
+            >
+              Define your forms in a custom DSL. Version-control them in Git.
+              Render live interactive UIs — no drag-and-drop, no JSON configs.
+            </p>
+
+            {/* CTAs */}
+            <div
+              className={`flex flex-col sm:flex-row items-start gap-4 transition-all duration-700 delay-300 ${
+                isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+              }`}
+            >
+              <Button asChild size="lg" className="bg-foreground hover:bg-foreground/90 text-background px-8 h-14 text-base rounded-full group">
+                <Link href="/editor/demo">
+                  Talk to AI
+                  <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="h-14 px-8 text-base rounded-full border-foreground/20 hover:bg-foreground/5">
+                <Link href="/editor/demo">Open Editor</Link>
+              </Button>
+            </div>
+
+            {/* Mono caption below CTAs */}
+            <p
+              className={`mt-8 font-mono text-xs text-muted-foreground/60 transition-all duration-700 delay-400 ${
+                isVisible ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              hand-written C++ parser · compiled to WebAssembly · runs in your browser
+            </p>
+          </div>
+
+          {/* ── Right: AST Visualizer ── */}
+          <div
+            className={`hidden lg:block transition-all duration-1000 delay-500 ${
+              isVisible ? "opacity-100 translate-x-0" : "opacity-0 translate-x-8"
             }`}
           >
-            Your toolkit to stop configuring and start innovating. 
-            Securely build, deploy, and scale the best experiences.
-          </p>
-          
-          {/* CTAs */}
-          <div 
-            className={`flex flex-col sm:flex-row items-start gap-4 transition-all duration-700 delay-300 ${
-              isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-            }`}
-          >
-            <Button 
-              size="lg" 
-              className="bg-foreground hover:bg-foreground/90 text-background px-8 h-14 text-base rounded-full group"
-            >
-              Start free trial
-              <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
-            </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
-              className="h-14 px-8 text-base rounded-full border-foreground/20 hover:bg-foreground/5"
-            >
-              Watch demo
-            </Button>
+            <ASTVisualizer />
           </div>
         </div>
-        
       </div>
-      
-      {/* Stats marquee - full width outside container */}
-      <div 
-        className={`absolute bottom-24 left-0 right-0 transition-all duration-700 delay-500 ${
+
+      {/* Static system diagnostic bar - full width, bottom of section */}
+      <div
+        className={`absolute bottom-16 left-0 right-0 transition-all duration-700 delay-500 ${
           isVisible ? "opacity-100" : "opacity-0"
         }`}
       >
-        <div className="flex gap-16 marquee whitespace-nowrap">
-          {[...Array(2)].map((_, i) => (
-            <div key={i} className="flex gap-16">
-              {[
-                { value: "20 days", label: "saved on builds", company: "NETFLIX" },
-                { value: "98%", label: "faster deployment", company: "STRIPE" },
-                { value: "300%", label: "throughput increase", company: "LINEAR" },
-                { value: "6x", label: "faster to ship", company: "NOTION" },
-              ].map((stat) => (
-                <div key={`${stat.company}-${i}`} className="flex items-baseline gap-4">
-                  <span className="text-4xl lg:text-5xl font-display">{stat.value}</span>
-                  <span className="text-sm text-muted-foreground">
-                    {stat.label}
-                    <span className="block font-mono text-xs mt-1">{stat.company}</span>
-                  </span>
-                </div>
-              ))}
+        <div className="grid grid-cols-1 sm:grid-cols-5 border-y border-[#080503]/20 bg-background/80 backdrop-blur-sm">
+          {statusItems.map((item) => (
+            <div
+              key={item}
+              className="min-h-12 border-b border-[#080503]/20 px-4 py-3 sm:border-b-0 sm:border-r sm:last:border-r-0 font-mono text-[10px] uppercase tracking-widest text-foreground/75 flex items-center justify-center text-center"
+            >
+              {item}
             </div>
           ))}
         </div>
       </div>
-      
-      {/* Scroll indicator */}
-      
     </section>
   );
 }

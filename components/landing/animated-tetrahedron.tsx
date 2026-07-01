@@ -2,7 +2,12 @@
 
 import { useEffect, useRef } from "react";
 
-export function AnimatedTetrahedron() {
+interface AnimatedTetrahedronProps {
+  /** Force paper-white (#FAFAF9) rendering — use when placed on a dark inverse bg */
+  paperMode?: boolean;
+}
+
+export function AnimatedTetrahedron({ paperMode = false }: AnimatedTetrahedronProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
 
@@ -149,7 +154,11 @@ export function AnimatedTetrahedron() {
       // Draw points
       points.forEach((point) => {
         const alpha = 0.15 + (point.z + 1.5) * 0.25;
-        ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(alpha, 0.9)})`;
+        const clampedAlpha = Math.min(alpha, 0.9);
+        // paperMode = light chars on dark bg; default = dark chars on light bg
+        ctx.fillStyle = paperMode
+          ? `rgba(250, 250, 249, ${clampedAlpha})`
+          : `rgba(8, 5, 3, ${clampedAlpha})`;
         ctx.fillText(point.char, point.x, point.y);
       });
 

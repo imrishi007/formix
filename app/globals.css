@@ -87,6 +87,11 @@
   }
   body {
     @apply bg-background text-foreground;
+    min-height: 100vh;
+  }
+
+  html {
+    color-scheme: light;
   }
   html {
     scroll-behavior: smooth;
@@ -188,4 +193,39 @@
       linear-gradient(135deg, var(--foreground) 25%, transparent 25%, transparent 50%, var(--foreground) 50%, var(--foreground) 75%, transparent 75%) border-box;
     background-size: 100% 100%, 8px 8px;
   }
+
+  /* ── AST Visualizer animations ─────────────────────────────── */
+
+  /* Data-packet dot drops from parser to AST panel */
+  .ast-packet-flow {
+    animation: ast-packet 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  @keyframes ast-packet {
+    0%   { transform: translateY(-6px); opacity: 0; }
+    20%  { opacity: 1; }
+    80%  { opacity: 1; }
+    100% { transform: translateY(6px);  opacity: 0; }
+  }
+
+  /* Amber blink for "compiling" status indicator */
+  .ast-status-blink {
+    animation: ast-blink 0.6s step-end infinite;
+  }
+
+  @keyframes ast-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.1; }
+  }
+
+  /* Green pulse for "parse ok" status indicator */
+  .ast-status-pulse {
+    animation: ast-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes ast-pulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%       { opacity: 0.5; transform: scale(0.85); }
+  }
 }
+

@@ -46,37 +46,38 @@ function AnimatedCounter({ end, suffix = "", prefix = "" }: { end: number; suffi
 
 const metrics = [
   { 
-    value: 2847392, 
+    value: 1284730, 
     suffix: "", 
     prefix: "",
-    label: "API requests today",
+    label: "DSL tokens parsed today",
   },
   { 
-    value: 99, 
-    suffix: ".99%", 
+    value: 94, 
+    suffix: "%", 
     prefix: "",
-    label: "Uptime this quarter",
+    label: "AI generation accuracy",
   },
   { 
-    value: 23, 
+    value: 4, 
     suffix: "ms", 
     prefix: "",
-    label: "Average response time",
+    label: "Average WASM parse time",
   },
   { 
-    value: 184, 
+    value: 47, 
     suffix: "", 
     prefix: "",
-    label: "Countries served",
+    label: "Grammar rules in v1.1",
   },
 ];
 
 export function MetricsSection() {
-  const [time, setTime] = useState(new Date());
+  const [time, setTime] = useState<Date | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
+    setTime(new Date());
     const interval = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
@@ -101,16 +102,16 @@ export function MetricsSection() {
           <div>
             <span className="inline-flex items-center gap-3 text-sm font-mono text-muted-foreground mb-6">
               <span className="w-8 h-px bg-foreground/30" />
-              Live metrics
+              -- By the numbers
             </span>
             <h2
               className={`text-4xl lg:text-6xl font-display tracking-tight transition-all duration-700 ${
                 isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
               }`}
             >
-              Performance you
+              By the numbers.
               <br />
-              can measure.
+              Measurably better.
             </h2>
           </div>
           <div className="flex items-center gap-4 font-mono text-sm text-muted-foreground">
@@ -119,7 +120,7 @@ export function MetricsSection() {
               Live
             </span>
             <span className="text-foreground/30">|</span>
-            <span>{time.toLocaleTimeString()}</span>
+            <span suppressHydrationWarning>{time ? time.toLocaleTimeString() : "--:--:--"}</span>
           </div>
         </div>
         

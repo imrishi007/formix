@@ -5,38 +5,56 @@ import { useEffect, useRef, useState } from "react";
 const steps = [
   {
     number: "I",
-    title: "Connect your tools",
-    description: "Integrate with your existing stack in minutes. We support 200+ data sources out of the box.",
-    code: `import { optimus } from '@optimus/core'
+    title: "Write DSL",
+    description: "Define your form structure in Forml — a clean, readable DSL with fields, validation rules, conditionals, and repeat groups.",
+    code: `form "Customer Feedback" {
+  field name : text
+    ui { label: "Your Name" }
+    validate { required }
 
-optimus.connect({
-  source: 'your-database',
-  sync: true
-})`,
+  field rating : select {
+    option "Excellent"
+    option "Good"
+    option "Needs Work"
+  }
+  ui { label: "Rating" }
+}`,
   },
   {
     number: "II",
-    title: "Build your workflow",
-    description: "Design powerful automations with our visual builder or write code directly.",
-    code: `optimus.workflow('process', {
-  trigger: 'event',
-  actions: [
-    'validate',
-    'transform', 
-    'deliver'
+    title: "Parse to AST",
+    description: "The hand-written C++ parser compiles your DSL to a JSON AST via WebAssembly — entirely in the browser, zero network calls.",
+    code: `{
+  "type": "Form",
+  "name": "Customer Feedback",
+  "body": [
+    {
+      "type": "Field",
+      "name": "name",
+      "dataType": "text",
+      "validation": {
+        "required": true
+      }
+    }
   ]
-})`,
+}`,
   },
   {
     number: "III",
-    title: "Ship to production",
-    description: "Deploy globally with zero configuration. Your app goes live in under 30 seconds.",
-    code: `optimus.deploy({
-  target: 'production',
-  regions: 'auto'
-})
-
-// Deployed to 12 regions`,
+    title: "Render Live",
+    description: "React walks the AST recursively and renders an interactive form in real-time. Fill it, test it, and submit it — all from the editor.",
+    code: `// ASTRenderer.tsx
+function ASTRenderer({ ast }) {
+  return ast.body.map((node) => {
+    if (node.type === 'Field') {
+      return <FormField key={node.name}
+                field={node} />
+    }
+    if (node.type === 'Conditional') {
+      return <Conditional node={node} />
+    }
+  })
+}`,
   },
 ];
 
@@ -88,16 +106,16 @@ export function HowItWorksSection() {
         <div className="mb-16 lg:mb-24">
           <span className="inline-flex items-center gap-3 text-sm font-mono text-background/50 mb-6">
             <span className="w-8 h-px bg-background/30" />
-            Process
+            -- Process
           </span>
           <h2
             className={`text-4xl lg:text-6xl font-display tracking-tight transition-all duration-700 ${
               isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
             }`}
           >
-            Three steps.
+            Write DSL.
             <br />
-            <span className="text-background/50">Infinite possibilities.</span>
+            <span className="text-background/50">Parse. Render. Ship.</span>
           </h2>
         </div>
 
@@ -151,7 +169,9 @@ export function HowItWorksSection() {
                   <div className="w-3 h-3 rounded-full bg-background/20" />
                   <div className="w-3 h-3 rounded-full bg-background/20" />
                 </div>
-                <span className="text-xs font-mono text-background/40">workflow.ts</span>
+                <span className="text-xs font-mono text-background/40">
+                  {steps[activeStep].number === "I" ? "feedback.forml" : steps[activeStep].number === "II" ? "ast.json" : "ASTRenderer.tsx"}
+                </span>
               </div>
 
               {/* Code content */}
