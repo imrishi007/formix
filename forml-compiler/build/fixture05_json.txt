@@ -1,0 +1,471 @@
+ FIXTURE: ../tests/fixtures/05_deep_nesting.forml
+=============================================================
+
+-- JSON ------------------------------------------------------
+{
+  "action": {
+    "endpoint": "https://api.example.com/apply",
+    "location": {
+      "column": 3,
+      "line": 90
+    },
+    "method": "POST",
+    "type": "ActionBlock"
+  },
+  "groupDefinitions": [
+    {
+      "fields": [
+        {
+          "fieldType": "text",
+          "location": {
+            "column": 5,
+            "line": 13
+          },
+          "name": "phone",
+          "options": [],
+          "type": "Field",
+          "ui": {
+            "label": "Phone",
+            "type": "UIBlock"
+          }
+        },
+        {
+          "fieldType": "text",
+          "location": {
+            "column": 5,
+            "line": 14
+          },
+          "name": "fax",
+          "options": [],
+          "type": "Field",
+          "ui": {
+            "label": "Fax",
+            "type": "UIBlock"
+          }
+        }
+      ],
+      "location": {
+        "column": 3,
+        "line": 12
+      },
+      "name": "contact_info",
+      "type": "GroupDefinition"
+    }
+  ],
+  "location": {
+    "column": 1,
+    "line": 8
+  },
+  "name": "Deep Nesting Test",
+  "pages": [
+    {
+      "location": {
+        "column": 3,
+        "line": 17
+      },
+      "name": "Personal Details",
+      "statements": [
+        {
+          "location": {
+            "column": 5,
+            "line": 19
+          },
+          "name": "Basic Info",
+          "statements": [
+            {
+              "fieldType": "text",
+              "location": {
+                "column": 7,
+                "line": 21
+              },
+              "name": "full_name",
+              "options": [],
+              "type": "Field",
+              "ui": {
+                "label": "Full Name",
+                "placeholder": "Jane Doe",
+                "type": "UIBlock"
+              },
+              "validation": {
+                "maxLength": 100.0,
+                "minLength": 2.0,
+                "required": true,
+                "type": "ValidationBlock"
+              }
+            },
+            {
+              "fieldType": "integer",
+              "location": {
+                "column": 7,
+                "line": 30
+              },
+              "name": "age",
+              "options": [],
+              "type": "Field",
+              "ui": {
+                "label": "Age",
+                "type": "UIBlock"
+              },
+              "validation": {
+                "max": 120.0,
+                "min": 0.0,
+                "type": "ValidationBlock"
+              }
+            },
+            {
+              "fieldType": "email",
+              "location": {
+                "column": 7,
+                "line": 37
+              },
+              "name": "email_addr",
+              "options": [],
+              "type": "Field",
+              "ui": {
+                "label": "Email Address",
+                "type": "UIBlock"
+              },
+              "validation": {
+                "required": true,
+                "type": "ValidationBlock"
+              }
+            },
+            {
+              "compute": {
+                "expression": {
+                  "left": {
+                    "left": {
+                      "location": {
+                        "column": 41,
+                        "line": 44
+                      },
+                      "name": "base_rate",
+                      "type": "IdentifierExpr"
+                    },
+                    "location": {
+                      "column": 51,
+                      "line": 44
+                    },
+                    "operator": "*",
+                    "right": {
+                      "location": {
+                        "column": 53,
+                        "line": 44
+                      },
+                      "name": "age",
+                      "type": "IdentifierExpr"
+                    },
+                    "type": "BinaryExpr"
+                  },
+                  "location": {
+                    "column": 57,
+                    "line": 44
+                  },
+                  "operator": "+",
+                  "right": {
+                    "location": {
+                      "column": 59,
+                      "line": 44
+                    },
+                    "raw": "10",
+                    "type": "NumberLiteral",
+                    "value": 10.0
+                  },
+                  "type": "BinaryExpr"
+                },
+                "location": {
+                  "column": 31,
+                  "line": 44
+                },
+                "type": "ComputeBlock"
+              },
+              "fieldType": "float",
+              "location": {
+                "column": 7,
+                "line": 44
+              },
+              "name": "total_cost",
+              "options": [],
+              "type": "Field"
+            },
+            {
+              "condition": {
+                "left": {
+                  "comparator": ">=",
+                  "field": "age",
+                  "location": {
+                    "column": 10,
+                    "line": 47
+                  },
+                  "type": "SimpleCond",
+                  "value": {
+                    "location": {
+                      "column": 17,
+                      "line": 47
+                    },
+                    "numberValue": 18.0,
+                    "text": "18",
+                    "type": "Value",
+                    "valueKind": "number"
+                  }
+                },
+                "location": {
+                  "column": 20,
+                  "line": 47
+                },
+                "operator": "&&",
+                "right": {
+                  "comparator": "==",
+                  "field": "email_addr",
+                  "location": {
+                    "column": 23,
+                    "line": 47
+                  },
+                  "type": "SimpleCond",
+                  "value": {
+                    "location": {
+                      "column": 37,
+                      "line": 47
+                    },
+                    "text": "verified",
+                    "type": "Value",
+                    "valueKind": "string"
+                  }
+                },
+                "type": "BinaryCond"
+              },
+              "else": [
+                {
+                  "fieldType": "text",
+                  "location": {
+                    "column": 9,
+                    "line": 50
+                  },
+                  "name": "guardian_name",
+                  "options": [],
+                  "type": "Field",
+                  "validation": {
+                    "required": true,
+                    "type": "ValidationBlock"
+                  }
+                }
+              ],
+              "location": {
+                "column": 7,
+                "line": 47
+              },
+              "then": [
+                {
+                  "fieldType": "text",
+                  "location": {
+                    "column": 9,
+                    "line": 48
+                  },
+                  "name": "occupation",
+                  "options": [],
+                  "type": "Field",
+                  "validation": {
+                    "required": true,
+                    "type": "ValidationBlock"
+                  }
+                }
+              ],
+              "type": "Conditional"
+            }
+          ],
+          "type": "Section"
+        },
+        {
+          "location": {
+            "column": 5,
+            "line": 55
+          },
+          "name": "Contact",
+          "statements": [
+            {
+              "layoutKind": "row",
+              "location": {
+                "column": 7,
+                "line": 56
+              },
+              "statements": [
+                {
+                  "groupName": "contact_info",
+                  "location": {
+                    "column": 9,
+                    "line": 57
+                  },
+                  "type": "GroupUse"
+                },
+                {
+                  "fieldType": "text",
+                  "location": {
+                    "column": 9,
+                    "line": 58
+                  },
+                  "name": "city",
+                  "options": [],
+                  "type": "Field",
+                  "ui": {
+                    "label": "City",
+                    "type": "UIBlock"
+                  }
+                }
+              ],
+              "type": "Layout"
+            },
+            {
+              "layoutKind": "column",
+              "location": {
+                "column": 7,
+                "line": 61
+              },
+              "statements": [
+                {
+                  "fieldType": "select",
+                  "location": {
+                    "column": 9,
+                    "line": 62
+                  },
+                  "name": "country",
+                  "options": [
+                    "India",
+                    "USA",
+                    "UK"
+                  ],
+                  "type": "Field"
+                }
+              ],
+              "type": "Layout"
+            }
+          ],
+          "type": "Section"
+        }
+      ],
+      "trigger": {
+        "actions": [
+          {
+            "action": "show",
+            "location": {
+              "column": 7,
+              "line": 72
+            },
+            "target": "occupation",
+            "type": "ActionStatement"
+          },
+          {
+            "action": "hide",
+            "location": {
+              "column": 7,
+              "line": 73
+            },
+            "target": "guardian_name",
+            "type": "ActionStatement"
+          }
+        ],
+        "event": "load",
+        "location": {
+          "column": 5,
+          "line": 71
+        },
+        "type": "TriggerBlock"
+      },
+      "type": "Page"
+    },
+    {
+      "location": {
+        "column": 3,
+        "line": 78
+      },
+      "name": "Work Info",
+      "statements": [
+        {
+          "countRef": "num_jobs",
+          "fields": [
+            {
+              "fieldType": "text",
+              "location": {
+                "column": 7,
+                "line": 81
+              },
+              "name": "job_title",
+              "options": [],
+              "type": "Field"
+            },
+            {
+              "fieldType": "text",
+              "location": {
+                "column": 7,
+                "line": 82
+              },
+              "name": "employer",
+              "options": [],
+              "type": "Field"
+            },
+            {
+              "fieldType": "integer",
+              "location": {
+                "column": 7,
+                "line": 83
+              },
+              "name": "start_year",
+              "options": [],
+              "type": "Field",
+              "validation": {
+                "max": 2100.0,
+                "min": 1900.0,
+                "type": "ValidationBlock"
+              }
+            }
+          ],
+          "location": {
+            "column": 5,
+            "line": 80
+          },
+          "type": "RepeatGroup"
+        },
+        {
+          "fieldType": "integer",
+          "location": {
+            "column": 5,
+            "line": 86
+          },
+          "name": "num_jobs",
+          "options": [],
+          "type": "Field",
+          "validation": {
+            "max": 20.0,
+            "min": 0.0,
+            "type": "ValidationBlock"
+          }
+        }
+      ],
+      "type": "Page"
+    }
+  ],
+  "statements": [],
+  "type": "Form",
+  "varDeclarations": [
+    {
+      "location": {
+        "column": 3,
+        "line": 10
+      },
+      "name": "base_rate",
+      "type": "VarDeclaration",
+      "value": {
+        "location": {
+          "column": 19,
+          "line": 10
+        },
+        "numberValue": 0.15,
+        "text": "0.15",
+        "type": "Value",
+        "valueKind": "number"
+      }
+    }
+  ]
+}
+
+-- Diagnostics: none
+

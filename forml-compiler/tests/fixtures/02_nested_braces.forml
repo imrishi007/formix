@@ -1,0 +1,60 @@
+// Lexer/parser-only fixture; semantic completeness is not expected.
+// Fixture 02: nested braces and all punctuation
+// Purpose: exercise LEFT_BRACE, RIGHT_BRACE, LEFT_PAREN, RIGHT_PAREN,
+//          COLON, COMMA, SEMICOLON, and deeply nested block structure.
+// Also exercises: select/radio/checkbox option lists, trigger blocks,
+//                 action statements, all comparison and logical operators.
+
+form "Nested Braces Test" {
+
+  group address_block {
+    field street: text ui { label: "Street" }
+    field city:   text ui { label: "City"   }
+  }
+
+  page "Step One" {
+
+    field status: select {
+      option "Active"
+      option "Inactive"
+      option "Pending"
+    }
+
+    field rating: radio {
+      option "Low"
+      option "Medium"
+      option "High"
+    }
+
+    // Conditional with nested braces and logical operators
+    if fleet_size > 5 && owner_type == "corporate" {
+      field company_name: text validate { required }
+      use address_block
+    } else {
+      field notes: text ui { placeholder: "Optional notes" }
+    }
+
+    // Trigger block with action statements exercising ( ) and ,
+    on change {
+      hide(notes)
+      show(company_name)
+      set(rating, "High")
+      clear(status)
+      navigate("https://example.com")
+      submit()
+    }
+
+    repeat count = num_dependents {
+      field dep_name:  text
+      field dep_age:   integer validate { min: 0 max: 18 }
+    }
+
+  }
+
+  // Action block at form level
+  action submit {
+    endpoint: "https://api.formix.dev/submit"
+    method: POST
+  }
+
+}

@@ -1,0 +1,10 @@
+{
+    "cmake.sourceDirectory": "C:/Users/Rishi/Desktop/Foxmix/formix/forml-compiler",
+    "C_Cpp.default.configurationProvider": "",
+    "C_Cpp.files.exclude": {
+        "**/.git": true,
+        "**/.next": true,
+        "**/node_modules": true,
+        "**/build": true
+    }
+}

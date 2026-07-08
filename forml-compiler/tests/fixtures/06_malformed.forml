@@ -1,0 +1,40 @@
+// Fixture 06: deliberately malformed — tests synchronize() error recovery
+//
+// Expected:
+//   - Multiple parse errors are reported (one per structural mistake below)
+//   - The parser does NOT crash
+//   - Valid parts of the form still appear in the AST (proof of recovery)
+//
+// Deliberate errors:
+//   1. Missing closing brace for page "Step One" — synchronize() should resync
+//   2. Field with no colon separator
+//   3. Missing string after 'form' keyword  (actually: number used as name)
+//   4. validate block with a missing colon after 'min'
+
+form "Malformed Form" {
+
+  page "Step One" {
+
+    field name: text validate {
+      required
+    }
+
+    // ERROR 1: field with no ':' separator
+    field badfield text
+
+    // ERROR 2: validate block missing ':' after min
+    field age: integer validate {
+      min 25
+    }
+
+  // ERROR 3: missing closing brace for page — synchronize() will see next keyword
+  // The '}' for the form itself closes what it can.
+
+  field top_level: boolean
+
+  action submit {
+    endpoint: "https://api.example.com/submit"
+    method: POST
+  }
+
+}

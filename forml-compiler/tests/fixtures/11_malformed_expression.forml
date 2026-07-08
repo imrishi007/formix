@@ -1,0 +1,12 @@
+// Fixture 11: malformed expression and condition regression
+// Purpose: exercise parser recovery for precedence-climbing loops.
+
+form "Malformed Expression Fixture" {
+  page "Main" {
+    field total: float compute = a + * b
+
+    if x == && y {
+      field note: text
+    }
+  }
+}

@@ -1,0 +1,95 @@
+// Fixture 05: deep nesting
+// Purpose: exercise page → section → conditional → field nesting.
+// Also tests: compute expressions (arithmetic precedence), trigger blocks,
+//             repeat groups, and action blocks.
+//
+// Expected: parses cleanly with ZERO diagnostics.
+
+form "Deep Nesting Test" {
+
+  var base_rate = 0.15 ;
+
+  group contact_info {
+    field phone: text ui { label: "Phone" }
+    field fax:   text ui { label: "Fax"   }
+  }
+
+  page "Personal Details" {
+
+    section "Basic Info" {
+
+      field full_name: text ui {
+        label: "Full Name"
+        placeholder: "Jane Doe"
+      } validate {
+        required
+        minLength: 2
+        maxLength: 100
+      }
+
+      field age: integer ui {
+        label: "Age"
+      } validate {
+        min: 0
+        max: 120
+      }
+
+      field email_addr: email ui {
+        label: "Email Address"
+      } validate {
+        required
+      }
+
+      // compute: exercises + and * precedence (a*b+c should be (a*b)+c)
+      field total_cost: float compute = base_rate * age + 10
+
+      // conditional with && operator
+      if age >= 18 && email_addr == "verified" {
+        field occupation: text validate { required }
+      } else {
+        field guardian_name: text validate { required }
+      }
+
+    } // end section "Basic Info"
+
+    section "Contact" {
+      row {
+        use contact_info
+        field city: text ui { label: "City" }
+      }
+
+      column {
+        field country: select {
+          option "India"
+          option "USA"
+          option "UK"
+        }
+      }
+    }
+
+    // Page-level trigger
+    on load {
+      show(occupation)
+      hide(guardian_name)
+    }
+
+  } // end page "Personal Details"
+
+  page "Work Info" {
+
+    repeat count = num_jobs {
+      field job_title:   text
+      field employer:    text
+      field start_year:  integer validate { min: 1900 max: 2100 }
+    }
+
+    field num_jobs: integer validate { min: 0 max: 20 }
+
+  }
+
+  action submit {
+    endpoint: "https://api.example.com/apply"
+    method: POST
+  }
+
+}

@@ -1,0 +1,125 @@
+============================================================
+  Forml Parser — Stage 3 Test Driver
+============================================================
+
+=============================================================
+ FIXTURE: ../tests/fixtures/01_strings_and_numbers.forml
+=============================================================
+
+── AST ──────────────────────────────────────────────────────
+Form: "User Registration"
+  VarDeclaration: max_age = 120
+  VarDeclaration: tax_rate = 0.18
+  VarDeclaration: app_name = Formix Demo
+  Field: age type=integer
+    ValidationBlock:
+      required
+      min: 18
+      max: 120
+  Field: agreed type=boolean
+    UIBlock:
+      label: "I agree to the terms"
+      Value(bool(false)): "false"
+  Field: total type=float
+    ComputeBlock:
+      BinaryExpr op=-
+        BinaryExpr op=+
+          BinaryExpr op=*
+            IdentifierExpr: base_price
+            NumberLiteral: 1.18
+          IdentifierExpr: shipping
+        BinaryExpr op=/
+          IdentifierExpr: discount
+          NumberLiteral: 2
+
+── Diagnostics (2) [HAS ERRORS] ──
+[Error]   Line 26, Col 76: Unexpected token ';' in statement position
+[Error]   Line 29, Col 1: Expected '}' to close form body
+
+=============================================================
+ FIXTURE: ../tests/fixtures/02_nested_braces.forml
+=============================================================
+
+── AST ──────────────────────────────────────────────────────
+Form: "Nested Braces Test"
+  GroupDefinition: address_block
+    Field: street type=text
+      UIBlock:
+        label: "Street"
+    Field: city type=text
+      UIBlock:
+        label: "City"
+  Page: "Step One"
+    Field: status type=select
+      option: "Active"
+      option: "Inactive"
+      option: "Pending"
+    Field: rating type=radio
+      option: "Low"
+      option: "Medium"
+      option: "High"
+    Conditional:
+      condition:
+        BinaryCond op=&&
+          SimpleCond: fleet_size >
+            Value(number): "5"
+          SimpleCond: owner_type ==
+            Value(string): "corporate"
+      then:
+        Field: company_name type=text
+          ValidationBlock:
+            required
+        GroupUse: address_block
+      else:
+        Field: notes type=text
+          UIBlock:
+            placeholder: "Optional notes"
+    RepeatGroup: count=num_dependents
+      Field: dep_name type=text
+      Field: dep_age type=integer
+        ValidationBlock:
+          min: 0
+          max: 18
+    TriggerBlock: on change
+      ActionStatement: hide(notes)
+      ActionStatement: show(company_name)
+      ActionStatement: set(rating)
+        Value(string): "High"
+      ActionStatement: clear(status)
+      ActionStatement: navigate(https://example.com)
+      ActionStatement: submit
+  ActionBlock: method=POST endpoint="https://api.formix.dev/submit"
+
+── Diagnostics: none ✓
+
+=============================================================
+ FIXTURE: ../tests/fixtures/04_soft_keyword_names.forml
+=============================================================
+
+── AST ──────────────────────────────────────────────────────
+Form: "Soft Keyword Names"
+  GroupDefinition: email
+    Field: address type=text
+      UIBlock:
+        label: "Email Address"
+  VarDeclaration: label = My Label
+  VarDeclaration: value = 42
+  VarDeclaration: option = yes
+  VarDeclaration: row = 1
+  Page: "Main"
+    Field: email type=text
+      UIBlock:
+        label: "Email field"
+        placeholder: "Enter email"
+    Field: value type=integer
+      ValidationBlock:
+        min: 0
+        max: 100
+    Field: label type=text
+      UIBlock:
+        helpText: "This field is named label"
+    Field: option type=boolean
+      UIBlock:
+        Value(bool(false)): "false"
+    Field: row type=integer
+    GroupUse:

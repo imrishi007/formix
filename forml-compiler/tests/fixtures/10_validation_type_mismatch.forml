@@ -1,0 +1,9 @@
+form "Validation Type Mismatch Fixture" {
+
+  page "Main" {
+    field name: text validate {
+      min: 1
+    }
+  }
+
+}

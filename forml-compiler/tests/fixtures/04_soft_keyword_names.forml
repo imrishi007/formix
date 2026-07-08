@@ -1,0 +1,52 @@
+// Fixture 04: soft keyword names
+// Purpose: prove that soft keywords are valid as field/var/group names.
+//
+// The following identifiers are ALL soft keywords in the grammar but should
+// be usable as names in IDENTIFIER positions: email, value, label, option, row.
+//
+// Expected: parses cleanly with ZERO diagnostics.
+
+form "Soft Keyword Names" {
+
+  // `value`, `label`, `option`, `row` used as var names
+  var label = "My Label" ;
+  var value = 42 ;
+  var option = "yes" ;
+  var row = 1 ;
+
+  // group named with a soft keyword
+  group email {
+    field address: text ui {
+      label: "Email Address"
+    }
+  }
+
+  page "Main" {
+
+    // Fields named with soft keywords
+    field email: text ui {
+      label: "Email field"
+      placeholder: "Enter email"
+    }
+
+    field value: integer validate {
+      min: 0
+      max: 100
+    }
+
+    field label: text ui {
+      helpText: "This field is named label"
+    }
+
+    field option: boolean ui {
+      default: false
+    }
+
+    // row used as a field name (soft keyword, not a layout keyword here)
+    field row: integer
+
+    // use the group named "email"
+    use email
+  }
+
+}

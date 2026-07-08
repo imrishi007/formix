@@ -1,0 +1,7 @@
+form "Undefined Reference Fixture" {
+
+  page "Main" {
+    field total: float compute = missing_total + 1
+  }
+
+}

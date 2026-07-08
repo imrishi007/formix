@@ -1,0 +1,10 @@
+form "Var Identifier Fixture" {
+
+  var bad_value = other_value ;
+  var other_value = 10 ;
+
+  page "Main" {
+    field note: text
+  }
+
+}

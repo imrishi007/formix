@@ -1,0 +1,8 @@
+form "Duplicate Field Fixture" {
+
+  page "Main" {
+    field first_name: text
+    field first_name: integer
+  }
+
+}

@@ -1,0 +1,29 @@
+// Lexer/parser-only fixture; semantic completeness is not expected.
+// Fixture 01: strings and numbers
+// Purpose: exercise STRING, NUMBER, basic keywords, punctuation, and operators.
+// This is NOT a valid form — just a token-exercising fragment.
+
+form "User Registration" {
+
+  // Variable declarations: keyword + identifier + = + value + ;
+  var max_age = 120 ;
+  var tax_rate = 0.18 ;
+  var app_name = "Formix Demo" ;
+
+  // Field with a numeric validation rule
+  field age: integer validate {
+    min: 18
+    max: 120
+    required
+  }
+
+  // A simple boolean-type field
+  field agreed: boolean ui {
+    label: "I agree to the terms"
+    default: false
+  }
+
+  // Arithmetic compute expression exercising +, -, *, /
+  field total: float compute = base_price * 1.18 + shipping - discount / 2
+
+}

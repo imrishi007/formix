@@ -1,0 +1,31 @@
+// Fixture 03: deliberate bad characters — error handling test
+// Purpose: exercise the lexer's error recovery.
+//
+// Expected behaviour:
+//   • Each bad character should produce ONE TokenType::ERROR token.
+//   • A diagnostic error message should be recorded for each position.
+//   • Scanning should CONTINUE after each bad character (not crash/abort).
+//   • Valid tokens around the bad characters should still appear correctly.
+//
+// Bad characters inserted:
+//   Line 7:  @ — not valid in any Forml context
+//   Line 8:  # — not valid (Python-style comment would be a grammar extension)
+//   Line 10: bare ! — NEQ operator is "!=" but a lone "!" is not valid
+//   Line 11: bare & — AND operator is "&&" but a lone "&" is not valid
+//   Line 12: bare | — OR operator is "||" but a lone "|" is not valid
+//   Line 15: unterminated string — missing closing quote
+
+form "Error Test" {
+
+  field name: text @
+  field code: integer # some comment that is not valid in Forml
+
+  // Isolated bad operators (maximal munch should handle these with clear errors)
+  var x = 5 ! 3 ;
+  var y = 5 & 3 ;
+  var z = 5 | 3 ;
+
+  // Unterminated string — lexer should report error at position of opening quote
+  field broken: text ui { label: "Unterminated string }
+
+}
