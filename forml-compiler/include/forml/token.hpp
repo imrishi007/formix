@@ -1,4 +1,31 @@
-// include/forml/token.hpp - token definitions for the Forml lexer and parser.
+// =============================================================================
+//  include/forml/token.hpp
+//  Forml Compiler — Stage 0: Token Definitions
+// =============================================================================
+//
+//  PURPOSE
+//  -------
+//  This file defines the entire "vocabulary" of the Forml DSL as seen by the
+//  lexer and parser.  In compiler construction, a "token" is the smallest
+//  meaningful unit in a language — just like words are the smallest meaningful
+//  units in English.  The lexer reads raw characters and groups them into
+//  tokens; the parser reads those tokens and groups them into grammar rules.
+//
+//  Three things live here:
+//    1. TokenType — an enum class naming every kind of token the Forml grammar
+//                   can produce.  Derived exhaustively from EBNF_grammar.md.
+//    2. Token     — a struct pairing a TokenType with its raw text and where
+//                   in the source file it appeared (line + column).
+//    3. tokenTypeToString() — debug helper for printing readable token tables.
+//
+//  WHY enum class (not plain enum)?
+//  ---------------------------------
+//  A plain `enum` dumps all names into the enclosing scope, which causes
+//  collisions (e.g. your own variable named "ERROR" would clash with the
+//  token ERROR).  `enum class` (C++11) scopes names under the type, so you
+//  must write TokenType::ERROR — impossible to collide.
+//
+// =============================================================================
 
 #pragma once   // Guard: ensures this file is included at most once per
                // compilation unit, preventing duplicate-definition errors.
@@ -7,7 +34,21 @@
 
 namespace forml {
 
-// TokenType names every terminal the lexer can emit.
+// =============================================================================
+//  TokenType
+// =============================================================================
+//  Every entry below corresponds to a terminal in EBNF_grammar.md, or to a
+//  meta-token needed by the compiler infrastructure (END_OF_FILE, ERROR).
+//
+//  Reading strategy for the grammar → token mapping:
+//    • Quoted strings in the EBNF (e.g. "form", "{", "==") → keywords or
+//      fixed punctuation/operator tokens below.
+//    • Named terminals in ALL-CAPS (IDENTIFIER, STRING, NUMBER) → literal
+//      token types that carry variable content.
+//
+//  The groups below mirror the structure of EBNF_grammar.md so you can cross-
+//  check easily.
+// =============================================================================
 
 enum class TokenType {
 
@@ -221,7 +262,27 @@ enum class TokenType {
 };
 
 
-// Token stores the token kind, lexeme, and source location.
+// =============================================================================
+//  Token
+// =============================================================================
+//  A Token is what the Lexer hands to the Parser.  It packages together:
+//
+//    type    — WHAT kind of thing this token is (from the enum above)
+//    lexeme  — the RAW source text that produced this token
+//              e.g.  STRING "Hello" has lexeme = "\"Hello\""  (quotes included)
+//                    NUMBER 42     has lexeme = "42"
+//                    KW_FORM       has lexeme = "form"
+//    line    — 1-based line number in the source file
+//    column  — 1-based column number of the FIRST character of this token
+//
+//  WHY store line and column on every token?
+//  -----------------------------------------
+//  Error messages like:
+//    [ParseError] Line 4, Col 12: Expected ':' after field name
+//  are only useful if the parser can point to the EXACT position.  Since the
+//  parser works with tokens (not characters), every token must carry its
+//  source coordinates, stamped at scan time.
+// =============================================================================
 
 struct Token {
     TokenType   type;
@@ -231,7 +292,18 @@ struct Token {
 };
 
 
-// tokenTypeToString returns a short printable name for a token type.
+// =============================================================================
+//  tokenTypeToString
+// =============================================================================
+//  Maps a TokenType enum value to a short, human-readable string.
+//  Used by:
+//    • test_lexer.cpp   — pretty-print token tables during lexer review
+//    • diagnostics      — produce readable error messages in later stages
+//
+//  This is a free function (not a method) because it is stateless — it is
+//  purely a lookup table from enum → string.  The implementation lives in
+//  token.cpp so the enum-to-string mapping is defined in exactly one place.
+// =============================================================================
 
 std::string tokenTypeToString(TokenType type);
 

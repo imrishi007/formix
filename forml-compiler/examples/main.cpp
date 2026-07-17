@@ -1,6 +1,6 @@
 // examples/main.cpp - Native CLI for the Forml compiler bridge.
 
-#include "include/forml/forml_bridge.hpp"
+#include "forml/forml_bridge.hpp"
 
 #include <fstream>
 #include <iostream>

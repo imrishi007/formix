@@ -8,31 +8,18 @@ const footerLinks = {
     { name: "Features", href: "#features" },
     { name: "How it works", href: "#how-it-works" },
     { name: "Demo", href: "#demo" },
-    { name: "Roadmap", href: "#" },
   ],
   Developers: [
-    { name: "Forml Grammar", href: "#" },
-    { name: "DSL Reference", href: "#" },
-    { name: "WASM Bridge", href: "#" },
-    { name: "Status", href: "#" },
-  ],
-  Company: [
-    { name: "About", href: "#" },
-    { name: "Blog", href: "#" },
-    { name: "IIT Ropar", href: "#" },
-    { name: "Contact", href: "#" },
-  ],
-  Legal: [
-    { name: "Privacy", href: "#" },
-    { name: "Terms", href: "#" },
-    { name: "License", href: "#" },
+    { name: "Forml Grammar", href: "/docs/grammar" },
+    { name: "DSL Reference", href: "/docs/syntax" },
+    { name: "Fields & Types", href: "/docs/fields" },
+    { name: "Examples", href: "/docs/examples" },
   ],
 };
 
 const socialLinks = [
-  { name: "Twitter", href: "#" },
-  { name: "GitHub", href: "#" },
-  { name: "LinkedIn", href: "#" },
+  { name: "GitHub", href: "https://github.com" },
+  { name: "LinkedIn", href: "https://linkedin.com" },
 ];
 
 export function FooterSection() {
@@ -46,7 +33,7 @@ export function FooterSection() {
       <div className="relative z-10 max-w-[1400px] mx-auto px-6 lg:px-12">
         {/* Main Footer */}
         <div className="py-16 lg:py-24">
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-12 lg:gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 lg:gap-8">
             {/* Brand Column */}
             <div className="col-span-2">
               <a href="#" className="inline-flex items-center gap-2 mb-6">
@@ -85,11 +72,6 @@ export function FooterSection() {
                         className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-2"
                       >
                         {link.name}
-                        {"badge" in link && link.badge && (
-                          <span className="text-xs px-2 py-0.5 bg-foreground text-background rounded-full">
-                            {link.badge}
-                          </span>
-                        )}
                       </a>
                     </li>
                   ))}

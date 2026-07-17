@@ -1,6 +1,6 @@
 import React from "react"
 import type { Metadata } from 'next'
-import { Instrument_Sans, Instrument_Serif, JetBrains_Mono } from 'next/font/google'
+import { Instrument_Sans, Instrument_Serif, JetBrains_Mono, Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
@@ -20,6 +20,11 @@ const jetbrainsMono = JetBrains_Mono({
   variable: '--font-jetbrains'
 });
 
+const inter = Inter({
+  subsets: ["latin"],
+  variable: '--font-inter'
+});
+
 export const metadata: Metadata = {
   title: 'Formix — Forms as Code',
   description: 'Define forms in a custom DSL, version-control them in Git, and render live interactive UIs with an AI generation layer. No drag-and-drop. No JSON configs.',
@@ -32,7 +37,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${instrumentSans.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+      <body className={`${instrumentSans.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} ${inter.variable} font-sans antialiased`}>
         {children}
         <Analytics />
       </body>

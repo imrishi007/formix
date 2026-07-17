@@ -9,6 +9,7 @@ const navLinks = [
   { name: "Features", href: "#features" },
   { name: "How it works", href: "#how-it-works" },
   { name: "Demo", href: "#demo" },
+  { name: "Docs", href: "/docs" },
   { name: "GitHub", href: "https://github.com" },
 ];
 
@@ -66,9 +67,9 @@ export function Navigation() {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-4">
-            <a href="#" className={`text-foreground/70 hover:text-foreground transition-all duration-500 ${isScrolled ? "text-xs" : "text-sm"}`}>
+            <Link href="/auth/signin" className={`text-foreground/70 hover:text-foreground transition-all duration-500 ${isScrolled ? "text-xs" : "text-sm"}`}>
               Sign in
-            </a>
+            </Link>
             <Button asChild size="sm" className={`bg-foreground hover:bg-foreground/90 text-background rounded-full transition-all duration-500 ${isScrolled ? "px-4 h-8 text-xs" : "px-6"}`}>
               <Link href="/editor/demo">Open Editor</Link>
             </Button>
@@ -128,11 +129,12 @@ export function Navigation() {
           style={{ transitionDelay: isMobileMenuOpen ? "300ms" : "0ms" }}
           >
             <Button 
+              asChild
               variant="outline" 
               className="flex-1 rounded-full h-14 text-base"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              Sign in
+              <Link href="/auth/signin">Sign in</Link>
             </Button>
             <Button asChild className="flex-1 bg-foreground text-background rounded-full h-14 text-base" onClick={() => setIsMobileMenuOpen(false)}>
               <Link href="/editor/demo">Open Editor</Link>

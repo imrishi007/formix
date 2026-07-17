@@ -43,6 +43,7 @@
   --font-sans: var(--font-instrument), 'Instrument Sans', system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), 'JetBrains Mono', monospace;
   --font-display: var(--font-instrument-serif), 'Instrument Serif', Georgia, serif;
+  --font-inter: var(--font-inter), 'Inter', system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -101,6 +102,26 @@
 @layer utilities {
   .font-display {
     font-family: var(--font-display);
+  }
+
+  .font-inter {
+    font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
+  }
+
+  /* IDE dark panel scrollbar */
+  .formix-scroll::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .formix-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .formix-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+  }
+  .formix-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.16);
   }
   
   .text-stroke {
@@ -226,6 +247,18 @@
   @keyframes ast-pulse {
     0%, 100% { opacity: 1;   transform: scale(1); }
     50%       { opacity: 0.5; transform: scale(0.85); }
+  }
+
+  /* Auth panel: compiler status dot blink while working */
+  @keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.15; }
+  }
+
+  /* Auth panel: right side dot grid */
+  .auth-dot-grid {
+    background-image: radial-gradient(circle, rgba(0,0,0,0.1) 1px, transparent 1px);
+    background-size: 28px 28px;
   }
 }
 

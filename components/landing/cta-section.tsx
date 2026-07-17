@@ -4,7 +4,92 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
-import { AnimatedTetrahedron } from "./animated-tetrahedron";
+
+// ─── Inline wireframe tetrahedron (replaces deleted animated-tetrahedron.tsx) ──
+
+function TetrahedronDecoration() {
+  return (
+    <>
+      <style>{`
+        @keyframes tetra-spin {
+          0%   { transform: rotateX(15deg) rotateY(0deg); }
+          100% { transform: rotateX(15deg) rotateY(360deg); }
+        }
+        @keyframes tetra-pulse {
+          0%, 100% { opacity: 0.18; }
+          50%       { opacity: 0.38; }
+        }
+        .tetra-scene {
+          perspective: 900px;
+          width: 320px;
+          height: 320px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .tetra-solid {
+          width: 200px;
+          height: 200px;
+          transform-style: preserve-3d;
+          animation: tetra-spin 12s linear infinite;
+        }
+        .tetra-face {
+          position: absolute;
+          width: 0;
+          height: 0;
+        }
+        .tetra-ring {
+          position: absolute;
+          border-radius: 50%;
+          border: 1px solid rgba(255,255,255,0.12);
+          animation: tetra-pulse 4s ease-in-out infinite;
+        }
+      `}</style>
+      <div className="tetra-scene">
+        {/* Outer decorative rings */}
+        <div className="tetra-ring" style={{ width: 300, height: 300, top: 10, left: 10, animationDelay: "0s" }} />
+        <div className="tetra-ring" style={{ width: 240, height: 240, top: 40, left: 40, animationDelay: "1.3s" }} />
+        <div className="tetra-ring" style={{ width: 180, height: 180, top: 70, left: 70, animationDelay: "2.6s" }} />
+
+        {/* SVG wireframe tetrahedron projected on 2D, rotated with CSS 3D */}
+        <div className="tetra-solid" style={{ position: "absolute" }}>
+          <svg
+            viewBox="0 0 200 200"
+            width="200"
+            height="200"
+            style={{ position: "absolute", top: 0, left: 0, overflow: "visible" }}
+          >
+            {/* Vertices of a regular tetrahedron projected to 2D */}
+            {/* A=top, B=bottom-left, C=bottom-right, D=center-back */}
+            <g stroke="rgba(255,255,255,0.65)" strokeWidth="1" fill="none">
+              {/* Front face edges */}
+              <line x1="100" y1="20"  x2="30"  y2="160" strokeWidth="1.5" />
+              <line x1="100" y1="20"  x2="170" y2="160" strokeWidth="1.5" />
+              <line x1="30"  y1="160" x2="170" y2="160" strokeWidth="1.5" />
+              {/* Back edges (dimmed) */}
+              <line x1="100" y1="20"  x2="100" y2="120" stroke="rgba(255,255,255,0.25)" strokeDasharray="5 4" />
+              <line x1="30"  y1="160" x2="100" y2="120" stroke="rgba(255,255,255,0.25)" strokeDasharray="5 4" />
+              <line x1="170" y1="160" x2="100" y2="120" stroke="rgba(255,255,255,0.25)" strokeDasharray="5 4" />
+            </g>
+            {/* Vertex dots */}
+            <g fill="rgba(255,255,255,0.8)">
+              <circle cx="100" cy="20"  r="3" />
+              <circle cx="30"  cy="160" r="3" />
+              <circle cx="170" cy="160" r="3" />
+              <circle cx="100" cy="120" r="2.5" fill="rgba(255,255,255,0.4)" />
+            </g>
+            {/* Edge midpoint markers */}
+            <g fill="rgba(255,255,255,0.3)">
+              <circle cx="65"  cy="90"  r="1.5" />
+              <circle cx="135" cy="90"  r="1.5" />
+              <circle cx="100" cy="160" r="1.5" />
+            </g>
+          </svg>
+        </div>
+      </div>
+    </>
+  );
+}
 
 export function CtaSection() {
   const [isVisible, setIsVisible] = useState(false);
@@ -81,7 +166,7 @@ export function CtaSection() {
 
               {/* Right animation */}
               <div className="hidden lg:flex items-center justify-center w-[500px] h-[500px] -mr-16">
-                <AnimatedTetrahedron paperMode />
+                <TetrahedronDecoration />
               </div>
             </div>
           </div>

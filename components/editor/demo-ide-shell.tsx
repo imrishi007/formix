@@ -1,173 +1,88 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import type { editor as MonacoEditorNS } from "monaco-editor";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronRight,
+  FileCode2,
   FileText,
   Files,
   Folder,
+  FolderOpen,
   GitBranch,
-  Search,
-  Settings,
-  ChevronRight,
-  CircleDot,
+  Loader2,
+  Plus,
+  Terminal,
+  Trash2,
+  TriangleAlert,
+  X,
+  Zap,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
-type SidebarTool = "files" | "git" | "search" | "settings";
-type EditorTab = "feedback.forml" | "README.md";
-type ParseState = "valid" | "parsing" | "error";
+import {
+  useFormlCompiler,
+  type FormlCompileResult,
+  type FormlDiagnostic,
+} from "@/lib/use-forml-compiler";
+import {
+  getFileSystemStore,
+  newFormlTemplate,
+  type VirtualFile,
+} from "@/lib/forml-file-system";
 
-interface TreeEntry {
-  name: string;
-  kind: "folder" | "file";
-  children?: TreeEntry[];
-  active?: boolean;
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface PreviewField {
-  name: string;
-  type: string;
-  label: string;
-  placeholder: string;
-  helpText: string;
-}
+type SidebarTool = "files";
+type CompilePhase = "idle" | "parsing" | "semantic" | "valid" | "error";
+type DiagTab = "problems" | "ast" | "json" | "tokens";
+type ASTNode = Record<string, unknown>;
 
-interface CursorState {
-  line: number;
-  column: number;
-}
+interface CursorState { line: number; column: number; }
 
-interface MonacoThemeRule {
-  token: string;
-  foreground: string;
-  fontStyle?: string;
-}
-
-interface MonacoTheme {
-  base: "vs-dark";
-  inherit: boolean;
-  rules: MonacoThemeRule[];
-  colors: Record<string, string>;
-}
-
+interface MonacoThemeRule { token: string; foreground: string; fontStyle?: string; }
+interface MonacoTheme { base: "vs-dark"; inherit: boolean; rules: MonacoThemeRule[]; colors: Record<string, string>; }
 interface MonacoLanguageRegistry {
   getLanguages: () => Array<{ id: string }>;
   register: (language: { id: string }) => void;
-  setMonarchTokensProvider: (languageId: string, provider: Record<string, unknown>) => void;
+  setMonarchTokensProvider: (id: string, p: Record<string, unknown>) => void;
 }
-
 interface MonacoEditorAPI {
   defineTheme: (name: string, theme: MonacoTheme) => void;
   setTheme: (name: string) => void;
+  setModelMarkers: (model: MonacoEditorNS.ITextModel, owner: string, markers: MonacoEditorNS.IMarkerData[]) => void;
 }
-
 interface MonacoLike {
   editor: MonacoEditorAPI;
   languages: MonacoLanguageRegistry;
+  MarkerSeverity: { Error: number; Warning: number; Info: number };
 }
 
-interface FormSummary {
-  title: string;
-  fields: PreviewField[];
-}
+// ─── Monaco (dynamic import) ──────────────────────────────────────────────────
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (
-    <div className="absolute inset-0 flex items-center justify-center bg-[#080503]">
-      <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#FAFAF9]/30">
+    <div className="absolute inset-0 flex items-center justify-center bg-[#0D0D0D]">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-white/20">
         Loading editor...
       </span>
     </div>
   ),
 });
 
-const INITIAL_DSL = `form "Customer Feedback" {
-  field name: text
-    ui {
-      label: "Your Name"
-      placeholder: "Jane Doe"
-    }
-    validate {
-      required
-      minLength: 2
-    }
-
-  field email: email
-    ui {
-      label: "Email Address"
-      placeholder: "you@company.com"
-    }
-    validate {
-      required
-    }
-
-  field rating: select {
-    option "Excellent"
-    option "Good"
-    option "Needs Work"
-    option "Poor"
-  }
-  ui {
-    label: "Overall Rating"
-  }
-
-  field comments: text
-    ui {
-      label: "Additional Comments"
-      helpText: "Tell us more about your experience."
-      placeholder: "Your feedback here..."
-    }
-
-  action submit {
-    endpoint: "https://api.formix.dev/submit"
-    method: POST
-  }
-}`;
-
-const README_CONTENT = `# Formix
-
-Forms as Code.
-
-- One \`.forml\` file = one form
-- Client-side WASM parser
-- Monaco editor
-- Live preview`;
-
-const FILE_TREE: TreeEntry[] = [
-  {
-    name: ".github",
-    kind: "folder",
-    children: [{ name: "workflows", kind: "folder" }],
-  },
-  {
-    name: "src",
-    kind: "folder",
-    children: [
-      { name: "app", kind: "folder" },
-      { name: "components", kind: "folder" },
-      { name: "wasm", kind: "folder" },
-    ],
-  },
-  {
-    name: "feedback.forml",
-    kind: "file",
-    active: true,
-  },
-  {
-    name: "README.md",
-    kind: "file",
-  },
-];
-
-const SIDEBAR_TOOLS: Array<{ id: SidebarTool; icon: ReactNode; label: string }> = [
-  { id: "files", icon: <Files className="h-4 w-4" />, label: "Files" },
-  { id: "git", icon: <GitBranch className="h-4 w-4" />, label: "Git" },
-  { id: "search", icon: <Search className="h-4 w-4" />, label: "Search" },
-  { id: "settings", icon: <Settings className="h-4 w-4" />, label: "Settings" },
-];
+// ─── Monaco Options ───────────────────────────────────────────────────────────
 
 const MONACO_OPTIONS = {
   automaticLayout: true,
@@ -178,7 +93,7 @@ const MONACO_OPTIONS = {
   fontLigatures: false,
   fontSize: 13,
   hideCursorInOverviewRuler: true,
-  lineDecorationsWidth: 10,
+  lineDecorationsWidth: 8,
   lineHeight: 22,
   lineNumbers: "on" as const,
   lineNumbersMinChars: 3,
@@ -186,14 +101,10 @@ const MONACO_OPTIONS = {
   overviewRulerBorder: false,
   overviewRulerLanes: 0,
   quickSuggestions: false,
-  renderLineHighlight: "none" as const,
+  renderLineHighlight: "line" as const,
   renderValidationDecorations: "off" as const,
   renderWhitespace: "none" as const,
-  scrollbar: {
-    alwaysConsumeMouseWheel: false,
-    horizontalScrollbarSize: 4,
-    verticalScrollbarSize: 4,
-  },
+  scrollbar: { alwaysConsumeMouseWheel: false, horizontalScrollbarSize: 4, verticalScrollbarSize: 4 },
   scrollBeyondLastLine: false,
   smoothScrolling: true,
   suggest: { showWords: false },
@@ -208,20 +119,20 @@ const MONACO_OPTIONS = {
   wordWrap: "off" as const,
   codeLens: false,
   links: false,
+  padding: { top: 16, bottom: 64 },
 };
 
-function defineFormixNightTheme(monaco: MonacoLike) {
-  const languageId = "forml";
-  const hasLanguage = monaco.languages.getLanguages().some((language) => language.id === languageId);
+// ─── Formix Monaco Theme ──────────────────────────────────────────────────────
 
-  if (!hasLanguage) {
+function defineFormixMono(monaco: MonacoLike) {
+  const languageId = "forml";
+  if (!monaco.languages.getLanguages().some((l) => l.id === languageId)) {
     monaco.languages.register({ id: languageId });
   }
-
   monaco.languages.setMonarchTokensProvider(languageId, {
     tokenizer: {
       root: [
-        [/\b(?:form|field|ui|validate|action|submit|option|required|minLength|POST|PUT|PATCH|text|email|select|radio|checkbox)\b/, "keyword"],
+        [/\b(?:form|field|ui|validate|action|submit|option|required|minLength|maxLength|pattern|min|max|POST|PUT|PATCH|text|email|select|radio|checkbox|integer|float|date|boolean|url|label|placeholder|helpText|endpoint|method|default|bind|page|section|group|use|var|repeat|count|if|else|on|compute|from|map|row|column|load|change|blur|hide|show|clear|set|navigate)\b/, "keyword"],
         [/"([^"\\]|\\.)*$/, "string.invalid"],
         [/"/, "string", "@string"],
         [/\d+(?:\.\d+)?/, "number"],
@@ -230,358 +141,1242 @@ function defineFormixNightTheme(monaco: MonacoLike) {
         [/[a-zA-Z_]\w*/, "identifier"],
         [/--.*$/, "comment"],
       ],
-      string: [
-        [/[^\\"]+/, "string"],
-        [/\\./, "string"],
-        [/"/, "string", "@pop"],
-      ],
+      string: [[/[^\\"]+/, "string"], [/\\./, "string"], [/"/, "string", "@pop"]],
     },
   });
-
-  monaco.editor.defineTheme("formix-night", {
+  monaco.editor.defineTheme("formix-mono", {
     base: "vs-dark",
     inherit: false,
     rules: [
-      { token: "", foreground: "FAFAF9" },
-      { token: "keyword", foreground: "FAFAF9" },
-      { token: "string", foreground: "FAFAF9" },
-      { token: "number", foreground: "FAFAF9" },
-      { token: "delimiter", foreground: "FAFAF9" },
-      { token: "operator", foreground: "FAFAF9" },
-      { token: "identifier", foreground: "FAFAF9" },
-      { token: "comment", foreground: "FAFAF9" },
+      { token: "", foreground: "EDEDEB" },
+      { token: "keyword", foreground: "C9B8FF", fontStyle: "bold" },
+      { token: "string", foreground: "C8BA9A" },
+      { token: "string.invalid", foreground: "E05252" },
+      { token: "number", foreground: "9090A0" },
+      { token: "delimiter", foreground: "505060" },
+      { token: "operator", foreground: "A0A0B0" },
+      { token: "identifier", foreground: "C8C8CC" },
+      { token: "comment", foreground: "4A4A5A", fontStyle: "italic" },
     ],
     colors: {
-      "editor.background": "#080503",
-      "editor.foreground": "#FAFAF9",
-      "editorLineNumber.foreground": "#FAFAF966",
-      "editorLineNumber.activeForeground": "#FAFAF9",
-      "editorGutter.background": "#080503",
-      "editorCursor.foreground": "#FAFAF9",
-      "editor.selectionBackground": "#FAFAF91A",
-      "editor.inactiveSelectionBackground": "#FAFAF90E",
-      "editor.lineHighlightBackground": "#FAFAF90A",
-      "editor.lineHighlightBorder": "#00000000",
-      "editorIndentGuide.background1": "#FAFAF914",
-      "editorIndentGuide.activeBackground1": "#FAFAF92A",
-      "editorWhitespace.foreground": "#FAFAF914",
-      "editorWidget.background": "#080503",
-      "editorWidget.border": "#FAFAF91A",
-      "editorWidget.foreground": "#FAFAF9",
-      "editorSuggestWidget.background": "#080503",
-      "editorSuggestWidget.border": "#FAFAF91A",
-      "editorSuggestWidget.foreground": "#FAFAF9",
-      "editorSuggestWidget.selectedBackground": "#FAFAF91A",
+      "editor.background": "#0D0D0D",
+      "editor.foreground": "#EDEDEB",
+      "editorLineNumber.foreground": "#3A3A3A",
+      "editorLineNumber.activeForeground": "#8A8A8A",
+      "editorGutter.background": "#0D0D0D",
+      "editorCursor.foreground": "#EDEDEB",
+      "editor.selectionBackground": "#7C6FE028",
+      "editor.inactiveSelectionBackground": "#7C6FE012",
+      "editor.lineHighlightBackground": "#141414",
+      "editor.lineHighlightBorder": "#1C1C1C",
+      "editorIndentGuide.background1": "#1E1E1E",
+      "editorIndentGuide.activeBackground1": "#303030",
+      "editorWhitespace.foreground": "#1C1C1C",
+      "editorWidget.background": "#141414",
+      "editorWidget.border": "#2A2A2A",
+      "editorWidget.foreground": "#EDEDEB",
       "scrollbar.shadow": "#00000000",
-      "scrollbarSlider.background": "#FAFAF90A",
-      "scrollbarSlider.hoverBackground": "#FAFAF91A",
-      "scrollbarSlider.activeBackground": "#FAFAF929",
+      "scrollbarSlider.background": "#FFFFFF0A",
+      "scrollbarSlider.hoverBackground": "#FFFFFF18",
+      "scrollbarSlider.activeBackground": "#FFFFFF28",
       "editorOverviewRuler.border": "#00000000",
-      "focusBorder": "#FAFAF91F",
+      "focusBorder": "#7C6FE040",
+      "editorError.foreground": "#E05252",
+      "editorWarning.foreground": "#C4A35A",
     },
   });
 }
 
-function parseFormSummary(source: string): FormSummary {
-  const titleMatch = source.match(/form\s+"([^"]+)"/);
-  const title = titleMatch?.[1] ?? "Untitled Form";
-  const fieldMatches = [...source.matchAll(/field\s+([A-Za-z_]\w*)\s*:\s*([A-Za-z_]\w*)/g)];
+// ─── AST Condition Evaluator ──────────────────────────────────────────────────
 
-  const fields = fieldMatches.map((match, index) => {
-    const start = match.index ?? 0;
-    const end = fieldMatches[index + 1]?.index ?? source.length;
-    const snippet = source.slice(start, end);
-    const label = snippet.match(/label:\s*"([^"]+)"/)?.[1] ?? match[1];
-    const placeholder = snippet.match(/placeholder:\s*"([^"]+)"/)?.[1] ?? "";
-    const helpText = snippet.match(/helpText:\s*"([^"]+)"/)?.[1] ?? "";
-
-    return {
-      name: match[1],
-      type: match[2],
-      label,
-      placeholder,
-      helpText,
-    };
-  });
-
-  return { title, fields };
-}
-
-function getParseState(source: string): ParseState {
-  const trimmed = source.trim();
-  if (!trimmed.startsWith("form")) {
-    return "error";
+function evalCondition(cond: ASTNode, values: Record<string, string>): boolean {
+  const type = cond.type as string;
+  if (type === "BinaryCond") {
+    const op = cond.operator as string;
+    const l = evalCondition(cond.left as ASTNode, values);
+    const r = evalCondition(cond.right as ASTNode, values);
+    return op === "&&" ? l && r : l || r;
   }
-
-  const opens = (source.match(/\{/g) || []).length;
-  const closes = (source.match(/\}/g) || []).length;
-  return opens === closes ? "valid" : "error";
+  if (type === "SimpleCond") {
+    const fieldName = cond.field as string;
+    const comparator = cond.comparator as string;
+    const valueNode = cond.value as ASTNode;
+    const currentVal = values[fieldName] ?? "";
+    const vk = valueNode?.valueKind as string;
+    let rhs: string;
+    if (vk === "number") rhs = String(valueNode.numberValue as number);
+    else if (vk === "boolean") rhs = String(valueNode.booleanValue as boolean);
+    else rhs = (valueNode?.text as string) ?? "";
+    switch (comparator) {
+      case "==": return currentVal === rhs;
+      case "!=": return currentVal !== rhs;
+      case ">":  return Number(currentVal) > Number(rhs);
+      case "<":  return Number(currentVal) < Number(rhs);
+      case ">=": return Number(currentVal) >= Number(rhs);
+      case "<=": return Number(currentVal) <= Number(rhs);
+    }
+  }
+  return false;
 }
 
-function ActivityButton({
-  active,
-  icon,
-  label,
+// ─── Dynamic Field Renderer ───────────────────────────────────────────────────
+
+const INPUT_CLS =
+  "w-full rounded border border-[#D4CCB8] bg-[#F5F3EE] px-3 py-2 font-inter text-[12px] text-[#222016] outline-none placeholder:text-[#B4AA96] transition-all duration-150 focus:border-[#7C6FE0] focus:ring-2 focus:ring-[#7C6FE0]/10";
+
+function DynamicField({
+  field,
+  nameKey,
+  values,
+  onChange,
+  repeatIndex,
 }: {
-  active: boolean;
-  icon: ReactNode;
-  label: string;
+  field: ASTNode;
+  nameKey: string;
+  values: Record<string, string>;
+  onChange: (key: string, val: string) => void;
+  repeatIndex?: number;
+}) {
+  const fieldType = field.fieldType as string;
+  const options = (field.options as string[]) ?? [];
+  const ui = field.ui as ASTNode | undefined;
+  const label = (ui?.label as string) ?? (field.name as string);
+  const placeholder = (ui?.placeholder as string) ?? "";
+  const helpText = (ui?.helpText as string) ?? "";
+  const value = values[nameKey] ?? "";
+
+  return (
+    <div className="space-y-1.5">
+      <label className="flex items-baseline gap-1.5 font-inter text-[11px] font-semibold tracking-wide text-[#3D3528]">
+        {label}
+        {repeatIndex !== undefined && (
+          <span className="font-inter text-[9px] font-normal text-[#9A9080]">
+            item {repeatIndex + 1}
+          </span>
+        )}
+      </label>
+
+      {fieldType === "select" && (
+        <div className="relative">
+          <select
+            value={value}
+            onChange={(e) => onChange(nameKey, e.target.value)}
+            className={INPUT_CLS + " appearance-none"}
+          >
+            <option value="">Select...</option>
+            {options.map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+          <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[#7C6FE0]" />
+        </div>
+      )}
+
+      {fieldType === "radio" && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {options.map((o) => (
+            <label key={o} className="flex items-center gap-1.5 font-inter text-[12px] text-[#222016] cursor-pointer">
+              <input
+                type="radio"
+                name={nameKey}
+                value={o}
+                checked={value === o}
+                onChange={() => onChange(nameKey, o)}
+                className="accent-[#7C6FE0]"
+              />
+              {o}
+            </label>
+          ))}
+        </div>
+      )}
+
+      {fieldType === "checkbox" && (
+        <div className="space-y-1">
+          {options.map((o) => {
+            const ck = values[`${nameKey}__${o}`] === "true";
+            return (
+              <label key={o} className="flex items-center gap-2 font-inter text-[12px] text-[#222016] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ck}
+                  onChange={(e) => onChange(`${nameKey}__${o}`, e.target.checked ? "true" : "false")}
+                  className="accent-[#7C6FE0]"
+                />
+                {o}
+              </label>
+            );
+          })}
+        </div>
+      )}
+
+      {fieldType === "boolean" && (
+        <label className="flex items-center gap-2 font-inter text-[12px] text-[#222016] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={value === "true"}
+            onChange={(e) => onChange(nameKey, e.target.checked ? "true" : "false")}
+            className="accent-[#7C6FE0]"
+          />
+          {placeholder || label}
+        </label>
+      )}
+
+      {(fieldType === "integer" || fieldType === "float") && (
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => onChange(nameKey, e.target.value)}
+          placeholder={placeholder || "0"}
+          className={INPUT_CLS}
+        />
+      )}
+
+      {!["select", "radio", "checkbox", "boolean", "integer", "float"].includes(fieldType) && (
+        <input
+          type={
+            fieldType === "email" ? "email"
+            : fieldType === "date" ? "date"
+            : fieldType === "url" ? "url"
+            : "text"
+          }
+          value={value}
+          onChange={(e) => onChange(nameKey, e.target.value)}
+          placeholder={placeholder}
+          className={INPUT_CLS}
+        />
+      )}
+
+      {helpText && (
+        <p className="font-inter text-[10px] text-[#8A8070]">{helpText}</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Recursive AST Statement Renderer ────────────────────────────────────────
+
+function RenderStatements({
+  stmts,
+  values,
+  onChange,
+  depth = 0,
+}: {
+  stmts: ASTNode[];
+  values: Record<string, string>;
+  onChange: (key: string, val: string) => void;
+  depth?: number;
+}) {
+  return (
+    <>
+      {stmts.map((stmt, i) => {
+        const type = stmt.type as string;
+        const key = `stmt-${depth}-${i}`;
+
+        if (type === "Field") {
+          const fieldName = stmt.name as string;
+          return (
+            <DynamicField
+              key={key}
+              field={stmt}
+              nameKey={fieldName}
+              values={values}
+              onChange={onChange}
+            />
+          );
+        }
+
+        if (type === "RepeatGroup") {
+          const countRef = stmt.countRef as string;
+          const rawCount = parseInt(values[countRef] ?? "0", 10);
+          const count = Math.min(Math.max(isNaN(rawCount) ? 0 : rawCount, 0), 20);
+          const fields = (stmt.fields as ASTNode[]) ?? [];
+
+          return (
+            <div key={key} className="space-y-3">
+              {count === 0 && (
+                <div className="flex items-center gap-2 rounded border border-dashed border-[#D0C8B4] bg-[#F8F6F0] px-4 py-3">
+                  <span className="text-[#C0B8A0] text-[18px]">↑</span>
+                  <p className="font-inter text-[11px] text-[#9A9080]">
+                    Set{" "}
+                    <code className="rounded bg-[#EDE8E0] px-1 font-mono text-[10px] text-[#4A4030]">
+                      {countRef}
+                    </code>{" "}
+                    to a number to generate sections here
+                  </p>
+                </div>
+              )}
+              <AnimatePresence initial={false}>
+                {Array.from({ length: count }, (_, idx) => (
+                  <motion.div
+                    key={`${key}-item-${idx}`}
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.22, delay: idx * 0.05 }}
+                    className="overflow-hidden rounded border border-[#D4CCB8] bg-[#F5F3EE]"
+                  >
+                    <div className="flex items-center gap-2 border-b border-[#E4DCD0] bg-[#EDE9E2] px-4 py-2">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#7C6FE0] font-inter text-[10px] font-bold text-white">
+                        {idx + 1}
+                      </span>
+                      <span className="font-inter text-[11px] font-medium text-[#3D3528]">
+                        {countRef.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())} {idx + 1}
+                      </span>
+                    </div>
+                    <div className="space-y-4 px-4 py-4">
+                      {fields.map((f, fi) => {
+                        const fieldName = f.name as string;
+                        const nameKey = `${fieldName}_repeat_${idx}`;
+                        return (
+                          <DynamicField
+                            key={`${key}-${idx}-f${fi}`}
+                            field={f}
+                            nameKey={nameKey}
+                            values={values}
+                            onChange={onChange}
+                            repeatIndex={idx}
+                          />
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          );
+        }
+
+        if (type === "Conditional") {
+          const condition = stmt.condition as ASTNode;
+          const thenStmts = (stmt.then as ASTNode[]) ?? [];
+          const elseStmts = (stmt.else as ASTNode[]) ?? [];
+
+          let condMet = false;
+          try { condMet = evalCondition(condition, values); } catch { /* ignore */ }
+
+          const branch = condMet ? thenStmts : elseStmts;
+          if (branch.length === 0) return null;
+
+          return (
+            <AnimatePresence key={key} mode="wait">
+              <motion.div
+                key={`cond-${key}-${condMet ? "then" : "else"}`}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-4 border-l-2 border-[#7C6FE0]/40 pl-3">
+                  <p className="font-mono text-[9px] uppercase tracking-wider text-[#9A9080]">
+                    {condMet ? "if" : "else"}
+                  </p>
+                  <RenderStatements
+                    stmts={branch}
+                    values={values}
+                    onChange={onChange}
+                    depth={depth + 1}
+                  />
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          );
+        }
+
+        if (type === "Section") {
+          const sectionName = stmt.name as string;
+          const sectionStmts = (stmt.statements as ASTNode[]) ?? [];
+          return (
+            <div key={key} className="space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="flex-none font-inter text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7C6FE0]">
+                  {sectionName}
+                </span>
+                <span className="h-px flex-1 bg-[#E0D8C8]" />
+              </div>
+              <RenderStatements
+                stmts={sectionStmts}
+                values={values}
+                onChange={onChange}
+                depth={depth + 1}
+              />
+            </div>
+          );
+        }
+
+        if (type === "Layout") {
+          const layoutKind = stmt.layoutKind as string;
+          const layoutStmts = (stmt.statements as ASTNode[]) ?? [];
+          return (
+            <div
+              key={key}
+              className={
+                layoutKind === "row"
+                  ? "grid grid-cols-2 gap-3"
+                  : "space-y-4"
+              }
+            >
+              {layoutStmts.map((ls, li) => (
+                <RenderStatements
+                  key={`${key}-l${li}`}
+                  stmts={[ls]}
+                  values={values}
+                  onChange={onChange}
+                  depth={depth + 1}
+                />
+              ))}
+            </div>
+          );
+        }
+
+        return null;
+      })}
+    </>
+  );
+}
+
+// ─── Dynamic Preview Panel ────────────────────────────────────────────────────
+
+function PreviewPanel({
+  ast,
+  source,
+  compilePhase,
+}: {
+  ast: ASTNode | null;
+  source: string;
+  compilePhase: CompilePhase;
+}) {
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const prevFormName = useRef<string>("");
+
+  useEffect(() => {
+    const name = (ast?.name as string) ?? source.match(/form\s+"([^"]+)"/)?.[1] ?? "";
+    if (name !== prevFormName.current) {
+      prevFormName.current = name;
+      setFormValues({});
+    }
+  }, [ast, source]);
+
+  const handleChange = useCallback((key: string, val: string) => {
+    setFormValues((prev) => ({ ...prev, [key]: val }));
+  }, []);
+
+  const isError = compilePhase === "error";
+  const isParsing = compilePhase === "parsing" || compilePhase === "semantic";
+
+  const allStatements = useMemo<ASTNode[]>(() => {
+    if (!ast) return [];
+    const pages = (ast.pages as ASTNode[]) ?? [];
+    const stmts = (ast.statements as ASTNode[]) ?? [];
+    const pageStmts = pages.flatMap((p) => (p.statements as ASTNode[]) ?? []);
+    return [...pageStmts, ...stmts];
+  }, [ast]);
+
+  const fallbackTitle = useMemo(
+    () => source.match(/form\s+"([^"]+)"/)?.[1] ?? "Untitled Form",
+    [source]
+  );
+  const formTitle = (ast?.name as string) ?? fallbackTitle;
+  const action = ast?.action as ASTNode | undefined;
+
+  const statusMap = {
+    idle:     { text: "Idle",         dot: "bg-[#3A3A3A]",                color: "text-[#555555]" },
+    parsing:  { text: "Parsing...",   dot: "bg-[#C4A35A] animate-pulse",  color: "text-[#C4A35A]" },
+    semantic: { text: "Analyzing...", dot: "bg-[#C4A35A] animate-pulse",  color: "text-[#C4A35A]" },
+    valid:    { text: "Render Ready", dot: "bg-[#7C6FE0]",                color: "text-[#7C6FE0]" },
+    error:    { text: "Parse Error",  dot: "bg-[#E05252]",                color: "text-[#E05252]" },
+  };
+  const status = statusMap[compilePhase];
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-[#F5F3EE]">
+      {/* Header */}
+      <div className="flex h-9 flex-none items-center justify-between border-b border-[#DDD5C0] bg-[#EDEAE2] px-4">
+        <span className="font-inter text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7A7060]">
+          Live Preview
+        </span>
+        <div className={`flex items-center gap-1.5 ${status.color}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
+          <span className="font-inter text-[10px] font-medium">{status.text}</span>
+        </div>
+      </div>
+
+      {/* Canvas */}
+      <div className="min-h-0 flex-1 overflow-auto p-6">
+        <AnimatePresence mode="wait">
+          {isError ? (
+            <motion.div
+              key="error-state"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.15 }}
+              className="flex h-full min-h-[200px] items-center justify-center"
+            >
+              <div className="flex max-w-xs flex-col items-center gap-3 text-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#F0CECE] bg-[#FDF0F0]">
+                  <AlertCircle className="h-5 w-5 text-[#E05252]" />
+                </div>
+                <div>
+                  <p className="font-inter text-[13px] font-semibold text-[#1A1410]">Compile Error</p>
+                  <p className="mt-1 font-inter text-[11px] leading-relaxed text-[#7A7060]">
+                    Fix errors in the editor — the preview updates automatically.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="form-state"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: isParsing ? 0.4 : 1 }}
+              transition={{ duration: 0.15 }}
+              className="mx-auto w-full max-w-[380px]"
+            >
+              <div className="overflow-hidden rounded-lg border border-[#D4CCB8] bg-[#FAF8F2] shadow-[0_8px_32px_rgba(0,0,0,0.08)]">
+                {/* Card header */}
+                <div className="border-b border-[#E4DCD0] bg-[#F0EDE5] px-6 py-5">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded border border-[#7C6FE0]/30 bg-[#7C6FE0]/10 px-2 py-0.5 font-inter text-[9px] font-semibold uppercase tracking-[0.14em] text-[#7C6FE0]">
+                      Live
+                    </span>
+                    {allStatements.length > 0 && (
+                      <span className="font-inter text-[10px] text-[#9A9080]">
+                        {allStatements.filter((s) => s.type === "Field").length} fields
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="mt-2.5 font-inter text-[20px] font-bold tracking-tight text-[#1A1410]">
+                    {formTitle}
+                  </h2>
+                </div>
+
+                {/* Dynamic form body */}
+                <div className="space-y-5 px-6 py-6">
+                  {allStatements.length > 0 ? (
+                    <RenderStatements
+                      stmts={allStatements}
+                      values={formValues}
+                      onChange={handleChange}
+                    />
+                  ) : (
+                    <p className="font-inter text-[11px] text-[#B4AA96]">
+                      Parsing form...
+                    </p>
+                  )}
+                </div>
+
+                {/* Submit footer */}
+                <div className="border-t border-[#E4DCD0] px-6 py-4">
+                  <button
+                    type="button"
+                    className="w-full rounded-md bg-[#7C6FE0] py-2.5 font-inter text-[12px] font-semibold text-white transition-all duration-150 hover:bg-[#6B5FD0] active:scale-[0.98]"
+                  >
+                    Submit Form
+                  </button>
+                  {action && (
+                    <p className="mt-2.5 text-center font-inter text-[9px] text-[#B4AA96]">
+                      {action.method as string} · {action.endpoint as string}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Repeat group hint */}
+              {allStatements.some((s) => s.type === "RepeatGroup") && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#DDD5C0] bg-[#F0EDE5] px-3 py-2.5">
+                  <Zap className="mt-0.5 h-3 w-3 flex-none text-[#7C6FE0]" />
+                  <p className="font-inter text-[10px] leading-relaxed text-[#7A7060]">
+                    This form uses <strong className="text-[#3D3528]">repeat groups</strong> — enter a number in the count field and new sections appear dynamically.
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function ActivityBtn({ active, icon, label, onClick }: {
+  active: boolean; icon: ReactNode; label: string; onClick?: () => void;
 }) {
   return (
     <button
       type="button"
       aria-pressed={active}
       title={label}
-      className={`flex h-10 w-10 items-center justify-center border-r border-foreground/10 transition-colors ${
-        active ? "bg-foreground text-background" : "text-foreground/50 hover:bg-foreground/[0.03] hover:text-foreground"
+      onClick={onClick}
+      className={`relative flex h-10 w-11 items-center justify-center transition-all duration-150 ${
+        active ? "text-[#EDEDEB]" : "text-[#555555] hover:text-[#999999]"
       }`}
     >
+      {active && (
+        <span className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-sm bg-[#7C6FE0]" />
+      )}
       {icon}
     </button>
   );
 }
 
-function TreeRow({ entry, depth = 0 }: { entry: TreeEntry; depth?: number }) {
-  const isFolder = entry.kind === "folder";
+function FileIcon({ type }: { type?: string }) {
+  if (type === "forml") return <FileCode2 className="h-3.5 w-3.5 text-[#9090A8]" />;
+  if (type === "md")    return <FileText className="h-3.5 w-3.5 text-[#666680]" />;
+  return <FileText className="h-3.5 w-3.5 text-[#555566]" />;
+}
 
+// ─── Explorer Panel ───────────────────────────────────────────────────────────
+
+function ExplorerPanel({ files, activeFile, onSelectFile, onCreateFile, onDeleteFile }: {
+  files: Map<string, VirtualFile>;
+  activeFile: string;
+  onSelectFile: (name: string) => void;
+  onCreateFile: (name: string) => void;
+  onDeleteFile: (name: string) => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [hoveredFile, setHoveredFile] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (creating) inputRef.current?.focus(); }, [creating]);
+
+  function commitCreate() {
+    const name = newName.trim();
+    if (name) {
+      const finalName = name.includes(".") ? name : `${name}.forml`;
+      onCreateFile(finalName);
+    }
+    setCreating(false);
+    setNewName("");
+  }
+
+  const sortedFiles = useMemo(() => {
+    return [...files.values()].sort((a, b) => {
+      if (a.fileType === "forml" && b.fileType !== "forml") return -1;
+      if (a.fileType !== "forml" && b.fileType === "forml") return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [files]);
+
+  const formlFiles = sortedFiles.filter((f) => f.fileType === "forml");
+  const otherFiles = sortedFiles.filter((f) => f.fileType !== "forml");
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-[#0D0D0D]">
+      <div className="flex h-9 flex-none items-center justify-between px-4">
+        <span className="font-inter text-[9px] font-semibold uppercase tracking-[0.2em] text-[#555555]">Explorer</span>
+        <button
+          type="button"
+          title="New File"
+          onClick={() => setCreating(true)}
+          className="flex h-5 w-5 items-center justify-center rounded text-[#555555] transition-colors hover:text-[#AAAAAA] hover:bg-[#1A1A1A]"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="flex-none border-b border-[#252525] px-4 pb-2">
+        <span className="font-inter text-[9px] font-medium uppercase tracking-[0.14em] text-[#444444]">Formix Project</span>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto px-2 py-2 space-y-px">
+        <FormlFolder
+          label="forml-files"
+          files={formlFiles}
+          activeFile={activeFile}
+          hoveredFile={hoveredFile}
+          onHover={setHoveredFile}
+          onSelect={onSelectFile}
+          onDelete={onDeleteFile}
+        />
+
+        {otherFiles.map((file) => (
+          <FileRow
+            key={file.name}
+            file={file}
+            isActive={file.name === activeFile}
+            isHovered={hoveredFile === file.name}
+            onMouseEnter={() => setHoveredFile(file.name)}
+            onMouseLeave={() => setHoveredFile(null)}
+            onSelect={() => onSelectFile(file.name)}
+            onDelete={() => onDeleteFile(file.name)}
+          />
+        ))}
+
+        {creating && (
+          <div className="flex items-center gap-1.5 rounded bg-[#1E1E1E] border border-[#7C6FE0]/30 px-2 py-[4px] mt-1">
+            <FileCode2 className="h-3.5 w-3.5 flex-none text-[#7C6FE0]" />
+            <input
+              ref={inputRef}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitCreate();
+                if (e.key === "Escape") { setCreating(false); setNewName(""); }
+              }}
+              onBlur={commitCreate}
+              placeholder="filename.forml"
+              className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-[#EDEDEB] outline-none placeholder:text-[#444444]"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="flex-none border-t border-[#252525] px-4 py-2.5">
+        <div className="flex items-center gap-1.5 text-[10px] text-[#555555]">
+          <GitBranch className="h-3 w-3" />
+          <span className="font-inter">main</span>
+          <span className="ml-auto flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#4ADE80]" />
+            <span className="font-inter">{files.size} files</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormlFolder({ label, files, activeFile, hoveredFile, onHover, onSelect, onDelete }: {
+  label: string; files: VirtualFile[]; activeFile: string; hoveredFile: string | null;
+  onHover: (n: string | null) => void; onSelect: (n: string) => void; onDelete: (n: string) => void;
+}) {
+  const [open, setOpen] = useState(true);
   return (
     <div>
-      <div
-        className={`flex items-center gap-2 py-1.5 text-[11px] font-mono ${
-          entry.active ? "text-foreground" : "text-foreground/50"
-        }`}
-        style={{ paddingLeft: `${depth * 14}px` }}
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        className="group flex w-full items-center gap-1.5 rounded py-[4px] pr-2 text-left text-[12px] text-[#777777] hover:bg-[#1A1A1A] hover:text-[#BBBBBB] transition-all duration-150"
+        style={{ paddingLeft: "8px" }}
       >
-        {isFolder ? (
-          <ChevronRight className="h-3 w-3 text-foreground/25" />
-        ) : (
-          <span className="h-1.5 w-1.5 rounded-full border border-foreground/20" />
+        <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.15 }} className="flex-none">
+          <ChevronRight className="h-3 w-3 text-[#555555]" />
+        </motion.span>
+        {open
+          ? <FolderOpen className="h-3.5 w-3.5 flex-none text-[#7C6FE0]/70" />
+          : <Folder className="h-3.5 w-3.5 flex-none text-[#555566]" />
+        }
+        <span className="flex-1 truncate font-inter text-[12px]">{label}</span>
+        <span className="font-mono text-[9px] text-[#444444]">{files.length}</span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="overflow-hidden"
+          >
+            {files.map((file) => (
+              <FileRow
+                key={file.name}
+                file={file}
+                depth={1}
+                isActive={file.name === activeFile}
+                isHovered={hoveredFile === file.name}
+                onMouseEnter={() => onHover(file.name)}
+                onMouseLeave={() => onHover(null)}
+                onSelect={() => onSelect(file.name)}
+                onDelete={() => onDelete(file.name)}
+              />
+            ))}
+          </motion.div>
         )}
-        {isFolder ? <Folder className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-        <span className={entry.active ? "text-foreground" : ""}>{entry.name}</span>
-        {entry.active ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-foreground" /> : null}
-      </div>
-      {entry.children?.map((child) => (
-        <TreeRow key={`${entry.name}-${child.name}`} entry={child} depth={depth + 1} />
-      ))}
+      </AnimatePresence>
     </div>
   );
 }
 
-function ExplorerPanel() {
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-[#FAFAF9]">
-      <div className="flex h-9 items-center justify-between border-b border-foreground/10 px-4">
-        <div className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F57]" />
-          <span className="h-2.5 w-2.5 rounded-full bg-[#FEBC2E]" />
-          <span className="h-2.5 w-2.5 rounded-full bg-[#28C840]" />
-        </div>
-        <span className="font-mono text-[9px] uppercase tracking-[0.26em] text-foreground/35">
-          Formix / Explorer
-        </span>
-      </div>
-
-      <div className="flex items-center justify-between border-b border-foreground/10 px-4 py-2">
-        <span className="font-mono text-[9px] uppercase tracking-[0.26em] text-foreground/35">
-          Project Files
-        </span>
-        <span className="font-mono text-[8px] uppercase tracking-[0.22em] text-foreground/25">
-          feedback.forml
-        </span>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-4">
-        <div className="space-y-0.5">
-          {FILE_TREE.map((entry) => (
-            <TreeRow key={entry.name} entry={entry} />
-          ))}
-        </div>
-      </div>
-
-      <div className="border-t border-foreground/10 px-4 py-3">
-        <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.24em] text-foreground/35">
-          <CircleDot className="h-3 w-3" />
-          Workspace synced
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EditorTabs({
-  activeTab,
-  onTabChange,
-}: {
-  activeTab: EditorTab;
-  onTabChange: (tab: EditorTab) => void;
+function FileRow({ file, depth = 0, isActive, isHovered, onMouseEnter, onMouseLeave, onSelect, onDelete }: {
+  file: VirtualFile; depth?: number; isActive: boolean; isHovered: boolean;
+  onMouseEnter: () => void; onMouseLeave: () => void; onSelect: () => void; onDelete: () => void;
 }) {
   return (
-    <div className="flex h-10 items-end border-b border-[#FAFAF9]/10 bg-[#080503] px-3">
-      {(["feedback.forml", "README.md"] as const).map((tab) => {
-        const active = activeTab === tab;
+    <div
+      className={`group relative flex w-full items-center gap-1.5 rounded py-[4px] pr-2 text-[12px] transition-all duration-150 ${
+        isActive
+          ? "bg-[#1E1E2A] text-[#EDEDEB]"
+          : "text-[#777777] hover:bg-[#181818] hover:text-[#BBBBBB]"
+      }`}
+      style={{ paddingLeft: `${8 + depth * 14}px` }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <span className="flex-none w-3" />
+      <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
+        <span className="flex-none"><FileIcon type={file.fileType} /></span>
+        <span className={`flex-1 truncate font-inter ${isActive ? "text-[#EDEDEB] font-medium" : ""}`}>
+          {file.name}
+        </span>
+      </button>
+      {isHovered && (
+        <button
+          type="button"
+          title={`Delete ${file.name}`}
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="flex-none rounded p-0.5 text-[#555555] transition-colors hover:text-[#E05252]"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      )}
+      {isActive && !isHovered && (
+        <span className="ml-auto h-1.5 w-1.5 flex-none rounded-full bg-[#7C6FE0]" />
+      )}
+    </div>
+  );
+}
+
+// ─── Editor Tab Bar ────────────────────────────────────────────────────────────
+
+function EditorTabs({ openTabs, activeTab, files, onTabChange, onTabClose }: {
+  openTabs: string[]; activeTab: string; files: Map<string, VirtualFile>;
+  onTabChange: (tab: string) => void; onTabClose: (tab: string) => void;
+}) {
+  return (
+    <div className="flex h-9 flex-none items-stretch border-b border-[#252525] bg-[#0D0D0D] overflow-x-auto">
+      {openTabs.map((name) => {
+        const active = activeTab === name;
+        const fileType = files.get(name)?.fileType;
         return (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => onTabChange(tab)}
-            className={`relative flex h-9 items-center gap-2 border-r border-[#FAFAF9]/8 px-4 font-mono text-[10px] uppercase tracking-[0.24em] transition-colors ${
-              active ? "bg-[#FAFAF9]/5 text-[#FAFAF9]" : "text-[#FAFAF9]/45 hover:text-[#FAFAF9]/80"
+          <div
+            key={name}
+            className={`relative flex flex-none items-center gap-1.5 border-r border-[#252525] px-3 font-inter text-[11px] transition-all duration-150 max-w-[180px] ${
+              active
+                ? "bg-[#141414] text-[#EDEDEB]"
+                : "text-[#555555] hover:bg-[#121212] hover:text-[#999999]"
             }`}
           >
-            <span>{tab}</span>
-            {active ? <span className="absolute inset-x-0 bottom-0 h-px bg-[#FAFAF9]" /> : null}
-          </button>
-        );
-      })}
-      <div className="ml-auto flex items-center gap-2 pb-2">
-        <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-[#FAFAF9]/30">
-          JetBrains Mono
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function EditorPanel({
-  activeTab,
-  dsl,
-  readme,
-  onTabChange,
-  onDslChange,
-  onCursorChange,
-}: {
-  activeTab: EditorTab;
-  dsl: string;
-  readme: string;
-  onTabChange: (tab: EditorTab) => void;
-  onDslChange: (value: string) => void;
-  onCursorChange: (cursor: CursorState) => void;
-}) {
-  const editorValue = activeTab === "feedback.forml" ? dsl : readme;
-  const editorLanguage = activeTab === "feedback.forml" ? "forml" : "markdown";
-  const readOnly = activeTab === "README.md";
-
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-[#080503] text-[#FAFAF9]">
-      <EditorTabs activeTab={activeTab} onTabChange={onTabChange} />
-      <div className="relative min-h-0 flex-1 bg-[#080503]">
-        <MonacoEditor
-          beforeMount={defineFormixNightTheme}
-          theme="formix-night"
-          language={editorLanguage}
-          value={editorValue}
-          onChange={(value) => {
-            if (activeTab === "feedback.forml") {
-              onDslChange(value ?? "");
-            }
-          }}
-          onMount={(editor, monaco) => {
-            monaco.editor.setTheme("formix-night");
-            editor.updateOptions(MONACO_OPTIONS);
-            editor.onDidChangeCursorPosition((event) => {
-              onCursorChange({
-                line: event.position.lineNumber,
-                column: event.position.column,
-              });
-            });
-          }}
-          options={{
-            ...MONACO_OPTIONS,
-            readOnly,
-            domReadOnly: readOnly,
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function PreviewPanel({
-  summary,
-  parseState,
-}: {
-  summary: FormSummary;
-  parseState: ParseState;
-}) {
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-[#FAFAF9]">
-      <div className="flex items-center justify-between border-b border-foreground/10 px-4 py-3">
-        <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-foreground/35">
-          Live Preview
-        </span>
-        <span
-          className={`font-mono text-[9px] uppercase tracking-[0.24em] ${
-            parseState === "valid" ? "text-foreground" : "text-foreground/45"
-          }`}
-        >
-          {parseState === "valid" ? "Render ready" : "Parse pending"}
-        </span>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-auto p-6">
-        {parseState === "error" ? (
-          <div className="border border-foreground/10 p-6">
-            <p className="font-mono text-[9px] uppercase tracking-[0.26em] text-foreground/35">
-              Parse Error
-            </p>
-            <p className="mt-3 font-sans text-sm leading-relaxed text-foreground/70">
-              The current DSL needs matching braces and a `form` declaration before the preview can render.
-            </p>
-          </div>
-        ) : (
-          <div className="mx-auto flex w-full max-w-[380px] flex-col border border-foreground/10 bg-[#FAFAF9] p-6">
-            <div className="border-b border-foreground/10 pb-5">
-              <p className="font-mono text-[9px] uppercase tracking-[0.28em] text-foreground/35">
-                Form Preview
-              </p>
-              <h2 className="mt-3 font-display text-[2rem] leading-none text-foreground">
-                {summary.title}
-              </h2>
-              <p className="mt-3 font-mono text-[9px] uppercase tracking-[0.22em] text-foreground/25">
-                {summary.fields.length} fields loaded
-              </p>
-            </div>
-
-            <div className="mt-6 space-y-5">
-              {summary.fields.map((field) => (
-                <div key={field.name}>
-                  <label className="mb-2 block font-mono text-[9px] uppercase tracking-[0.24em] text-foreground/45">
-                    {field.label}
-                  </label>
-                  {field.type === "select" ? (
-                    <div className="border-b border-foreground/15 pb-2 font-sans text-sm text-foreground/75">
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-1.5 w-1.5 rounded-full bg-foreground/70" />
-                        Select an option
-                      </span>
-                    </div>
-                  ) : field.type === "text" || field.type === "email" ? (
-                    <div className="border-b border-foreground/15 pb-2 font-sans text-sm text-foreground/45">
-                      {field.placeholder || "Type here..."}
-                    </div>
-                  ) : (
-                    <div className="border-b border-foreground/15 pb-2 font-sans text-sm text-foreground/45">
-                      Field type: {field.type}
-                    </div>
-                  )}
-                  {field.helpText ? (
-                    <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.18em] text-foreground/25">
-                      {field.helpText}
-                    </p>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-
+            {active && (
+              <span className="absolute inset-x-0 top-0 h-[2px] bg-[#7C6FE0]" />
+            )}
+            <button type="button" onClick={() => onTabChange(name)} className="flex min-w-0 items-center gap-1.5 flex-1 py-2">
+              <FileIcon type={fileType} />
+              <span className="truncate">{name}</span>
+            </button>
             <button
               type="button"
-              className="mt-8 h-11 border border-foreground bg-foreground font-mono text-[10px] uppercase tracking-[0.28em] text-[#FAFAF9]"
+              onClick={(e) => { e.stopPropagation(); onTabClose(name); }}
+              className={`flex-none rounded p-0.5 transition-colors ${
+                active ? "text-[#555555] hover:text-[#AAAAAA]" : "text-[#333333] hover:text-[#777777]"
+              }`}
             >
-              Submit Form
+              <X className="h-2.5 w-2.5" />
             </button>
           </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Compiler Badge ────────────────────────────────────────────────────────────
+
+function CompilerBadge({ phase }: { phase: CompilePhase }) {
+  const configs: Record<CompilePhase, { text: string; color: string; icon: ReactNode } | null> = {
+    idle: null,
+    parsing:  { text: "Parsing...",          color: "bg-[#1A1A1A] text-[#AAAAAA] border-[#2E2E2E]",   icon: <Loader2 className="h-3 w-3 animate-spin" /> },
+    semantic: { text: "Semantic Analysis...", color: "bg-[#1A1A1A] text-[#AAAAAA] border-[#2E2E2E]",   icon: <Zap className="h-3 w-3" /> },
+    valid:    { text: "Compiled ✓",           color: "bg-[#141420] text-[#7C6FE0] border-[#2A2540]",   icon: <CheckCircle2 className="h-3 w-3" /> },
+    error:    { text: "Compile Error",        color: "bg-[#1E0E0E] text-[#E05252] border-[#3D1A1A]",   icon: <AlertCircle className="h-3 w-3" /> },
+  };
+  const config = phase !== "idle" ? configs[phase] : null;
+  return (
+    <AnimatePresence mode="wait">
+      {config && (
+        <motion.div
+          key={phase}
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.15 }}
+          className={`pointer-events-none absolute right-4 top-3 z-10 flex items-center gap-1.5 rounded border px-2.5 py-1 font-inter text-[10px] font-medium ${config.color}`}
+        >
+          {config.icon}
+          {config.text}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ─── Editor Panel ──────────────────────────────────────────────────────────────
+
+function EditorPanel({ openTabs, activeTab, files, compilePhase, onTabChange, onTabClose,
+  onContentChange, onCursorChange, editorRef, monacoRef, diagnostics }: {
+  openTabs: string[]; activeTab: string; files: Map<string, VirtualFile>; compilePhase: CompilePhase;
+  onTabChange: (tab: string) => void; onTabClose: (tab: string) => void;
+  onContentChange: (name: string, value: string) => void;
+  onCursorChange: (cursor: CursorState) => void;
+  editorRef: React.MutableRefObject<MonacoEditorNS.IStandaloneCodeEditor | null>;
+  monacoRef: React.MutableRefObject<MonacoLike | null>;
+  diagnostics: FormlDiagnostic[];
+}) {
+  const activeFile = files.get(activeTab);
+  const isForml = activeFile?.fileType === "forml";
+
+  useEffect(() => {
+    if (!monacoRef.current || !editorRef.current) return;
+    const model = editorRef.current.getModel();
+    if (!model) return;
+    const monaco = monacoRef.current;
+    const markers = diagnostics.map((d) => ({
+      startLineNumber: Math.max(d.line, 1), endLineNumber: Math.max(d.line, 1),
+      startColumn: Math.max(d.col, 1), endColumn: Math.max(d.col + 1, 2),
+      message: d.message,
+      severity: d.severity === "error" ? monaco.MarkerSeverity.Error
+        : d.severity === "warning" ? monaco.MarkerSeverity.Warning : monaco.MarkerSeverity.Info,
+    }));
+    monaco.editor.setModelMarkers(model, "forml-compiler", markers);
+  }, [diagnostics, editorRef, monacoRef]);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-[#0D0D0D]">
+      <EditorTabs openTabs={openTabs} activeTab={activeTab} files={files}
+        onTabChange={onTabChange} onTabClose={onTabClose} />
+      <div className="relative min-h-0 flex-1">
+        {openTabs.length === 0 ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="text-center">
+              <FileCode2 className="mx-auto h-8 w-8 text-[#252525]" />
+              <p className="mt-3 font-inter text-[11px] text-[#444444]">Select a file to open</p>
+            </div>
+          </div>
+        ) : (
+          <MonacoEditor
+            key={activeTab}
+            beforeMount={(monaco) => { defineFormixMono(monaco as unknown as MonacoLike); }}
+            theme="formix-mono"
+            language={isForml ? "forml" : "markdown"}
+            value={activeFile?.content ?? ""}
+            onChange={(value) => { if (isForml) onContentChange(activeTab, value ?? ""); }}
+            onMount={(editor, monaco) => {
+              editorRef.current = editor as MonacoEditorNS.IStandaloneCodeEditor;
+              monacoRef.current = monaco as unknown as MonacoLike;
+              monaco.editor.setTheme("formix-mono");
+              editor.updateOptions(MONACO_OPTIONS);
+              editor.onDidChangeCursorPosition((event) => {
+                onCursorChange({ line: event.position.lineNumber, column: event.position.column });
+              });
+            }}
+            options={{ ...MONACO_OPTIONS, readOnly: !isForml, domReadOnly: !isForml }}
+          />
         )}
+        {isForml && <CompilerBadge phase={compilePhase} />}
+      </div>
+    </div>
+  );
+}
+
+// ─── Diagnostics Panel ────────────────────────────────────────────────────────
+
+const DIAG_TABS: Array<{ id: DiagTab; label: string }> = [
+  { id: "problems",  label: "Problems" },
+  { id: "ast",       label: "AST" },
+  { id: "json",      label: "JSON Schema" },
+  { id: "tokens",    label: "Tokens" },
+];
+
+function DiagnosticsContent({ tab, compileResult, activeFile }: {
+  tab: DiagTab; compileResult: FormlCompileResult | null; activeFile: string;
+}) {
+  if (tab === "problems") {
+    const diags = compileResult?.diagnostics ?? [];
+    const errors   = diags.filter((d) => d.severity === "error");
+    const warnings = diags.filter((d) => d.severity === "warning");
+    if (diags.length === 0)
+      return (
+        <div className="flex items-center gap-2 p-4 text-[#555555]">
+          <CheckCircle2 className="h-3.5 w-3.5 text-[#4ADE80]" />
+          <span className="font-inter text-[11px]">No problems detected</span>
+        </div>
+      );
+    return (
+      <div className="space-y-1 p-4">
+        {[...errors, ...warnings].map((d, i) => (
+          <div key={i} className="flex items-start gap-2.5 rounded-sm px-2 py-1.5 hover:bg-[#141414]">
+            {d.severity === "error"
+              ? <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none text-[#E05252]" />
+              : <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none text-[#C4A35A]" />}
+            <div>
+              <p className={`font-inter text-[11px] ${d.severity === "error" ? "text-[#E05252]" : "text-[#C4A35A]"}`}>
+                {d.message}
+              </p>
+              <p className="mt-0.5 font-inter text-[10px] text-[#555555]">
+                {activeFile} · Line {d.line}, Col {d.col}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (tab === "ast") {
+    return (
+      <pre className="p-4 font-mono text-[10px] leading-relaxed text-[#9A9AAA] overflow-auto">
+        {compileResult?.ast ? JSON.stringify(compileResult.ast, null, 2) : "// No AST — fix compile errors first."}
+      </pre>
+    );
+  }
+  if (tab === "json") {
+    const ast = compileResult?.ast as ASTNode | null;
+    if (!ast) return <pre className="p-4 font-mono text-[10px] text-[#444444]">// No schema — fix compile errors first.</pre>;
+    const stmts = ((ast.statements as ASTNode[]) ?? []).filter((s) => s.type === "Field");
+    const schema = {
+      $schema: "https://formix.dev/schema/v1",
+      title: ast.name,
+      fields: stmts.map((s) => {
+        const ui = s.ui as ASTNode | undefined;
+        return { name: s.name, type: s.fieldType, label: ui?.label ?? s.name, placeholder: ui?.placeholder, helpText: ui?.helpText, options: (s.options as string[])?.length ? s.options : undefined };
+      }),
+    };
+    return (
+      <pre className="p-4 font-mono text-[10px] leading-relaxed text-[#9A9AAA] overflow-auto">
+        {JSON.stringify(schema, null, 2)}
+      </pre>
+    );
+  }
+  if (tab === "tokens") {
+    const ast = compileResult?.ast as ASTNode | null;
+    if (!ast) return <pre className="p-4 font-mono text-[10px] text-[#444444]">// Compile to see tokens.</pre>;
+    const stmts = ((ast.statements as ASTNode[]) ?? []).filter((s) => s.type === "Field");
+    const tokens = [
+      { token: "form",          type: "KEYWORD" },
+      { token: `"${ast.name}"`, type: "STRING" },
+      { token: "{",             type: "LBRACE" },
+      ...stmts.flatMap((s) => [
+        { token: "field",           type: "KEYWORD" },
+        { token: s.name as string,  type: "IDENTIFIER" },
+        { token: ":",               type: "COLON" },
+        { token: s.fieldType as string, type: "TYPE_KEYWORD" },
+      ]),
+      { token: "}", type: "RBRACE" },
+    ];
+    return (
+      <div className="overflow-auto">
+        <table className="w-full font-mono text-[10px]">
+          <thead>
+            <tr className="border-b border-[#252525]">
+              {["#", "Token", "Type"].map((h) => (
+                <th key={h} className="px-4 py-2 text-left font-mono text-[9px] uppercase tracking-wider text-[#444444]">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tokens.map((tok, i) => (
+              <tr key={i} className="border-b border-[#141414] transition-colors hover:bg-[#141414]">
+                <td className="px-4 py-1.5 text-[#444444]">{i}</td>
+                <td className="px-4 py-1.5 text-[#AAAAAA]">{tok.token}</td>
+                <td className="px-4 py-1.5 text-[#7C6FE0]">{tok.type}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  return null;
+}
+
+function DiagnosticsPanel({ open, onToggle, compileResult, activeFile }: {
+  open: boolean; onToggle: () => void; compileResult: FormlCompileResult | null; activeFile: string;
+}) {
+  const [activeTab, setActiveTab] = useState<DiagTab>("problems");
+  const errorCount = compileResult?.diagnostics.filter((d) => d.severity === "error").length ?? 0;
+  const warnCount  = compileResult?.diagnostics.filter((d) => d.severity === "warning").length ?? 0;
+
+  return (
+    <div className="flex-none">
+      <motion.div
+        initial={false}
+        animate={{ height: open ? 240 : 0 }}
+        transition={{ type: "spring", stiffness: 400, damping: 40 }}
+        className="overflow-hidden border-t border-[#252525] bg-[#0D0D0D]"
+      >
+        <div className="flex h-9 items-center border-b border-[#252525]">
+          {DIAG_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setActiveTab(t.id)}
+              className={`relative flex h-full items-center gap-1.5 px-4 font-inter text-[10px] transition-colors duration-150 ${
+                activeTab === t.id ? "text-[#EDEDEB]" : "text-[#555555] hover:text-[#999999]"
+              }`}
+            >
+              {activeTab === t.id && (
+                <span className="absolute inset-x-0 bottom-0 h-[2px] bg-[#7C6FE0]" />
+              )}
+              {t.label}
+              {t.id === "problems" && errorCount > 0 && (
+                <span className="flex h-3.5 min-w-[14px] items-center justify-center rounded bg-[#2A1010] px-1 font-mono text-[8px] font-bold text-[#E05252]">
+                  {errorCount}
+                </span>
+              )}
+              {t.id === "problems" && warnCount > 0 && errorCount === 0 && (
+                <span className="flex h-3.5 min-w-[14px] items-center justify-center rounded bg-[#2A2210] px-1 font-mono text-[8px] font-bold text-[#C4A35A]">
+                  {warnCount}
+                </span>
+              )}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={onToggle}
+            className="ml-auto flex h-full w-9 items-center justify-center text-[#444444] transition-colors hover:text-[#888888]"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+        <div className="h-[calc(240px-36px)] overflow-auto">
+          <DiagnosticsContent tab={activeTab} compileResult={compileResult} activeFile={activeFile} />
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Status Bar ────────────────────────────────────────────────────────────────
+
+function StatusBar({ compilePhase, cursor, onToggleDiag, compileMs, wasmReady }: {
+  compilePhase: CompilePhase; cursor: CursorState;
+  onToggleDiag: () => void; compileMs: number | null; wasmReady: boolean;
+}) {
+  const isError   = compilePhase === "error";
+  const isValid   = compilePhase === "valid";
+  const isParsing = compilePhase === "parsing" || compilePhase === "semantic";
+
+  return (
+    <div className="flex h-6 flex-none items-center justify-between border-t border-[#252525] bg-[#0D0D0D] px-3">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onToggleDiag}
+          title="Toggle Diagnostics Panel"
+          className="flex items-center gap-1 text-[#555555] transition-colors hover:text-[#AAAAAA]"
+        >
+          <Terminal className="h-2.5 w-2.5" />
+          <span className="font-inter text-[9px]">Console</span>
+        </button>
+        <span className="h-3 w-px bg-[#2A2A2A]" />
+
+        {!wasmReady && (
+          <span className="flex items-center gap-1.5 font-inter text-[9px] text-[#555555]">
+            <Loader2 className="h-2 w-2 animate-spin" />WASM loading...
+          </span>
+        )}
+        {wasmReady && isParsing && (
+          <span className="flex items-center gap-1.5 font-inter text-[9px] text-[#888888]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#C4A35A] animate-pulse" />Compiling...
+          </span>
+        )}
+        {wasmReady && isValid && (
+          <div className="flex items-center gap-2.5">
+            <span className="font-inter text-[9px] text-[#7C6FE0]">✓ Parser</span>
+            <span className="h-3 w-px bg-[#2A2A2A]" />
+            <span className="font-inter text-[9px] text-[#7C6FE0]">✓ AST</span>
+            <span className="h-3 w-px bg-[#2A2A2A]" />
+            <span className="font-inter text-[9px] text-[#7C6FE0]">✓ Semantic</span>
+            {compileMs !== null && (
+              <>
+                <span className="h-3 w-px bg-[#2A2A2A]" />
+                <span className="font-inter text-[9px] text-[#666666]">{compileMs} ms</span>
+              </>
+            )}
+          </div>
+        )}
+        {wasmReady && isError && (
+          <span className="flex items-center gap-1 font-inter text-[9px] text-[#E05252]">
+            <TriangleAlert className="h-2.5 w-2.5" />Compile error
+          </span>
+        )}
+        {wasmReady && compilePhase === "idle" && (
+          <span className="font-inter text-[9px] text-[#555555]">WASM ready · C++ compiler active</span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <span className="font-inter text-[9px] text-[#666666]">Ln {cursor.line}, Col {cursor.column}</span>
+        <span className="h-3 w-px bg-[#2A2A2A]" />
+        <span className="font-inter text-[9px] text-[#555555]">UTF-8</span>
+        <span className="h-3 w-px bg-[#2A2A2A]" />
+        <span className="flex items-center gap-1 font-inter text-[9px] text-[#555555]">
+          <GitBranch className="h-2 w-2" />main
+        </span>
+        <span className="h-3 w-px bg-[#2A2A2A]" />
+        <span className="flex items-center gap-1.5 font-inter text-[9px] text-[#555555]">
+          <span className={`h-1.5 w-1.5 rounded-full ${wasmReady ? "bg-[#4ADE80]" : "bg-[#C4A35A] animate-pulse"}`} />
+          {wasmReady ? "WASM active" : "Loading..."}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Top Bar ──────────────────────────────────────────────────────────────────
+
+function TopBar({ activeFile, compilePhase, wasmReady, onManualCompile }: {
+  activeFile: string; compilePhase: CompilePhase; wasmReady: boolean; onManualCompile: () => void;
+}) {
+  const phaseLabel = {
+    idle:     wasmReady ? "Ready" : "Loading...",
+    parsing:  "Parsing...",
+    semantic: "Analyzing...",
+    valid:    "Compiled",
+    error:    "Error",
+  };
+  const phaseDot = {
+    idle:     wasmReady ? "bg-[#4ADE80]" : "bg-[#C4A35A] animate-pulse",
+    parsing:  "bg-[#C4A35A] animate-pulse",
+    semantic: "bg-[#C4A35A] animate-pulse",
+    valid:    "bg-[#7C6FE0]",
+    error:    "bg-[#E05252]",
+  };
+  const phaseTextColor = {
+    idle:     wasmReady ? "text-[#666666]" : "text-[#666666]",
+    parsing:  "text-[#888888]",
+    semantic: "text-[#888888]",
+    valid:    "text-[#7C6FE0]",
+    error:    "text-[#E05252]",
+  };
+
+  return (
+    <div className="flex h-10 flex-none items-center justify-between border-b border-[#252525] bg-[#0D0D0D] px-4">
+      {/* Left: brand + breadcrumb */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded border border-[#2D2D3D] bg-[#141420]">
+            <span className="font-inter text-[9px] font-black tracking-tighter text-[#7C6FE0]">FX</span>
+          </div>
+          <span className="font-inter text-[12px] font-semibold tracking-tight text-[#EDEDEB]">Formix</span>
+        </div>
+        <span className="h-4 w-px bg-[#2A2A2A]" />
+        <div className="flex items-center gap-1 font-inter text-[11px]">
+          <span className="text-[#555555]">my-project</span>
+          <ChevronRight className="h-3 w-3 text-[#3A3A3A]" />
+          <span className="text-[#999999]">{activeFile}</span>
+        </div>
+      </div>
+
+      {/* Right: status + run button */}
+      <div className="flex items-center gap-3">
+        <div className={`flex items-center gap-1.5 ${phaseTextColor[compilePhase]}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${phaseDot[compilePhase]}`} />
+          <span className="font-inter text-[10px] font-medium">{phaseLabel[compilePhase]}</span>
+        </div>
+        <span className="h-4 w-px bg-[#2A2A2A]" />
+        <button
+          type="button"
+          onClick={onManualCompile}
+          disabled={!wasmReady}
+          className="flex items-center gap-1.5 rounded-md bg-[#7C6FE0] px-3 py-1.5 font-inter text-[10px] font-semibold text-white transition-all duration-150 hover:bg-[#8A7DF0] active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <Zap className="h-3 w-3" />
+          Run
+        </button>
       </div>
     </div>
   );
@@ -589,110 +1384,182 @@ function PreviewPanel({
 
 function PartitionHandle() {
   return (
-    <PanelResizeHandle className="group relative flex w-3 shrink-0 cursor-col-resize items-stretch justify-center bg-transparent">
-      <span className="h-full w-px bg-foreground/10 transition-colors group-hover:bg-foreground/35" />
+    <PanelResizeHandle className="group relative flex w-[3px] shrink-0 cursor-col-resize items-stretch justify-center bg-transparent">
+      <span className="h-full w-px bg-[#252525] transition-all duration-150 group-hover:bg-[#7C6FE0]/40 group-hover:w-[2px]" />
     </PanelResizeHandle>
   );
 }
 
+// ─── Main Shell ────────────────────────────────────────────────────────────────
+
 export function DemoIdeShell() {
-  const [activeTool, setActiveTool] = useState<SidebarTool>("files");
-  const [activeTab, setActiveTab] = useState<EditorTab>("feedback.forml");
-  const [dsl, setDsl] = useState(INITIAL_DSL);
-  const [cursor, setCursor] = useState<CursorState>({ line: 1, column: 1 });
-  const [parseState, setParseState] = useState<ParseState>("parsing");
-  const summary = useMemo(() => parseFormSummary(dsl), [dsl]);
-  const readme = useMemo(() => README_CONTENT, []);
-  const parseTimerRef = useRef<number | null>(null);
+  const { ready: wasmReady, compile } = useFormlCompiler();
+
+  const fsStore = useMemo(() => getFileSystemStore(), []);
+  const [files, setFiles] = useState<Map<string, VirtualFile>>(() => fsStore.files);
 
   useEffect(() => {
-    if (parseTimerRef.current !== null) {
-      window.clearTimeout(parseTimerRef.current);
-    }
+    const unsub = fsStore.subscribe((updated) => setFiles(new Map(updated)));
+    return unsub;
+  }, [fsStore]);
 
-    setParseState("parsing");
-    parseTimerRef.current = window.setTimeout(() => {
-      setParseState(getParseState(dsl));
-    }, 180);
+  const [openTabs,      setOpenTabs]      = useState<string[]>(() => ["customer-feedback.forml"]);
+  const [activeTab,     setActiveTab]     = useState("customer-feedback.forml");
+  const [compilePhase,  setCompilePhase]  = useState<CompilePhase>("idle");
+  const [compileResult, setCompileResult] = useState<FormlCompileResult | null>(null);
+  const [compileMs,     setCompileMs]     = useState<number | null>(null);
+  const [cursor,        setCursor]        = useState<CursorState>({ line: 1, column: 1 });
+  const [diagOpen,      setDiagOpen]      = useState(false);
+  const [activeTool,    setActiveTool]    = useState<SidebarTool>("files");
 
-    return () => {
-      if (parseTimerRef.current !== null) {
-        window.clearTimeout(parseTimerRef.current);
-      }
-    };
-  }, [dsl]);
+  const editorRef    = useRef<MonacoEditorNS.IStandaloneCodeEditor | null>(null);
+  const monacoRef    = useRef<MonacoLike | null>(null);
+  const phaseTimers  = useRef<number[]>([]);
+
+  const clearPhaseTimers = useCallback(() => {
+    phaseTimers.current.forEach((id) => window.clearTimeout(id));
+    phaseTimers.current = [];
+  }, []);
+
+  const activeFile    = files.get(activeTab);
+  const isFormlActive = activeFile?.fileType === "forml";
+
+  const runCompile = useCallback((source: string) => {
+    if (!wasmReady) return;
+    clearPhaseTimers();
+    setCompilePhase("parsing");
+    const t1 = window.setTimeout(() => setCompilePhase("semantic"), 120);
+    const t2 = window.setTimeout(() => {
+      const result = compile(source);
+      setCompileResult(result);
+      setCompilePhase(result.ok ? "valid" : "error");
+      setCompileMs(result.durationMs);
+      if (!result.ok && result.diagnostics.some((d) => d.severity === "error")) setDiagOpen(true);
+    }, 280);
+    phaseTimers.current = [t1, t2];
+  }, [wasmReady, compile, clearPhaseTimers]);
+
+  useEffect(() => {
+    if (!isFormlActive) { setCompilePhase("idle"); setCompileResult(null); return; }
+    if (activeFile) runCompile(activeFile.content);
+    return clearPhaseTimers;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, wasmReady, isFormlActive]);
+
+  const editTimerRef = useRef<number | null>(null);
+  const handleContentChange = useCallback((name: string, value: string) => {
+    fsStore.update(name, value);
+    if (!isFormlActive) return;
+    if (editTimerRef.current) window.clearTimeout(editTimerRef.current);
+    editTimerRef.current = window.setTimeout(() => runCompile(value), 500);
+  }, [fsStore, isFormlActive, runCompile]);
+
+  const handleSelectFile = useCallback((name: string) => {
+    if (!openTabs.includes(name)) setOpenTabs((prev) => [...prev, name]);
+    setActiveTab(name);
+  }, [openTabs]);
+
+  const handleTabClose = useCallback((name: string) => {
+    const newTabs = openTabs.filter((t) => t !== name);
+    setOpenTabs(newTabs);
+    if (activeTab === name) setActiveTab(newTabs[newTabs.length - 1] ?? "");
+  }, [openTabs, activeTab]);
+
+  const handleCreateFile = useCallback((name: string) => {
+    try {
+      const title = name.replace(".forml", "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      const content = name.endsWith(".forml") ? newFormlTemplate(title) : "";
+      fsStore.create(name, content);
+      handleSelectFile(name);
+    } catch { handleSelectFile(name); }
+  }, [fsStore, handleSelectFile]);
+
+  const handleDeleteFile = useCallback((name: string) => {
+    fsStore.delete(name);
+    handleTabClose(name);
+  }, [fsStore, handleTabClose]);
+
+  const handleManualCompile = useCallback(() => {
+    if (activeFile && isFormlActive) runCompile(activeFile.content);
+  }, [activeFile, isFormlActive, runCompile]);
 
   return (
-    <div className="relative h-screen overflow-hidden bg-[#FAFAF9] text-[#080503]">
-      <aside className="absolute left-0 top-0 bottom-7 z-20 flex w-14 flex-col border-r border-foreground/10 bg-[#FAFAF9]">
-        <div className="flex h-14 items-center justify-center border-b border-foreground/10">
-          <span className="font-mono text-[10px] uppercase tracking-[0.34em] text-foreground/35">
-            FX
-          </span>
-        </div>
-        <nav className="flex flex-1 flex-col">
-          {SIDEBAR_TOOLS.map((tool) => (
-            <ActivityButton
-              key={tool.id}
-              active={activeTool === tool.id}
-              icon={tool.icon}
-              label={tool.label}
-            />
-          ))}
-        </nav>
-        <div className="border-t border-foreground/10 p-3">
-          <button
-            type="button"
-            onClick={() => setActiveTool("settings")}
-            className="flex h-8 w-8 items-center justify-center text-foreground/40 transition-colors hover:text-foreground"
-            title="Settings"
-          >
-            <Settings className="h-4 w-4" />
-          </button>
-        </div>
-      </aside>
+    <div className="relative flex h-screen flex-col overflow-hidden bg-[#0D0D0D] font-inter text-[#EDEDEB]">
+      <TopBar
+        activeFile={activeTab || "—"}
+        compilePhase={compilePhase}
+        wasmReady={wasmReady}
+        onManualCompile={handleManualCompile}
+      />
 
-      <div className="h-full pl-14 pb-7">
-        <PanelGroup direction="horizontal" className="h-full min-h-0 w-full">
-          <Panel defaultSize={24} minSize={18} className="min-h-0 bg-[#FAFAF9]">
-            <ExplorerPanel />
-          </Panel>
-          <PartitionHandle />
-          <Panel defaultSize={46} minSize={30} className="min-h-0 bg-[#080503]">
-            <EditorPanel
-              activeTab={activeTab}
-              dsl={dsl}
-              readme={readme}
-              onTabChange={setActiveTab}
-              onDslChange={setDsl}
-              onCursorChange={setCursor}
-            />
-          </Panel>
-          <PartitionHandle />
-          <Panel defaultSize={30} minSize={20} className="min-h-0 bg-[#FAFAF9]">
-            <PreviewPanel summary={summary} parseState={parseState} />
-          </Panel>
-        </PanelGroup>
+      <div className="flex min-h-0 flex-1">
+        {/* Activity Bar */}
+        <aside className="flex w-11 flex-none flex-col items-center border-r border-[#252525] bg-[#0D0D0D] py-2">
+          <ActivityBtn
+            active={activeTool === "files"}
+            icon={<Files className="h-4 w-4" />}
+            label="Files"
+            onClick={() => setActiveTool("files")}
+          />
+        </aside>
+
+        <div className="flex min-h-0 flex-1 flex-col">
+          <PanelGroup direction="horizontal" className="min-h-0 flex-1">
+            <Panel defaultSize={18} minSize={14} maxSize={30}>
+              <ExplorerPanel
+                files={files}
+                activeFile={activeTab}
+                onSelectFile={handleSelectFile}
+                onCreateFile={handleCreateFile}
+                onDeleteFile={handleDeleteFile}
+              />
+            </Panel>
+
+            <PartitionHandle />
+
+            <Panel defaultSize={50} minSize={28}>
+              <EditorPanel
+                openTabs={openTabs}
+                activeTab={activeTab}
+                files={files}
+                compilePhase={compilePhase}
+                onTabChange={setActiveTab}
+                onTabClose={handleTabClose}
+                onContentChange={handleContentChange}
+                onCursorChange={setCursor}
+                editorRef={editorRef}
+                monacoRef={monacoRef}
+                diagnostics={compileResult?.diagnostics ?? []}
+              />
+            </Panel>
+
+            <PartitionHandle />
+
+            <Panel defaultSize={32} minSize={20}>
+              <PreviewPanel
+                ast={compileResult?.ast ?? null}
+                source={activeFile?.content ?? ""}
+                compilePhase={compilePhase}
+              />
+            </Panel>
+          </PanelGroup>
+
+          <DiagnosticsPanel
+            open={diagOpen}
+            onToggle={() => setDiagOpen((p) => !p)}
+            compileResult={compileResult}
+            activeFile={activeTab}
+          />
+        </div>
       </div>
 
-      <footer className="absolute bottom-0 left-0 right-0 z-30 flex h-7 items-center justify-between border-t border-foreground/10 bg-[#FAFAF9] px-4">
-        <div className="flex items-center gap-4 font-mono text-[11px] uppercase tracking-[0.22em] text-foreground/55">
-          <span>PARSE STATUS: {parseState === "valid" ? "VALID" : parseState === "parsing" ? "PARSING" : "ERROR"}</span>
-          <span className="text-foreground/20">|</span>
-          <span>
-            Line {cursor.line} / Col {cursor.column}
-          </span>
-          <span className="text-foreground/20">|</span>
-          <span>UTF-8</span>
-          <span className="text-foreground/20">|</span>
-          <span>Branch: main</span>
-        </div>
-        <div className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.22em] text-foreground/35">
-          <span>feedback.forml</span>
-          <span className="text-foreground/20">|</span>
-          <span>{activeTab}</span>
-        </div>
-      </footer>
+      <StatusBar
+        compilePhase={compilePhase}
+        cursor={cursor}
+        onToggleDiag={() => setDiagOpen((p) => !p)}
+        compileMs={compileMs}
+        wasmReady={wasmReady}
+      />
     </div>
   );
 }

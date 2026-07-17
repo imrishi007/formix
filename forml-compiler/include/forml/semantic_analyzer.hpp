@@ -1,4 +1,4 @@
-// include/forml/semantic_analyzer.hpp — Forml Stage 4: Semantic Analyzer declaration.
+///// include/forml/semantic_analyzer.hpp — Forml Stage 4: Semantic Analyzer declaration.
 // Walks the AST produced by the Parser and enforces semantic rules.
 // Direct tree-walker (visitX calls); does NOT use ASTVisitor (Stage 5).
 
