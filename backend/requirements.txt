@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+httpx
+python-multipart
+bcrypt
+python-jose[cryptography]
+python-dotenv
