@@ -25,3 +25,31 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# SQLite database (runtime-generated, never commit)
+backend/formix.db
+*.db
+*.sqlite3
+
+# Compiled binaries (C++ build artifacts)
+*.exe
+*.o
+*.obj
+*.out
+forml-compiler/build/
+
+# OS
+.DS_Store
+Thumbs.db
