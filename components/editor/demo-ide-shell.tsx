@@ -14,12 +14,15 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
+  Copy,
+  ExternalLink,
   FileCode2,
   FileText,
   Files,
   Folder,
   FolderOpen,
   GitBranch,
+  Globe,
   Loader2,
   Plus,
   Terminal,
@@ -41,13 +44,22 @@ import {
   newFormlTemplate,
   type VirtualFile,
 } from "@/lib/forml-file-system";
+import {
+  evalCondition,
+  INPUT_CLS,
+  DynamicField,
+  RenderStatements,
+  type ASTNode,
+} from "@/components/form-renderer";
+import { createForm, updateForm, publishForm } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type SidebarTool = "files";
 type CompilePhase = "idle" | "parsing" | "semantic" | "valid" | "error";
 type DiagTab = "problems" | "ast" | "json" | "tokens";
-type ASTNode = Record<string, unknown>;
+type PublishState = "idle" | "publishing" | "done" | "error";
+// ASTNode is imported from @/components/form-renderer
 
 interface CursorState { line: number; column: number; }
 
@@ -187,353 +199,9 @@ function defineFormixMono(monaco: MonacoLike) {
   });
 }
 
-// ─── AST Condition Evaluator ──────────────────────────────────────────────────
-
-function evalCondition(cond: ASTNode, values: Record<string, string>): boolean {
-  const type = cond.type as string;
-  if (type === "BinaryCond") {
-    const op = cond.operator as string;
-    const l = evalCondition(cond.left as ASTNode, values);
-    const r = evalCondition(cond.right as ASTNode, values);
-    return op === "&&" ? l && r : l || r;
-  }
-  if (type === "SimpleCond") {
-    const fieldName = cond.field as string;
-    const comparator = cond.comparator as string;
-    const valueNode = cond.value as ASTNode;
-    const currentVal = values[fieldName] ?? "";
-    const vk = valueNode?.valueKind as string;
-    let rhs: string;
-    if (vk === "number") rhs = String(valueNode.numberValue as number);
-    else if (vk === "boolean") rhs = String(valueNode.booleanValue as boolean);
-    else rhs = (valueNode?.text as string) ?? "";
-    switch (comparator) {
-      case "==": return currentVal === rhs;
-      case "!=": return currentVal !== rhs;
-      case ">":  return Number(currentVal) > Number(rhs);
-      case "<":  return Number(currentVal) < Number(rhs);
-      case ">=": return Number(currentVal) >= Number(rhs);
-      case "<=": return Number(currentVal) <= Number(rhs);
-    }
-  }
-  return false;
-}
-
-// ─── Dynamic Field Renderer ───────────────────────────────────────────────────
-
-const INPUT_CLS =
-  "w-full rounded border border-[#D4CCB8] bg-[#F5F3EE] px-3 py-2 font-inter text-[12px] text-[#222016] outline-none placeholder:text-[#B4AA96] transition-all duration-150 focus:border-[#7C6FE0] focus:ring-2 focus:ring-[#7C6FE0]/10";
-
-function DynamicField({
-  field,
-  nameKey,
-  values,
-  onChange,
-  repeatIndex,
-}: {
-  field: ASTNode;
-  nameKey: string;
-  values: Record<string, string>;
-  onChange: (key: string, val: string) => void;
-  repeatIndex?: number;
-}) {
-  const fieldType = field.fieldType as string;
-  const options = (field.options as string[]) ?? [];
-  const ui = field.ui as ASTNode | undefined;
-  const label = (ui?.label as string) ?? (field.name as string);
-  const placeholder = (ui?.placeholder as string) ?? "";
-  const helpText = (ui?.helpText as string) ?? "";
-  const value = values[nameKey] ?? "";
-
-  return (
-    <div className="space-y-1.5">
-      <label className="flex items-baseline gap-1.5 font-inter text-[11px] font-semibold tracking-wide text-[#3D3528]">
-        {label}
-        {repeatIndex !== undefined && (
-          <span className="font-inter text-[9px] font-normal text-[#9A9080]">
-            item {repeatIndex + 1}
-          </span>
-        )}
-      </label>
-
-      {fieldType === "select" && (
-        <div className="relative">
-          <select
-            value={value}
-            onChange={(e) => onChange(nameKey, e.target.value)}
-            className={INPUT_CLS + " appearance-none"}
-          >
-            <option value="">Select...</option>
-            {options.map((o) => (
-              <option key={o} value={o}>{o}</option>
-            ))}
-          </select>
-          <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[#7C6FE0]" />
-        </div>
-      )}
-
-      {fieldType === "radio" && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          {options.map((o) => (
-            <label key={o} className="flex items-center gap-1.5 font-inter text-[12px] text-[#222016] cursor-pointer">
-              <input
-                type="radio"
-                name={nameKey}
-                value={o}
-                checked={value === o}
-                onChange={() => onChange(nameKey, o)}
-                className="accent-[#7C6FE0]"
-              />
-              {o}
-            </label>
-          ))}
-        </div>
-      )}
-
-      {fieldType === "checkbox" && (
-        <div className="space-y-1">
-          {options.map((o) => {
-            const ck = values[`${nameKey}__${o}`] === "true";
-            return (
-              <label key={o} className="flex items-center gap-2 font-inter text-[12px] text-[#222016] cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={ck}
-                  onChange={(e) => onChange(`${nameKey}__${o}`, e.target.checked ? "true" : "false")}
-                  className="accent-[#7C6FE0]"
-                />
-                {o}
-              </label>
-            );
-          })}
-        </div>
-      )}
-
-      {fieldType === "boolean" && (
-        <label className="flex items-center gap-2 font-inter text-[12px] text-[#222016] cursor-pointer">
-          <input
-            type="checkbox"
-            checked={value === "true"}
-            onChange={(e) => onChange(nameKey, e.target.checked ? "true" : "false")}
-            className="accent-[#7C6FE0]"
-          />
-          {placeholder || label}
-        </label>
-      )}
-
-      {(fieldType === "integer" || fieldType === "float") && (
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => onChange(nameKey, e.target.value)}
-          placeholder={placeholder || "0"}
-          className={INPUT_CLS}
-        />
-      )}
-
-      {!["select", "radio", "checkbox", "boolean", "integer", "float"].includes(fieldType) && (
-        <input
-          type={
-            fieldType === "email" ? "email"
-            : fieldType === "date" ? "date"
-            : fieldType === "url" ? "url"
-            : "text"
-          }
-          value={value}
-          onChange={(e) => onChange(nameKey, e.target.value)}
-          placeholder={placeholder}
-          className={INPUT_CLS}
-        />
-      )}
-
-      {helpText && (
-        <p className="font-inter text-[10px] text-[#8A8070]">{helpText}</p>
-      )}
-    </div>
-  );
-}
-
-// ─── Recursive AST Statement Renderer ────────────────────────────────────────
-
-function RenderStatements({
-  stmts,
-  values,
-  onChange,
-  depth = 0,
-}: {
-  stmts: ASTNode[];
-  values: Record<string, string>;
-  onChange: (key: string, val: string) => void;
-  depth?: number;
-}) {
-  return (
-    <>
-      {stmts.map((stmt, i) => {
-        const type = stmt.type as string;
-        const key = `stmt-${depth}-${i}`;
-
-        if (type === "Field") {
-          const fieldName = stmt.name as string;
-          return (
-            <DynamicField
-              key={key}
-              field={stmt}
-              nameKey={fieldName}
-              values={values}
-              onChange={onChange}
-            />
-          );
-        }
-
-        if (type === "RepeatGroup") {
-          const countRef = stmt.countRef as string;
-          const rawCount = parseInt(values[countRef] ?? "0", 10);
-          const count = Math.min(Math.max(isNaN(rawCount) ? 0 : rawCount, 0), 20);
-          const fields = (stmt.fields as ASTNode[]) ?? [];
-
-          return (
-            <div key={key} className="space-y-3">
-              {count === 0 && (
-                <div className="flex items-center gap-2 rounded border border-dashed border-[#D0C8B4] bg-[#F8F6F0] px-4 py-3">
-                  <span className="text-[#C0B8A0] text-[18px]">↑</span>
-                  <p className="font-inter text-[11px] text-[#9A9080]">
-                    Set{" "}
-                    <code className="rounded bg-[#EDE8E0] px-1 font-mono text-[10px] text-[#4A4030]">
-                      {countRef}
-                    </code>{" "}
-                    to a number to generate sections here
-                  </p>
-                </div>
-              )}
-              <AnimatePresence initial={false}>
-                {Array.from({ length: count }, (_, idx) => (
-                  <motion.div
-                    key={`${key}-item-${idx}`}
-                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                    transition={{ duration: 0.22, delay: idx * 0.05 }}
-                    className="overflow-hidden rounded border border-[#D4CCB8] bg-[#F5F3EE]"
-                  >
-                    <div className="flex items-center gap-2 border-b border-[#E4DCD0] bg-[#EDE9E2] px-4 py-2">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#7C6FE0] font-inter text-[10px] font-bold text-white">
-                        {idx + 1}
-                      </span>
-                      <span className="font-inter text-[11px] font-medium text-[#3D3528]">
-                        {countRef.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())} {idx + 1}
-                      </span>
-                    </div>
-                    <div className="space-y-4 px-4 py-4">
-                      {fields.map((f, fi) => {
-                        const fieldName = f.name as string;
-                        const nameKey = `${fieldName}_repeat_${idx}`;
-                        return (
-                          <DynamicField
-                            key={`${key}-${idx}-f${fi}`}
-                            field={f}
-                            nameKey={nameKey}
-                            values={values}
-                            onChange={onChange}
-                            repeatIndex={idx}
-                          />
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          );
-        }
-
-        if (type === "Conditional") {
-          const condition = stmt.condition as ASTNode;
-          const thenStmts = (stmt.then as ASTNode[]) ?? [];
-          const elseStmts = (stmt.else as ASTNode[]) ?? [];
-
-          let condMet = false;
-          try { condMet = evalCondition(condition, values); } catch { /* ignore */ }
-
-          const branch = condMet ? thenStmts : elseStmts;
-          if (branch.length === 0) return null;
-
-          return (
-            <AnimatePresence key={key} mode="wait">
-              <motion.div
-                key={`cond-${key}-${condMet ? "then" : "else"}`}
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="space-y-4 border-l-2 border-[#7C6FE0]/40 pl-3">
-                  <p className="font-mono text-[9px] uppercase tracking-wider text-[#9A9080]">
-                    {condMet ? "if" : "else"}
-                  </p>
-                  <RenderStatements
-                    stmts={branch}
-                    values={values}
-                    onChange={onChange}
-                    depth={depth + 1}
-                  />
-                </div>
-              </motion.div>
-            </AnimatePresence>
-          );
-        }
-
-        if (type === "Section") {
-          const sectionName = stmt.name as string;
-          const sectionStmts = (stmt.statements as ASTNode[]) ?? [];
-          return (
-            <div key={key} className="space-y-4">
-              <div className="flex items-center gap-2">
-                <span className="flex-none font-inter text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7C6FE0]">
-                  {sectionName}
-                </span>
-                <span className="h-px flex-1 bg-[#E0D8C8]" />
-              </div>
-              <RenderStatements
-                stmts={sectionStmts}
-                values={values}
-                onChange={onChange}
-                depth={depth + 1}
-              />
-            </div>
-          );
-        }
-
-        if (type === "Layout") {
-          const layoutKind = stmt.layoutKind as string;
-          const layoutStmts = (stmt.statements as ASTNode[]) ?? [];
-          return (
-            <div
-              key={key}
-              className={
-                layoutKind === "row"
-                  ? "grid grid-cols-2 gap-3"
-                  : "space-y-4"
-              }
-            >
-              {layoutStmts.map((ls, li) => (
-                <RenderStatements
-                  key={`${key}-l${li}`}
-                  stmts={[ls]}
-                  values={values}
-                  onChange={onChange}
-                  depth={depth + 1}
-                />
-              ))}
-            </div>
-          );
-        }
-
-        return null;
-      })}
-    </>
-  );
-}
+// ─── Renderer components imported from @/components/form-renderer ────────────
+// evalCondition, INPUT_CLS, DynamicField, RenderStatements are all editor-free
+// and shared with the public respondent page. See components/form-renderer/index.tsx.
 
 // ─── Dynamic Preview Panel ────────────────────────────────────────────────────
 
@@ -1318,8 +986,112 @@ function StatusBar({ compilePhase, cursor, onToggleDiag, compileMs, wasmReady }:
 
 // ─── Top Bar ──────────────────────────────────────────────────────────────────
 
-function TopBar({ activeFile, compilePhase, wasmReady, onManualCompile }: {
-  activeFile: string; compilePhase: CompilePhase; wasmReady: boolean; onManualCompile: () => void;
+// ─── Publish Modal ────────────────────────────────────────────────────────────
+
+function PublishModal({ url, embed, onClose }: {
+  url: string;
+  embed: string;
+  onClose: () => void;
+}) {
+  const [copiedUrl,   setCopiedUrl]   = useState(false);
+  const [copiedEmbed, setCopiedEmbed] = useState(false);
+
+  const copy = (text: string, setFlag: (v: boolean) => void) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setFlag(true);
+      setTimeout(() => setFlag(false), 2000);
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 12 }}
+        transition={{ duration: 0.2 }}
+        className="relative w-full max-w-lg rounded-xl border border-[#252535] bg-[#111118] p-6 shadow-2xl mx-4"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded text-[#555555] transition-colors hover:bg-[#1E1E2A] hover:text-[#AAAAAA]"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+
+        {/* Header */}
+        <div className="mb-5 flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#7C6FE0]/30 bg-[#7C6FE0]/10">
+            <Globe className="h-4 w-4 text-[#7C6FE0]" />
+          </div>
+          <div>
+            <p className="font-inter text-[14px] font-semibold text-[#EDEDEB]">Form Published</p>
+            <p className="font-inter text-[11px] text-[#555555]">Share the link or embed it anywhere</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* Public URL */}
+          <div>
+            <p className="mb-1.5 font-inter text-[10px] font-semibold uppercase tracking-[0.14em] text-[#555555]">
+              Public Link
+            </p>
+            <div className="flex items-center gap-2 rounded-lg border border-[#252525] bg-[#0D0D0D] px-3 py-2.5">
+              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[#EDEDEB]">{url}</span>
+              <button
+                type="button"
+                onClick={() => copy(url, setCopiedUrl)}
+                className="flex flex-none items-center gap-1 rounded border border-[#333333] bg-[#1A1A1A] px-2 py-1 font-inter text-[9px] text-[#999999] transition-colors hover:border-[#7C6FE0]/50 hover:text-[#7C6FE0]"
+              >
+                {copiedUrl ? "Copied!" : <><Copy className="h-2.5 w-2.5" /> Copy</>}
+              </button>
+            </div>
+          </div>
+
+          {/* Embed snippet */}
+          <div>
+            <p className="mb-1.5 font-inter text-[10px] font-semibold uppercase tracking-[0.14em] text-[#555555]">
+              Embed Snippet
+            </p>
+            <div className="rounded-lg border border-[#252525] bg-[#0D0D0D] px-3 py-3">
+              <pre className="overflow-x-auto whitespace-pre font-mono text-[10px] leading-relaxed text-[#9A9AAA]">{embed}</pre>
+            </div>
+            <button
+              type="button"
+              onClick={() => copy(embed, setCopiedEmbed)}
+              className="mt-2 flex items-center gap-1.5 rounded border border-[#333333] bg-[#1A1A1A] px-2.5 py-1.5 font-inter text-[9px] text-[#999999] transition-colors hover:border-[#7C6FE0]/50 hover:text-[#7C6FE0]"
+            >
+              <Copy className="h-2.5 w-2.5" />
+              {copiedEmbed ? "Copied!" : "Copy Snippet"}
+            </button>
+          </div>
+
+          {/* Open link */}
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#7C6FE0] py-2.5 font-inter text-[12px] font-semibold text-white transition-all hover:bg-[#8A7DF0]"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Open Form in New Tab
+          </a>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Top Bar ──────────────────────────────────────────────────────────────────
+
+function TopBar({ activeFile, compilePhase, wasmReady, onManualCompile, onPublish, publishState }: {
+  activeFile: string;
+  compilePhase: CompilePhase;
+  wasmReady: boolean;
+  onManualCompile: () => void;
+  onPublish: () => void;
+  publishState: PublishState;
 }) {
   const phaseLabel = {
     idle:     wasmReady ? "Ready" : "Loading...",
@@ -1361,7 +1133,7 @@ function TopBar({ activeFile, compilePhase, wasmReady, onManualCompile }: {
         </div>
       </div>
 
-      {/* Right: status + run button */}
+      {/* Right: status + run button + publish button */}
       <div className="flex items-center gap-3">
         <div className={`flex items-center gap-1.5 ${phaseTextColor[compilePhase]}`}>
           <span className={`h-1.5 w-1.5 rounded-full ${phaseDot[compilePhase]}`} />
@@ -1376,6 +1148,21 @@ function TopBar({ activeFile, compilePhase, wasmReady, onManualCompile }: {
         >
           <Zap className="h-3 w-3" />
           Run
+        </button>
+        <span className="h-4 w-px bg-[#2A2A2A]" />
+        <button
+          type="button"
+          id="publish-btn"
+          onClick={onPublish}
+          disabled={!wasmReady || publishState === "publishing" || compilePhase !== "valid"}
+          title={compilePhase !== "valid" ? "Fix compile errors before publishing" : "Publish form"}
+          className="flex items-center gap-1.5 rounded-md border border-[#7C6FE0]/50 px-3 py-1.5 font-inter text-[10px] font-semibold text-[#7C6FE0] transition-all duration-150 hover:bg-[#7C6FE0]/10 active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          {publishState === "publishing"
+            ? <Loader2 className="h-3 w-3 animate-spin" />
+            : <Globe className="h-3 w-3" />
+          }
+          {publishState === "publishing" ? "Publishing..." : "Publish"}
         </button>
       </div>
     </div>
@@ -1415,6 +1202,25 @@ export function DemoIdeShell() {
   const editorRef    = useRef<MonacoEditorNS.IStandaloneCodeEditor | null>(null);
   const monacoRef    = useRef<MonacoLike | null>(null);
   const phaseTimers  = useRef<number[]>([]);
+
+  // ── Publish state ──────────────────────────────────────────────────────────
+  const [publishState,   setPublishState]   = useState<PublishState>("idle");
+  const [publishedUrl,   setPublishedUrl]   = useState<string | null>(null);
+  const [publishedEmbed, setPublishedEmbed] = useState<string | null>(null);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+
+  /** Get the backend form ID persisted for this filename in localStorage. */
+  const getFormId = useCallback((filename: string): string | null => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(`formix_form_id_${filename}`) ?? null;
+  }, []);
+
+  /** Persist the backend form ID for this filename in localStorage. */
+  const saveFormId = useCallback((filename: string, id: string) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`formix_form_id_${filename}`, id);
+    }
+  }, []);
 
   const clearPhaseTimers = useCallback(() => {
     phaseTimers.current.forEach((id) => window.clearTimeout(id));
@@ -1483,6 +1289,67 @@ export function DemoIdeShell() {
     if (activeFile && isFormlActive) runCompile(activeFile.content);
   }, [activeFile, isFormlActive, runCompile]);
 
+  /**
+   * Publish the current file:
+   * 1. Compile the source (must be valid).
+   * 2. Create or update the form record in the backend.
+   * 3. Call POST /forms/{id}/publish with the compiled schema.
+   * 4. Show the PublishModal with the returned URL + embed snippet.
+   */
+  const handlePublish = useCallback(async () => {
+    if (!activeFile || !isFormlActive || !wasmReady) return;
+
+    const result = compile(activeFile.content);
+    if (!result.ok || !result.ast) {
+      // Surface compile errors before user tries to publish.
+      setDiagOpen(true);
+      return;
+    }
+
+    setPublishState("publishing");
+    try {
+      let formId = getFormId(activeTab);
+
+      const schemaTitle =
+        (result.ast.name as string) ??
+        activeTab.replace(".forml", "").replace(/-/g, " ");
+
+      if (!formId) {
+        // First publish: create the form record in the backend.
+        const created = await createForm({
+          title: schemaTitle,
+          forml_source: activeFile.content,
+          compiled_schema: result.ast,
+        });
+        formId = created.id;
+        saveFormId(activeTab, formId);
+      } else {
+        // Subsequent publish: update source + schema, then publish.
+        await updateForm(formId, {
+          forml_source: activeFile.content,
+          compiled_schema: result.ast,
+        });
+      }
+
+      const published = await publishForm(
+        formId,
+        result.ast,
+        window.location.origin,
+      );
+
+      setPublishedUrl(published.public_url);
+      setPublishedEmbed(published.embed_snippet);
+      setPublishState("done");
+      setShowPublishModal(true);
+    } catch (err) {
+      console.error("[Formix] Publish failed:", err);
+      setPublishState("error");
+    }
+  }, [
+    activeFile, isFormlActive, wasmReady, compile,
+    activeTab, getFormId, saveFormId,
+  ]);
+
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-[#0D0D0D] font-inter text-[#EDEDEB]">
       <TopBar
@@ -1490,6 +1357,8 @@ export function DemoIdeShell() {
         compilePhase={compilePhase}
         wasmReady={wasmReady}
         onManualCompile={handleManualCompile}
+        onPublish={handlePublish}
+        publishState={publishState}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -1560,6 +1429,20 @@ export function DemoIdeShell() {
         compileMs={compileMs}
         wasmReady={wasmReady}
       />
+
+      {/* Publish success modal */}
+      <AnimatePresence>
+        {showPublishModal && publishedUrl && publishedEmbed && (
+          <PublishModal
+            url={publishedUrl}
+            embed={publishedEmbed}
+            onClose={() => {
+              setShowPublishModal(false);
+              setPublishState("idle");
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
