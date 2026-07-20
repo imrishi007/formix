@@ -91,6 +91,19 @@
     min-height: 100vh;
   }
 
+  .ide-shell {
+    --ide-bg: #111111;
+    --ide-surface: #1B1B1B;
+    --ide-editor: #1E1E1E;
+    --ide-accent: #8B5CF6;
+    color-scheme: dark;
+  }
+
+  .ide-shell button,
+  .ide-shell input {
+    font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
+  }
+
   html {
     color-scheme: light;
   }
@@ -122,6 +135,27 @@
   }
   .formix-scroll::-webkit-scrollbar-thumb:hover {
     background: rgba(255,255,255,0.16);
+  }
+
+  .ide-shell ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .ide-shell ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .ide-shell ::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.10);
+    background-clip: padding-box;
+  }
+
+  .ide-shell ::-webkit-scrollbar-thumb:hover {
+    background: rgba(139,92,246,0.55);
+    background-clip: padding-box;
   }
   
   .text-stroke {

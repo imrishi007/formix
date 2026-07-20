@@ -15,16 +15,22 @@ import {
   CheckCircle2,
   ChevronRight,
   Copy,
+  Code2,
+  Columns2,
   ExternalLink,
+  Eye,
   FileCode2,
   FileText,
   Files,
   Folder,
   FolderOpen,
   GitBranch,
+  GitFork,
   Globe,
   Loader2,
   Plus,
+  Search,
+  Settings2,
   Terminal,
   Trash2,
   TriangleAlert,
@@ -32,7 +38,7 @@ import {
   Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 
 import {
   useFormlCompiler,
@@ -45,13 +51,21 @@ import {
   type VirtualFile,
 } from "@/lib/forml-file-system";
 import {
+  defineFormixMono,
+  MONACO_OPTIONS,
+  type MonacoLike,
+} from "@/lib/monaco-forml";
+import { registerFormlLanguageService } from "@/lib/monaco-forml-language";
+import {
   evalCondition,
   INPUT_CLS,
   DynamicField,
   RenderStatements,
   type ASTNode,
 } from "@/components/form-renderer";
+import { useFormValidation } from "@/hooks/use-form-validation";
 import { createForm, updateForm, publishForm } from "@/lib/api";
+import { MarkdownPreview } from "@/components/editor/markdown-preview";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,27 +73,10 @@ type SidebarTool = "files";
 type CompilePhase = "idle" | "parsing" | "semantic" | "valid" | "error";
 type DiagTab = "problems" | "ast" | "json" | "tokens";
 type PublishState = "idle" | "publishing" | "done" | "error";
+type MarkdownView = "code" | "preview" | "split";
 // ASTNode is imported from @/components/form-renderer
 
 interface CursorState { line: number; column: number; }
-
-interface MonacoThemeRule { token: string; foreground: string; fontStyle?: string; }
-interface MonacoTheme { base: "vs-dark"; inherit: boolean; rules: MonacoThemeRule[]; colors: Record<string, string>; }
-interface MonacoLanguageRegistry {
-  getLanguages: () => Array<{ id: string }>;
-  register: (language: { id: string }) => void;
-  setMonarchTokensProvider: (id: string, p: Record<string, unknown>) => void;
-}
-interface MonacoEditorAPI {
-  defineTheme: (name: string, theme: MonacoTheme) => void;
-  setTheme: (name: string) => void;
-  setModelMarkers: (model: MonacoEditorNS.ITextModel, owner: string, markers: MonacoEditorNS.IMarkerData[]) => void;
-}
-interface MonacoLike {
-  editor: MonacoEditorAPI;
-  languages: MonacoLanguageRegistry;
-  MarkerSeverity: { Error: number; Warning: number; Info: number };
-}
 
 // ─── Monaco (dynamic import) ──────────────────────────────────────────────────
 
@@ -94,114 +91,11 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ),
 });
 
-// ─── Monaco Options ───────────────────────────────────────────────────────────
-
-const MONACO_OPTIONS = {
-  automaticLayout: true,
-  contextmenu: false,
-  cursorBlinking: "smooth" as const,
-  cursorSmoothCaretAnimation: "on" as const,
-  fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-  fontLigatures: false,
-  fontSize: 13,
-  hideCursorInOverviewRuler: true,
-  lineDecorationsWidth: 8,
-  lineHeight: 22,
-  lineNumbers: "on" as const,
-  lineNumbersMinChars: 3,
-  minimap: { enabled: false },
-  overviewRulerBorder: false,
-  overviewRulerLanes: 0,
-  quickSuggestions: false,
-  renderLineHighlight: "line" as const,
-  renderValidationDecorations: "off" as const,
-  renderWhitespace: "none" as const,
-  scrollbar: { alwaysConsumeMouseWheel: false, horizontalScrollbarSize: 4, verticalScrollbarSize: 4 },
-  scrollBeyondLastLine: false,
-  smoothScrolling: true,
-  suggest: { showWords: false },
-  parameterHints: { enabled: false },
-  hover: { enabled: false },
-  folding: false,
-  glyphMargin: false,
-  bracketPairColorization: { enabled: false },
-  colorDecorators: false,
-  occurrencesHighlight: "off" as const,
-  selectionHighlight: false,
-  wordWrap: "off" as const,
-  codeLens: false,
-  links: false,
-  padding: { top: 16, bottom: 64 },
-};
-
-// ─── Formix Monaco Theme ──────────────────────────────────────────────────────
-
-function defineFormixMono(monaco: MonacoLike) {
-  const languageId = "forml";
-  if (!monaco.languages.getLanguages().some((l) => l.id === languageId)) {
-    monaco.languages.register({ id: languageId });
-  }
-  monaco.languages.setMonarchTokensProvider(languageId, {
-    tokenizer: {
-      root: [
-        [/\b(?:form|field|ui|validate|action|submit|option|required|minLength|maxLength|pattern|min|max|POST|PUT|PATCH|text|email|select|radio|checkbox|integer|float|date|boolean|url|label|placeholder|helpText|endpoint|method|default|bind|page|section|group|use|var|repeat|count|if|else|on|compute|from|map|row|column|load|change|blur|hide|show|clear|set|navigate)\b/, "keyword"],
-        [/"([^"\\]|\\.)*$/, "string.invalid"],
-        [/"/, "string", "@string"],
-        [/\d+(?:\.\d+)?/, "number"],
-        [/[{}()[\]:;,=]/, "delimiter"],
-        [/==|!=|<=|>=|&&|\|\||[<>+\-*/]/, "operator"],
-        [/[a-zA-Z_]\w*/, "identifier"],
-        [/--.*$/, "comment"],
-      ],
-      string: [[/[^\\"]+/, "string"], [/\\./, "string"], [/"/, "string", "@pop"]],
-    },
-  });
-  monaco.editor.defineTheme("formix-mono", {
-    base: "vs-dark",
-    inherit: false,
-    rules: [
-      { token: "", foreground: "EDEDEB" },
-      { token: "keyword", foreground: "C9B8FF", fontStyle: "bold" },
-      { token: "string", foreground: "C8BA9A" },
-      { token: "string.invalid", foreground: "E05252" },
-      { token: "number", foreground: "9090A0" },
-      { token: "delimiter", foreground: "505060" },
-      { token: "operator", foreground: "A0A0B0" },
-      { token: "identifier", foreground: "C8C8CC" },
-      { token: "comment", foreground: "4A4A5A", fontStyle: "italic" },
-    ],
-    colors: {
-      "editor.background": "#0D0D0D",
-      "editor.foreground": "#EDEDEB",
-      "editorLineNumber.foreground": "#3A3A3A",
-      "editorLineNumber.activeForeground": "#8A8A8A",
-      "editorGutter.background": "#0D0D0D",
-      "editorCursor.foreground": "#EDEDEB",
-      "editor.selectionBackground": "#7C6FE028",
-      "editor.inactiveSelectionBackground": "#7C6FE012",
-      "editor.lineHighlightBackground": "#141414",
-      "editor.lineHighlightBorder": "#1C1C1C",
-      "editorIndentGuide.background1": "#1E1E1E",
-      "editorIndentGuide.activeBackground1": "#303030",
-      "editorWhitespace.foreground": "#1C1C1C",
-      "editorWidget.background": "#141414",
-      "editorWidget.border": "#2A2A2A",
-      "editorWidget.foreground": "#EDEDEB",
-      "scrollbar.shadow": "#00000000",
-      "scrollbarSlider.background": "#FFFFFF0A",
-      "scrollbarSlider.hoverBackground": "#FFFFFF18",
-      "scrollbarSlider.activeBackground": "#FFFFFF28",
-      "editorOverviewRuler.border": "#00000000",
-      "focusBorder": "#7C6FE040",
-      "editorError.foreground": "#E05252",
-      "editorWarning.foreground": "#C4A35A",
-    },
-  });
-}
-
 // ─── Renderer components imported from @/components/form-renderer ────────────
 // evalCondition, INPUT_CLS, DynamicField, RenderStatements are all editor-free
 // and shared with the public respondent page. See components/form-renderer/index.tsx.
+// Monaco theme, tokenizer, options, and the MonacoLike typing live in
+// lib/monaco-forml.ts so both this editor and the compiler playground share them.
 
 // ─── Dynamic Preview Panel ────────────────────────────────────────────────────
 
@@ -229,9 +123,7 @@ function PreviewPanel({
     setFormValues((prev) => ({ ...prev, [key]: val }));
   }, []);
 
-  const isError = compilePhase === "error";
-  const isParsing = compilePhase === "parsing" || compilePhase === "semantic";
-
+  // Flatten AST into a flat statement list for rendering + validation.
   const allStatements = useMemo<ASTNode[]>(() => {
     if (!ast) return [];
     const pages = (ast.pages as ASTNode[]) ?? [];
@@ -239,6 +131,34 @@ function PreviewPanel({
     const pageStmts = pages.flatMap((p) => (p.statements as ASTNode[]) ?? []);
     return [...pageStmts, ...stmts];
   }, [ast]);
+
+  // Pre-touch all fields so authors see validation errors as they type.
+  const allFieldKeys = useMemo(() => {
+    const keys: string[] = [];
+    const collect = (stmts: ASTNode[]) => {
+      for (const s of stmts) {
+        if ((s.type as string) === "Field") keys.push(s.name as string);
+        else if ((s.type as string) === "Section" || (s.type as string) === "Layout")
+          collect((s.statements as ASTNode[]) ?? []);
+        else if ((s.type as string) === "Conditional") {
+          collect((s.then as ASTNode[]) ?? []);
+          collect((s.else as ASTNode[]) ?? []);
+        }
+      }
+    };
+    collect(allStatements);
+    return keys;
+  }, [allStatements]);
+
+  const preTouched = useMemo(
+    () => Object.fromEntries(allFieldKeys.map((k) => [k, true])),
+    [allFieldKeys],
+  );
+
+  const { errors } = useFormValidation(allStatements, formValues);
+
+  const isError = compilePhase === "error";
+  const isParsing = compilePhase === "parsing" || compilePhase === "semantic";
 
   const fallbackTitle = useMemo(
     () => source.match(/form\s+"([^"]+)"/)?.[1] ?? "Untitled Form",
@@ -257,20 +177,32 @@ function PreviewPanel({
   const status = statusMap[compilePhase];
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#F5F3EE]">
+    <div className="flex h-full min-h-0 flex-col bg-[#151515] text-[#F4F4F5]">
       {/* Header */}
-      <div className="flex h-9 flex-none items-center justify-between border-b border-[#DDD5C0] bg-[#EDEAE2] px-4">
-        <span className="font-inter text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7A7060]">
-          Live Preview
-        </span>
-        <div className={`flex items-center gap-1.5 ${status.color}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
-          <span className="font-inter text-[10px] font-medium">{status.text}</span>
+      <div className="flex h-12 flex-none items-center justify-between border-b border-white/[0.06] bg-[#1B1B1B] px-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#8B5CF6]/15 ring-1 ring-[#8B5CF6]/30">
+            <span className="font-inter text-[10px] font-bold text-[#C4B5FD]">FX</span>
+          </div>
+          <div>
+            <p className="font-inter text-[12px] font-semibold text-white">Live Preview</p>
+            <p className="font-inter text-[10px] text-[#71717A]">Rendered output</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-lg border border-white/[0.08] bg-[#111111] p-0.5">
+            <button type="button" className="rounded-md bg-white/[0.08] px-2.5 py-1 font-inter text-[10px] font-medium text-white shadow-sm">UI</button>
+            <button type="button" className="rounded-md px-2.5 py-1 font-inter text-[10px] text-[#71717A] transition-colors hover:text-white">AST</button>
+          </div>
+          <div className={`flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#111111] px-2.5 py-1 ${status.color}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
+            <span className="font-inter text-[10px] font-medium">{status.text}</span>
+          </div>
         </div>
       </div>
 
       {/* Canvas */}
-      <div className="min-h-0 flex-1 overflow-auto p-6">
+      <div className="min-h-0 flex-1 overflow-auto bg-[#111111] p-6">
         <AnimatePresence mode="wait">
           {isError ? (
             <motion.div
@@ -301,11 +233,11 @@ function PreviewPanel({
               transition={{ duration: 0.15 }}
               className="mx-auto w-full max-w-[380px]"
             >
-              <div className="overflow-hidden rounded-lg border border-[#D4CCB8] bg-[#FAF8F2] shadow-[0_8px_32px_rgba(0,0,0,0.08)]">
+              <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#FAFAF9] shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
                 {/* Card header */}
-                <div className="border-b border-[#E4DCD0] bg-[#F0EDE5] px-6 py-5">
+                <div className="border-b border-black/[0.06] bg-white px-6 py-6">
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 rounded border border-[#7C6FE0]/30 bg-[#7C6FE0]/10 px-2 py-0.5 font-inter text-[9px] font-semibold uppercase tracking-[0.14em] text-[#7C6FE0]">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[#8B5CF6]/25 bg-[#8B5CF6]/10 px-2.5 py-1 font-inter text-[9px] font-semibold uppercase tracking-[0.14em] text-[#7C3AED]">
                       Live
                     </span>
                     {allStatements.length > 0 && (
@@ -314,7 +246,7 @@ function PreviewPanel({
                       </span>
                     )}
                   </div>
-                  <h2 className="mt-2.5 font-inter text-[20px] font-bold tracking-tight text-[#1A1410]">
+                  <h2 className="mt-3 font-inter text-[22px] font-bold tracking-tight text-[#18181B]">
                     {formTitle}
                   </h2>
                 </div>
@@ -326,6 +258,8 @@ function PreviewPanel({
                       stmts={allStatements}
                       values={formValues}
                       onChange={handleChange}
+                      errors={errors}
+                      touched={preTouched}
                     />
                   ) : (
                     <p className="font-inter text-[11px] text-[#B4AA96]">
@@ -335,10 +269,10 @@ function PreviewPanel({
                 </div>
 
                 {/* Submit footer */}
-                <div className="border-t border-[#E4DCD0] px-6 py-4">
+                <div className="border-t border-black/[0.06] px-6 py-5">
                   <button
                     type="button"
-                    className="w-full rounded-md bg-[#7C6FE0] py-2.5 font-inter text-[12px] font-semibold text-white transition-all duration-150 hover:bg-[#6B5FD0] active:scale-[0.98]"
+                    className="w-full rounded-lg bg-[#8B5CF6] py-3 font-inter text-[12px] font-semibold text-white shadow-[0_8px_20px_rgba(139,92,246,0.22)] transition-all duration-150 hover:bg-[#7C3AED] active:scale-[0.98]"
                   >
                     Submit Form
                   </button>
@@ -434,24 +368,21 @@ function ExplorerPanel({ files, activeFile, onSelectFile, onCreateFile, onDelete
   const otherFiles = sortedFiles.filter((f) => f.fileType !== "forml");
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#0D0D0D]">
-      <div className="flex h-9 flex-none items-center justify-between px-4">
-        <span className="font-inter text-[9px] font-semibold uppercase tracking-[0.2em] text-[#555555]">Explorer</span>
-        <button
-          type="button"
-          title="New File"
-          onClick={() => setCreating(true)}
-          className="flex h-5 w-5 items-center justify-center rounded text-[#555555] transition-colors hover:text-[#AAAAAA] hover:bg-[#1A1A1A]"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
+    <div className="flex h-full min-h-0 flex-col rounded-2xl border border-white/[0.08] bg-[#1B1B1B] shadow-[0_16px_40px_rgba(0,0,0,0.18)]">
+      <div className="flex h-14 flex-none items-center justify-between px-5">
+        <span className="font-inter text-[12px] font-semibold text-[#F4F4F5]">Explorer</span>
+        <div className="flex items-center gap-1">
+          <button type="button" title="Search files" className="flex h-7 w-7 items-center justify-center rounded-lg text-[#71717A] transition-colors hover:bg-white/[0.06] hover:text-white"><Search className="h-3.5 w-3.5" /></button>
+          <button type="button" title="New File" onClick={() => setCreating(true)} className="flex h-7 w-7 items-center justify-center rounded-lg text-[#71717A] transition-colors hover:bg-white/[0.06] hover:text-white"><Plus className="h-3.5 w-3.5" /></button>
+        </div>
       </div>
 
-      <div className="flex-none border-b border-[#252525] px-4 pb-2">
-        <span className="font-inter text-[9px] font-medium uppercase tracking-[0.14em] text-[#444444]">Formix Project</span>
+      <div className="mx-4 flex h-9 flex-none items-center rounded-lg border border-white/[0.06] bg-[#111111] px-3">
+        <FolderOpen className="mr-2 h-3.5 w-3.5 text-[#8B5CF6]" />
+        <span className="font-inter text-[11px] font-medium text-[#A1A1AA]">Formix Project</span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-2 py-2 space-y-px">
+      <div className="formix-scroll min-h-0 flex-1 overflow-auto px-3 py-4 space-y-1">
         <FormlFolder
           label="forml-files"
           files={formlFiles}
@@ -494,12 +425,12 @@ function ExplorerPanel({ files, activeFile, onSelectFile, onCreateFile, onDelete
         )}
       </div>
 
-      <div className="flex-none border-t border-[#252525] px-4 py-2.5">
-        <div className="flex items-center gap-1.5 text-[10px] text-[#555555]">
+      <div className="flex-none border-t border-white/[0.06] px-5 py-4">
+        <div className="flex items-center gap-2 text-[11px] text-[#71717A]">
           <GitBranch className="h-3 w-3" />
           <span className="font-inter">main</span>
           <span className="ml-auto flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#4ADE80]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E] shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
             <span className="font-inter">{files.size} files</span>
           </span>
         </div>
@@ -518,18 +449,18 @@ function FormlFolder({ label, files, activeFile, hoveredFile, onHover, onSelect,
       <button
         type="button"
         onClick={() => setOpen((p) => !p)}
-        className="group flex w-full items-center gap-1.5 rounded py-[4px] pr-2 text-left text-[12px] text-[#777777] hover:bg-[#1A1A1A] hover:text-[#BBBBBB] transition-all duration-150"
+        className="group flex w-full items-center gap-2 rounded-lg py-2 pr-2 text-left text-[12px] text-[#A1A1AA] hover:bg-white/[0.05] hover:text-white transition-all duration-150"
         style={{ paddingLeft: "8px" }}
       >
         <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.15 }} className="flex-none">
-          <ChevronRight className="h-3 w-3 text-[#555555]" />
+          <ChevronRight className="h-3.5 w-3.5 text-[#71717A]" />
         </motion.span>
         {open
-          ? <FolderOpen className="h-3.5 w-3.5 flex-none text-[#7C6FE0]/70" />
-          : <Folder className="h-3.5 w-3.5 flex-none text-[#555566]" />
+          ? <FolderOpen className="h-4 w-4 flex-none text-[#A78BFA]" />
+          : <Folder className="h-4 w-4 flex-none text-[#71717A]" />
         }
         <span className="flex-1 truncate font-inter text-[12px]">{label}</span>
-        <span className="font-mono text-[9px] text-[#444444]">{files.length}</span>
+        <span className="font-mono text-[10px] text-[#52525B]">{files.length}</span>
       </button>
       <AnimatePresence initial={false}>
         {open && (
@@ -566,10 +497,10 @@ function FileRow({ file, depth = 0, isActive, isHovered, onMouseEnter, onMouseLe
 }) {
   return (
     <div
-      className={`group relative flex w-full items-center gap-1.5 rounded py-[4px] pr-2 text-[12px] transition-all duration-150 ${
+      className={`group relative flex w-full items-center gap-2 rounded-lg py-2 pr-2 text-[12px] transition-all duration-150 ${
         isActive
-          ? "bg-[#1E1E2A] text-[#EDEDEB]"
-          : "text-[#777777] hover:bg-[#181818] hover:text-[#BBBBBB]"
+          ? "bg-[#8B5CF6]/10 text-[#F4F4F5] before:absolute before:left-0 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:rounded-r-full before:bg-[#8B5CF6]"
+          : "text-[#A1A1AA] hover:bg-white/[0.05] hover:text-white"
       }`}
       style={{ paddingLeft: `${8 + depth * 14}px` }}
       onMouseEnter={onMouseEnter}
@@ -578,7 +509,7 @@ function FileRow({ file, depth = 0, isActive, isHovered, onMouseEnter, onMouseLe
       <span className="flex-none w-3" />
       <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
         <span className="flex-none"><FileIcon type={file.fileType} /></span>
-        <span className={`flex-1 truncate font-inter ${isActive ? "text-[#EDEDEB] font-medium" : ""}`}>
+        <span className={`flex-1 truncate font-inter ${isActive ? "text-white font-medium" : ""}`}>
           {file.name}
         </span>
       </button>
@@ -593,7 +524,7 @@ function FileRow({ file, depth = 0, isActive, isHovered, onMouseEnter, onMouseLe
         </button>
       )}
       {isActive && !isHovered && (
-        <span className="ml-auto h-1.5 w-1.5 flex-none rounded-full bg-[#7C6FE0]" />
+        <span className="ml-auto h-1.5 w-1.5 flex-none rounded-full bg-[#8B5CF6] shadow-[0_0_8px_rgba(139,92,246,0.7)]" />
       )}
     </div>
   );
@@ -606,21 +537,21 @@ function EditorTabs({ openTabs, activeTab, files, onTabChange, onTabClose }: {
   onTabChange: (tab: string) => void; onTabClose: (tab: string) => void;
 }) {
   return (
-    <div className="flex h-9 flex-none items-stretch border-b border-[#252525] bg-[#0D0D0D] overflow-x-auto">
+    <div className="formix-scroll flex h-12 flex-none items-stretch border-b border-white/[0.06] bg-[#181818] overflow-x-auto px-2 pt-2">
       {openTabs.map((name) => {
         const active = activeTab === name;
         const fileType = files.get(name)?.fileType;
         return (
           <div
             key={name}
-            className={`relative flex flex-none items-center gap-1.5 border-r border-[#252525] px-3 font-inter text-[11px] transition-all duration-150 max-w-[180px] ${
+              className={`relative flex flex-none items-center gap-1.5 rounded-t-lg border-r border-white/[0.06] px-4 font-inter text-[12px] transition-all duration-150 max-w-[220px] ${
               active
-                ? "bg-[#141414] text-[#EDEDEB]"
-                : "text-[#555555] hover:bg-[#121212] hover:text-[#999999]"
+                ? "bg-[#1E1E1E] text-[#F4F4F5] shadow-[0_-2px_12px_rgba(0,0,0,0.15)]"
+                : "text-[#71717A] hover:bg-white/[0.04] hover:text-[#D4D4D8]"
             }`}
           >
             {active && (
-              <span className="absolute inset-x-0 top-0 h-[2px] bg-[#7C6FE0]" />
+              <span className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-[#8B5CF6]" />
             )}
             <button type="button" onClick={() => onTabChange(name)} className="flex min-w-0 items-center gap-1.5 flex-1 py-2">
               <FileIcon type={fileType} />
@@ -672,10 +603,34 @@ function CompilerBadge({ phase }: { phase: CompilePhase }) {
   );
 }
 
+function MarkdownToolbar({ view, onChange }: { view: MarkdownView; onChange: (view: MarkdownView) => void }) {
+  const options: Array<{ id: MarkdownView; label: string; icon: ReactNode }> = [
+    { id: "code", label: "Code", icon: <Code2 className="h-3.5 w-3.5" /> },
+    { id: "preview", label: "Preview", icon: <Eye className="h-3.5 w-3.5" /> },
+    { id: "split", label: "Split View", icon: <Columns2 className="h-3.5 w-3.5" /> },
+  ];
+  return (
+    <div className="flex h-11 flex-none items-center justify-between border-b border-white/[0.06] bg-[#1B1B1B] px-3">
+      <div className="flex items-center gap-2">
+        <span className="rounded-md bg-[#8B5CF6]/10 px-2 py-1 font-inter text-[10px] font-medium text-[#C4B5FD]">Markdown</span>
+        <span className="font-inter text-[10px] text-[#52525B]">GFM enabled</span>
+      </div>
+      <div className="flex items-center rounded-lg border border-white/[0.08] bg-[#111111] p-0.5">
+        {options.map((option) => (
+          <button key={option.id} type="button" onClick={() => onChange(option.id)} className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-inter text-[10px] transition-all ${view === option.id ? "bg-[#8B5CF6]/15 text-[#C4B5FD] shadow-sm" : "text-[#71717A] hover:text-white"}`}>
+            {option.icon}{option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Editor Panel ──────────────────────────────────────────────────────────────
 
 function EditorPanel({ openTabs, activeTab, files, compilePhase, onTabChange, onTabClose,
-  onContentChange, onCursorChange, editorRef, monacoRef, diagnostics }: {
+  onContentChange, onCursorChange, editorRef, monacoRef, diagnostics,
+  onToggleExplorer, onToggleDiag }: {
   openTabs: string[]; activeTab: string; files: Map<string, VirtualFile>; compilePhase: CompilePhase;
   onTabChange: (tab: string) => void; onTabClose: (tab: string) => void;
   onContentChange: (name: string, value: string) => void;
@@ -683,10 +638,19 @@ function EditorPanel({ openTabs, activeTab, files, compilePhase, onTabChange, on
   editorRef: React.MutableRefObject<MonacoEditorNS.IStandaloneCodeEditor | null>;
   monacoRef: React.MutableRefObject<MonacoLike | null>;
   diagnostics: FormlDiagnostic[];
+  onToggleExplorer: () => void;
+  onToggleDiag: () => void;
 }) {
   const activeFile = files.get(activeTab);
   const isForml = activeFile?.fileType === "forml";
+  const isMarkdown = activeFile?.fileType === "md";
+  const isEditable = isForml || isMarkdown;
+  const [markdownView, setMarkdownView] = useState<MarkdownView>("split");
 
+  // Ref that holds ITextModel per file name (model-per-file pattern).
+  const modelsRef = useRef<Map<string, MonacoEditorNS.ITextModel>>(new Map());
+
+  // Keep markers in sync with diagnostics.
   useEffect(() => {
     if (!monacoRef.current || !editorRef.current) return;
     const model = editorRef.current.getModel();
@@ -702,11 +666,45 @@ function EditorPanel({ openTabs, activeTab, files, compilePhase, onTabChange, on
     monaco.editor.setModelMarkers(model, "forml-compiler", markers);
   }, [diagnostics, editorRef, monacoRef]);
 
+  // Switch the editor to the model for activeTab (no remount).
+  useEffect(() => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current as unknown as { editor: { createModel: (v: string, lang: string) => MonacoEditorNS.ITextModel } } | null;
+    if (!editor || !monaco) return;
+
+    const file = files.get(activeTab);
+    if (!file) return;
+    const lang = file.fileType === "forml" ? "forml" : "markdown";
+
+    let model = modelsRef.current.get(activeTab);
+    if (!model) {
+      model = monaco.editor.createModel(file.content, lang);
+      modelsRef.current.set(activeTab, model);
+    }
+    if (editor.getModel() !== model) {
+      editor.setModel(model);
+    }
+    editor.updateOptions({ readOnly: !isEditable, domReadOnly: !isEditable });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, files, isForml]);
+
+  // Dispose models for tabs that were closed.
+  useEffect(() => {
+    const openSet = new Set(openTabs);
+    modelsRef.current.forEach((model, name) => {
+      if (!openSet.has(name)) {
+        model.dispose();
+        modelsRef.current.delete(name);
+      }
+    });
+  }, [openTabs]);
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#0D0D0D]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1E1E1E] shadow-[0_18px_48px_rgba(0,0,0,0.28)]">
       <EditorTabs openTabs={openTabs} activeTab={activeTab} files={files}
         onTabChange={onTabChange} onTabClose={onTabClose} />
-      <div className="relative min-h-0 flex-1">
+      {isMarkdown && <MarkdownToolbar view={markdownView} onChange={setMarkdownView} />}
+      <div className={`relative min-h-0 flex-1 ${isMarkdown && markdownView === "split" ? "flex" : ""}`}>
         {openTabs.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
@@ -715,24 +713,96 @@ function EditorPanel({ openTabs, activeTab, files, compilePhase, onTabChange, on
             </div>
           </div>
         ) : (
+          <>
+          {(!isMarkdown || markdownView !== "preview") && (
+          <div className={isMarkdown && markdownView === "split" ? "min-w-0 flex-1 border-r border-white/[0.08]" : "h-full w-full"}>
           <MonacoEditor
-            key={activeTab}
-            beforeMount={(monaco) => { defineFormixMono(monaco as unknown as MonacoLike); }}
+            beforeMount={(monaco) => {
+              defineFormixMono(monaco as unknown as MonacoLike);
+              registerFormlLanguageService(monaco as unknown as MonacoLike);
+            }}
             theme="formix-mono"
             language={isForml ? "forml" : "markdown"}
             value={activeFile?.content ?? ""}
-            onChange={(value) => { if (isForml) onContentChange(activeTab, value ?? ""); }}
+            onChange={(value) => {
+              if (isEditable) onContentChange(activeTab, value ?? "");
+            }}
             onMount={(editor, monaco) => {
               editorRef.current = editor as MonacoEditorNS.IStandaloneCodeEditor;
               monacoRef.current = monaco as unknown as MonacoLike;
               monaco.editor.setTheme("formix-mono");
               editor.updateOptions(MONACO_OPTIONS);
+
+              // Create initial model for the active tab.
+              const file = files.get(activeTab);
+              if (file) {
+                const lang = file.fileType === "forml" ? "forml" : "markdown";
+                const existingModel = (monaco.editor as unknown as { getModels: () => MonacoEditorNS.ITextModel[] }).getModels().find(
+                  (m) => m === modelsRef.current.get(activeTab)
+                );
+                if (!existingModel) {
+                  const m = monaco.editor.createModel(file.content, lang);
+                  modelsRef.current.set(activeTab, m);
+                  editor.setModel(m);
+                }
+              }
+
               editor.onDidChangeCursorPosition((event) => {
                 onCursorChange({ line: event.position.lineNumber, column: event.position.column });
               });
+
+              // ── Keyboard shortcuts ───────────────────────────────────────
+              // Ctrl+S / Cmd+S  — save & compile
+              editor.addCommand(
+                monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+                () => { (document.querySelector('[data-action="run"]') as HTMLButtonElement)?.click(); },
+              );
+              // Ctrl+Enter / Cmd+Enter — manual compile
+              editor.addCommand(
+                monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+                () => { (document.querySelector('[data-action="run"]') as HTMLButtonElement)?.click(); },
+              );
+              // Ctrl+B / Cmd+B — toggle file explorer
+              editor.addCommand(
+                monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB,
+                () => onToggleExplorer(),
+              );
+              // Ctrl+J / Cmd+J — toggle diagnostics panel
+              editor.addCommand(
+                monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ,
+                () => onToggleDiag(),
+              );
+
+              // Command palette actions
+              editor.addAction({
+                id: "formix.compile",
+                label: "FormL: Compile Current File",
+                keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+                run: () => { (document.querySelector('[data-action="run"]') as HTMLButtonElement)?.click(); },
+              });
+              editor.addAction({
+                id: "formix.toggleDiagnostics",
+                label: "FormL: Toggle Diagnostics Panel",
+                keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ],
+                run: () => onToggleDiag(),
+              });
+              editor.addAction({
+                id: "formix.toggleExplorer",
+                label: "FormL: Toggle File Explorer",
+                keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB],
+                run: () => onToggleExplorer(),
+              });
             }}
-            options={{ ...MONACO_OPTIONS, readOnly: !isForml, domReadOnly: !isForml }}
+            options={{ ...MONACO_OPTIONS, readOnly: !isEditable, domReadOnly: !isEditable }}
           />
+          </div>
+          )}
+          {isMarkdown && markdownView !== "code" && (
+            <div className={markdownView === "split" ? "min-w-0 flex-1" : "h-full w-full"}>
+              <MarkdownPreview source={activeFile?.content ?? ""} />
+            </div>
+          )}
+          </>
         )}
         {isForml && <CompilerBadge phase={compilePhase} />}
       </div>
@@ -918,7 +988,7 @@ function StatusBar({ compilePhase, cursor, onToggleDiag, compileMs, wasmReady }:
   const isParsing = compilePhase === "parsing" || compilePhase === "semantic";
 
   return (
-    <div className="flex h-6 flex-none items-center justify-between border-t border-[#252525] bg-[#0D0D0D] px-3">
+    <div className="flex h-8 flex-none items-center justify-between border-t border-white/[0.06] bg-[#151515] px-4">
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -927,7 +997,7 @@ function StatusBar({ compilePhase, cursor, onToggleDiag, compileMs, wasmReady }:
           className="flex items-center gap-1 text-[#555555] transition-colors hover:text-[#AAAAAA]"
         >
           <Terminal className="h-2.5 w-2.5" />
-          <span className="font-inter text-[9px]">Console</span>
+          <span className="font-inter text-[10px]">Problems</span>
         </button>
         <span className="h-3 w-px bg-[#2A2A2A]" />
 
@@ -943,11 +1013,11 @@ function StatusBar({ compilePhase, cursor, onToggleDiag, compileMs, wasmReady }:
         )}
         {wasmReady && isValid && (
           <div className="flex items-center gap-2.5">
-            <span className="font-inter text-[9px] text-[#7C6FE0]">✓ Parser</span>
+            <span className="font-inter text-[10px] text-[#22C55E]">✓ Parser</span>
             <span className="h-3 w-px bg-[#2A2A2A]" />
-            <span className="font-inter text-[9px] text-[#7C6FE0]">✓ AST</span>
+            <span className="font-inter text-[10px] text-[#22C55E]">✓ AST</span>
             <span className="h-3 w-px bg-[#2A2A2A]" />
-            <span className="font-inter text-[9px] text-[#7C6FE0]">✓ Semantic</span>
+            <span className="font-inter text-[10px] text-[#22C55E]">✓ Semantic</span>
             {compileMs !== null && (
               <>
                 <span className="h-3 w-px bg-[#2A2A2A]" />
@@ -967,16 +1037,16 @@ function StatusBar({ compilePhase, cursor, onToggleDiag, compileMs, wasmReady }:
       </div>
 
       <div className="flex items-center gap-3">
-        <span className="font-inter text-[9px] text-[#666666]">Ln {cursor.line}, Col {cursor.column}</span>
+        <span className="font-inter text-[10px] text-[#A1A1AA]">Ln {cursor.line}, Col {cursor.column}</span>
         <span className="h-3 w-px bg-[#2A2A2A]" />
-        <span className="font-inter text-[9px] text-[#555555]">UTF-8</span>
+        <span className="font-inter text-[10px] text-[#71717A]">UTF-8</span>
         <span className="h-3 w-px bg-[#2A2A2A]" />
         <span className="flex items-center gap-1 font-inter text-[9px] text-[#555555]">
-          <GitBranch className="h-2 w-2" />main
+          <GitBranch className="h-3 w-3" />main
         </span>
         <span className="h-3 w-px bg-[#2A2A2A]" />
         <span className="flex items-center gap-1.5 font-inter text-[9px] text-[#555555]">
-          <span className={`h-1.5 w-1.5 rounded-full ${wasmReady ? "bg-[#4ADE80]" : "bg-[#C4A35A] animate-pulse"}`} />
+          <span className={`h-1.5 w-1.5 rounded-full ${wasmReady ? "bg-[#22C55E] shadow-[0_0_8px_rgba(34,197,94,0.7)]" : "bg-[#F59E0B] animate-pulse"}`} />
           {wasmReady ? "WASM active" : "Loading..."}
         </span>
       </div>
@@ -1104,47 +1174,55 @@ function TopBar({ activeFile, compilePhase, wasmReady, onManualCompile, onPublis
     idle:     wasmReady ? "bg-[#4ADE80]" : "bg-[#C4A35A] animate-pulse",
     parsing:  "bg-[#C4A35A] animate-pulse",
     semantic: "bg-[#C4A35A] animate-pulse",
-    valid:    "bg-[#7C6FE0]",
+    valid:    "bg-[#8B5CF6]",
     error:    "bg-[#E05252]",
   };
   const phaseTextColor = {
     idle:     wasmReady ? "text-[#666666]" : "text-[#666666]",
     parsing:  "text-[#888888]",
     semantic: "text-[#888888]",
-    valid:    "text-[#7C6FE0]",
+    valid:    "text-[#C4B5FD]",
     error:    "text-[#E05252]",
   };
 
   return (
-    <div className="flex h-10 flex-none items-center justify-between border-b border-[#252525] bg-[#0D0D0D] px-4">
+    <div className="flex h-14 flex-none items-center justify-between border-b border-white/[0.06] bg-[#151515] px-5">
       {/* Left: brand + breadcrumb */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded border border-[#2D2D3D] bg-[#141420]">
-            <span className="font-inter text-[9px] font-black tracking-tighter text-[#7C6FE0]">FX</span>
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#8B5CF6]/15 ring-1 ring-[#8B5CF6]/30 shadow-[0_0_18px_rgba(139,92,246,0.12)]">
+            <span className="font-inter text-[10px] font-black tracking-tighter text-[#C4B5FD]">FX</span>
           </div>
-          <span className="font-inter text-[12px] font-semibold tracking-tight text-[#EDEDEB]">Formix</span>
+          <span className="font-inter text-[14px] font-semibold tracking-tight text-white">Formix</span>
         </div>
         <span className="h-4 w-px bg-[#2A2A2A]" />
         <div className="flex items-center gap-1 font-inter text-[11px]">
-          <span className="text-[#555555]">my-project</span>
+          <span className="text-[#A1A1AA]">my-project</span>
           <ChevronRight className="h-3 w-3 text-[#3A3A3A]" />
-          <span className="text-[#999999]">{activeFile}</span>
+          <span className="rounded-md bg-white/[0.05] px-2 py-1 text-[#D4D4D8]">{activeFile}</span>
         </div>
       </div>
 
       {/* Right: status + run button + publish button */}
-      <div className="flex items-center gap-3">
-        <div className={`flex items-center gap-1.5 ${phaseTextColor[compilePhase]}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${phaseDot[compilePhase]}`} />
+      <div className="flex items-center gap-2">
+        <button type="button" title="Git branch" className="hidden items-center gap-1.5 rounded-lg px-2.5 py-2 font-inter text-[11px] text-[#A1A1AA] transition-colors hover:bg-white/[0.06] hover:text-white sm:flex">
+          <GitFork className="h-3.5 w-3.5" /> main
+        </button>
+        <button type="button" title="Settings" className="flex h-8 w-8 items-center justify-center rounded-lg text-[#71717A] transition-colors hover:bg-white/[0.06] hover:text-white">
+          <Settings2 className="h-4 w-4" />
+        </button>
+        <span className="mx-1 h-5 w-px bg-white/[0.08]" />
+        <div className={`flex items-center gap-2 rounded-full border border-white/[0.08] bg-[#1B1B1B] px-3 py-1.5 ${phaseTextColor[compilePhase]}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${phaseDot[compilePhase]} shadow-[0_0_8px_currentColor]`} />
           <span className="font-inter text-[10px] font-medium">{phaseLabel[compilePhase]}</span>
         </div>
         <span className="h-4 w-px bg-[#2A2A2A]" />
         <button
           type="button"
+          data-action="run"
           onClick={onManualCompile}
           disabled={!wasmReady}
-          className="flex items-center gap-1.5 rounded-md bg-[#7C6FE0] px-3 py-1.5 font-inter text-[10px] font-semibold text-white transition-all duration-150 hover:bg-[#8A7DF0] active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 rounded-lg bg-[#8B5CF6] px-4 py-2 font-inter text-[11px] font-semibold text-white shadow-[0_6px_18px_rgba(139,92,246,0.25)] transition-all duration-150 hover:bg-[#7C3AED] hover:shadow-[0_8px_22px_rgba(139,92,246,0.32)] active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <Zap className="h-3 w-3" />
           Run
@@ -1156,7 +1234,7 @@ function TopBar({ activeFile, compilePhase, wasmReady, onManualCompile, onPublis
           onClick={onPublish}
           disabled={!wasmReady || publishState === "publishing" || compilePhase !== "valid"}
           title={compilePhase !== "valid" ? "Fix compile errors before publishing" : "Publish form"}
-          className="flex items-center gap-1.5 rounded-md border border-[#7C6FE0]/50 px-3 py-1.5 font-inter text-[10px] font-semibold text-[#7C6FE0] transition-all duration-150 hover:bg-[#7C6FE0]/10 active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 rounded-lg border border-white/[0.1] bg-[#1B1B1B] px-4 py-2 font-inter text-[11px] font-semibold text-[#D4D4D8] transition-all duration-150 hover:border-[#8B5CF6]/50 hover:bg-[#8B5CF6]/10 hover:text-white active:scale-[0.97] disabled:opacity-30 disabled:cursor-not-allowed"
         >
           {publishState === "publishing"
             ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -1171,8 +1249,8 @@ function TopBar({ activeFile, compilePhase, wasmReady, onManualCompile, onPublis
 
 function PartitionHandle() {
   return (
-    <PanelResizeHandle className="group relative flex w-[3px] shrink-0 cursor-col-resize items-stretch justify-center bg-transparent">
-      <span className="h-full w-px bg-[#252525] transition-all duration-150 group-hover:bg-[#7C6FE0]/40 group-hover:w-[2px]" />
+    <PanelResizeHandle className="group relative flex w-3 shrink-0 cursor-col-resize items-stretch justify-center bg-transparent">
+      <span className="h-full w-px bg-transparent transition-all duration-150 group-hover:w-0.5 group-hover:bg-[#8B5CF6]/60" />
     </PanelResizeHandle>
   );
 }
@@ -1197,17 +1275,29 @@ export function DemoIdeShell() {
   const [compileMs,     setCompileMs]     = useState<number | null>(null);
   const [cursor,        setCursor]        = useState<CursorState>({ line: 1, column: 1 });
   const [diagOpen,      setDiagOpen]      = useState(false);
+  const [explorerOpen,  setExplorerOpen]  = useState(true);
   const [activeTool,    setActiveTool]    = useState<SidebarTool>("files");
 
-  const editorRef    = useRef<MonacoEditorNS.IStandaloneCodeEditor | null>(null);
-  const monacoRef    = useRef<MonacoLike | null>(null);
-  const phaseTimers  = useRef<number[]>([]);
+  const editorRef       = useRef<MonacoEditorNS.IStandaloneCodeEditor | null>(null);
+  const monacoRef       = useRef<MonacoLike | null>(null);
+  const phaseTimers     = useRef<number[]>([]);
+  const explorerPanelRef = useRef<ImperativePanelHandle | null>(null);
 
   // ── Publish state ──────────────────────────────────────────────────────────
   const [publishState,   setPublishState]   = useState<PublishState>("idle");
   const [publishedUrl,   setPublishedUrl]   = useState<string | null>(null);
   const [publishedEmbed, setPublishedEmbed] = useState<string | null>(null);
   const [showPublishModal, setShowPublishModal] = useState(false);
+
+  // Sync explorer panel collapse with explorerOpen state.
+  useEffect(() => {
+    if (!explorerPanelRef.current) return;
+    if (explorerOpen) {
+      explorerPanelRef.current.expand();
+    } else {
+      explorerPanelRef.current.collapse();
+    }
+  }, [explorerOpen]);
 
   /** Get the backend form ID persisted for this filename in localStorage. */
   const getFormId = useCallback((filename: string): string | null => {
@@ -1351,7 +1441,7 @@ export function DemoIdeShell() {
   ]);
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-[#0D0D0D] font-inter text-[#EDEDEB]">
+    <div className="ide-shell relative flex h-screen flex-col overflow-hidden bg-[#111111] font-inter text-[#F4F4F5]">
       <TopBar
         activeFile={activeTab || "—"}
         compilePhase={compilePhase}
@@ -1361,9 +1451,9 @@ export function DemoIdeShell() {
         publishState={publishState}
       />
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 gap-3 p-3">
         {/* Activity Bar */}
-        <aside className="flex w-11 flex-none flex-col items-center border-r border-[#252525] bg-[#0D0D0D] py-2">
+        <aside className="flex w-12 flex-none flex-col items-center rounded-2xl border border-white/[0.08] bg-[#1B1B1B] py-3 shadow-[0_16px_40px_rgba(0,0,0,0.18)]">
           <ActivityBtn
             active={activeTool === "files"}
             icon={<Files className="h-4 w-4" />}
@@ -1374,7 +1464,7 @@ export function DemoIdeShell() {
 
         <div className="flex min-h-0 flex-1 flex-col">
           <PanelGroup direction="horizontal" className="min-h-0 flex-1">
-            <Panel defaultSize={18} minSize={14} maxSize={30}>
+            <Panel ref={explorerPanelRef} defaultSize={18} minSize={14} maxSize={30} collapsible>
               <ExplorerPanel
                 files={files}
                 activeFile={activeTab}
@@ -1399,6 +1489,8 @@ export function DemoIdeShell() {
                 editorRef={editorRef}
                 monacoRef={monacoRef}
                 diagnostics={compileResult?.diagnostics ?? []}
+                onToggleExplorer={() => setExplorerOpen((p) => !p)}
+                onToggleDiag={() => setDiagOpen((p) => !p)}
               />
             </Panel>
 

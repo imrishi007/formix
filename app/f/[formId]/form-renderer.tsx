@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
 import {
   RenderStatements,
   type ASTNode,
 } from "@/components/form-renderer";
 import { getForm, submitForm, type PublicFormResponse } from "@/lib/api";
+import { useFormValidation } from "@/hooks/use-form-validation";
 
 type SubmitState = "idle" | "submitting" | "success" | "error";
 
@@ -47,8 +48,31 @@ export function FormRenderer({ formId }: { formId: string }) {
     setFormValues((prev) => ({ ...prev, [key]: val }));
   }, []);
 
+  // Flatten pages + root statements into a single list for rendering.
+  const allStatements = useMemo<ASTNode[]>(() => {
+    if (!schema?.compiled_schema) return [];
+    const ast = schema.compiled_schema;
+    const pages    = (ast.pages    as ASTNode[]) ?? [];
+    const stmts    = (ast.statements as ASTNode[]) ?? [];
+    const pageStmts = pages.flatMap((p) => (p.statements as ASTNode[]) ?? []);
+    return [...pageStmts, ...stmts];
+  }, [schema]);
+
+  // ── Validation ────────────────────────────────────────────────────────────
+  const { errors, touched, markTouched, validateAll, resetValidation } =
+    useFormValidation(allStatements, formValues);
+
+  const errorCount = Object.keys(errors).length;
+
+  const hasTouched = Object.keys(touched).length > 0;
+
   const handleSubmit = useCallback(async () => {
     if (!schema || submitState === "submitting") return;
+
+    // Gate on validation — surface all errors before submitting.
+    const currentErrors = validateAll();
+    if (Object.keys(currentErrors).length > 0) return;
+
     setSubmitState("submitting");
     setSubmitError(null);
     try {
@@ -63,17 +87,9 @@ export function FormRenderer({ formId }: { formId: string }) {
           : "Submission failed — please try again.",
       );
     }
-  }, [schema, formId, formValues, submitState]);
+  }, [schema, formId, formValues, submitState, validateAll]);
 
-  // Flatten pages + root statements into a single list for rendering.
-  const allStatements = useMemo<ASTNode[]>(() => {
-    if (!schema?.compiled_schema) return [];
-    const ast = schema.compiled_schema;
-    const pages    = (ast.pages    as ASTNode[]) ?? [];
-    const stmts    = (ast.statements as ASTNode[]) ?? [];
-    const pageStmts = pages.flatMap((p) => (p.statements as ASTNode[]) ?? []);
-    return [...pageStmts, ...stmts];
-  }, [schema]);
+  // (allStatements moved above useFormValidation)
 
   const formTitle = schema?.compiled_schema
     ? ((schema.compiled_schema.name as string) ?? schema.title)
@@ -144,6 +160,20 @@ export function FormRenderer({ formId }: { formId: string }) {
               Submission ID: {submissionId}
             </p>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              setFormValues({});
+              resetValidation();
+              setSubmitState("idle");
+              setSubmitError(null);
+              setSubmissionId(null);
+            }}
+            className="mt-2 flex items-center gap-2 rounded-lg border border-[#D4CCB8] bg-[#F5F3EE] px-5 py-2.5 font-inter text-[12px] font-medium text-[#3D3528] transition-all hover:border-[#7C6FE0]/40 hover:bg-[#F0EDE8] hover:text-[#7C6FE0]"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Submit another response
+          </button>
         </motion.div>
       </div>
     );
@@ -196,6 +226,9 @@ export function FormRenderer({ formId }: { formId: string }) {
                   stmts={allStatements}
                   values={formValues}
                   onChange={handleChange}
+                  onBlur={markTouched}
+                  errors={hasTouched ? errors : {}}
+                  touched={touched}
                 />
               ) : (
                 <p className="font-inter text-[12px] text-[#B4AA96]">
@@ -208,6 +241,20 @@ export function FormRenderer({ formId }: { formId: string }) {
           {/* Submit footer */}
           <div className="border-t border-[#E4DCD0] px-7 py-5">
             <AnimatePresence mode="wait">
+              {errorCount > 0 && hasTouched && (
+                <motion.div
+                  key="validation-summary"
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  className="mb-3 flex items-start gap-2.5 rounded-lg border border-[#F0CECE] bg-[#FDF5F5] px-3.5 py-3"
+                >
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-[#E05252]" />
+                  <p className="font-inter text-[12px] leading-relaxed text-[#C04040]">
+                    Please fix {errorCount} {errorCount === 1 ? "error" : "errors"} before submitting.
+                  </p>
+                </motion.div>
+              )}
               {submitError && (
                 <motion.div
                   key="error"

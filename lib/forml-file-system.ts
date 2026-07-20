@@ -968,8 +968,9 @@ export interface VirtualFile {
 }
 
 function inferFileType(name: string): FileType {
-  if (name.endsWith(".forml")) return "forml";
-  if (name.endsWith(".md")) return "md";
+  const extension = name.toLowerCase();
+  if (extension.endsWith(".forml")) return "forml";
+  if (extension.endsWith(".md")) return "md";
   return "generic";
 }
 

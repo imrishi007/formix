@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useFormlCompiler } from "@/lib/use-forml-compiler";
+import {
+  RenderStatements,
+  type ASTNode,
+} from "@/components/form-renderer";
 
 const DEFAULT_DSL = `form "Customer Feedback" {
   field name : text
@@ -33,9 +38,10 @@ const DEFAULT_DSL = `form "Customer Feedback" {
     }
 }`;
 
-// ─── Mock parser ─────────────────────────────────────────────────────────────
-// Scans the DSL text and extracts fields to render a live form preview.
-// This is a lightweight simulation; swap with the real WASM parse() when ready.
+// ─── Skeleton parser ────────────────────────────────────────────────────────
+// Scans the DSL text and extracts fields to render a live form preview
+// while the real WASM compiler is loading. Once wasmReady flips true,
+// the component switches to the real compiled output.
 
 type MockField = {
   name: string;
@@ -278,14 +284,29 @@ function PreviewField({ field }: { field: MockField }) {
 // ─── Main Demo Section ────────────────────────────────────────────────────────
 
 export function DemoSection() {
+  const { ready: wasmReady, compile } = useFormlCompiler();
+
   const [dsl, setDsl] = useState(DEFAULT_DSL);
-  const [parsed, setParsed] = useState<ParseResult>(() => mockParse(DEFAULT_DSL));
+  // Skeleton parse used only to render *something* before the WASM compiler
+  // finishes loading (~1s on first visit). Once wasmReady flips true we
+  // switch exclusively to real compiler output.
+  const [skeleton, setSkeleton] = useState<ParseResult>(() => mockParse(DEFAULT_DSL));
+  const [compileResult, setCompileResult] = useState<{
+    ast: ASTNode | null;
+    diagnostics: { line: number; col: number; severity: string; message: string }[];
+    ok: boolean;
+    durationMs: number;
+  } | null>(null);
+  const [compileMs, setCompileMs] = useState<number | null>(null);
+  const [demoNotice, setDemoNotice] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("ui");
   const [isVisible, setIsVisible] = useState(false);
   const [lineCount, setLineCount] = useState(DEFAULT_DSL.split("\n").length);
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
   const sectionRef = useRef<HTMLElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const compileTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -296,16 +317,94 @@ export function DemoSection() {
     return () => observer.disconnect();
   }, []);
 
+  // Run the real WASM compile on a 300ms debounce.
+  const runCompile = useCallback((src: string) => {
+    if (!wasmReady) return;
+    const result = compile(src);
+    setCompileResult({
+      ast: (result.ast ?? null) as ASTNode | null,
+      diagnostics: result.diagnostics,
+      ok: result.ok,
+      durationMs: result.durationMs,
+    });
+    setCompileMs(result.durationMs);
+  }, [wasmReady, compile]);
+
+  // Compile once as soon as the WASM runtime is ready.
+  useEffect(() => {
+    if (!wasmReady) return;
+    runCompile(dsl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wasmReady]);
+
+  useEffect(() => () => {
+    if (compileTimerRef.current) window.clearTimeout(compileTimerRef.current);
+  }, []);
+
   const handleDslChange = (value: string) => {
     setDsl(value);
-    setParsed(mockParse(value));
+    setSkeleton(mockParse(value)); // cheap skeleton, replaced by real output below
     setLineCount(value.split("\n").length);
+    if (wasmReady) {
+      if (compileTimerRef.current) window.clearTimeout(compileTimerRef.current);
+      compileTimerRef.current = window.setTimeout(() => runCompile(value), 300);
+    }
   };
 
   const syncScroll = () => {
     if (textareaRef.current && lineNumbersRef.current) {
       lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
     }
+  };
+
+  // Real compiled form (preferred) — falls back to skeleton only while WASM
+  // is still loading so the panel is never blank.
+  const realAst = compileResult?.ast ?? null;
+  const realFormName = (realAst?.name as string) ?? "";
+  const realFieldCount = useMemo(() => {
+    if (!realAst) return 0;
+    const countRecursive = (stmts: ASTNode[] | undefined): number => {
+      if (!Array.isArray(stmts)) return 0;
+      let n = 0;
+      for (const s of stmts) {
+        const t = s.type as string;
+        if (t === "Field") n += 1;
+        else if (t === "Page" || t === "Section" || t === "Layout") {
+          n += countRecursive(s.statements as ASTNode[] | undefined);
+        } else if (t === "Conditional") {
+          n += countRecursive(s.then as ASTNode[] | undefined);
+          n += countRecursive(s.else as ASTNode[] | undefined);
+        }
+      }
+      return n;
+    };
+    return countRecursive(realAst.statements as ASTNode[] | undefined)
+      + countRecursive(realAst.pages as ASTNode[] | undefined);
+  }, [realAst]);
+
+  const realStatements: ASTNode[] = useMemo(() => {
+    if (!realAst) return [];
+    const pages = (realAst.pages as ASTNode[]) ?? [];
+    const stmts = (realAst.statements as ASTNode[]) ?? [];
+    const pageStmts = pages.flatMap((p) => (p.statements as ASTNode[]) ?? []);
+    return [...pageStmts, ...stmts];
+  }, [realAst]);
+
+  const handleFieldChange = useCallback((key: string, val: string) => {
+    setFormValues((prev) => ({ ...prev, [key]: val }));
+  }, []);
+
+  // The form name + field count shown in the toolbar come from whichever
+  // source is live: real compiler output once available, skeleton otherwise.
+  const displayFormName = wasmReady && realAst ? (realFormName || skeleton.formName) : skeleton.formName;
+  const displayFieldCount = wasmReady && realAst ? realFieldCount : skeleton.fields.length;
+  const compileError = wasmReady && compileResult && !compileResult.ok
+    ? compileResult.diagnostics.find((d) => d.severity === "error")?.message ?? "Compile error"
+    : null;
+
+  const handleSubmitClick = () => {
+    setDemoNotice("This is a landing-page demo. Submissions are disabled here — open the editor to publish a real form.");
+    window.setTimeout(() => setDemoNotice(null), 4000);
   };
 
   return (
@@ -391,12 +490,20 @@ export function DemoSection() {
 
               {/* Status bar */}
               <div className="px-5 py-2.5 border-t border-background/10 flex items-center justify-between shrink-0">
-                {parsed.error ? (
-                  <span className="text-xs font-mono text-red-400 truncate">{parsed.error}</span>
+                {!wasmReady ? (
+                  <span className="flex items-center gap-2 text-xs font-mono text-yellow-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                    Initializing compiler…
+                  </span>
+                ) : compileError ? (
+                  <span className="text-xs font-mono text-red-400 truncate">{compileError}</span>
                 ) : (
                   <span className="flex items-center gap-2 text-xs font-mono text-background/40">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                    Parse OK — {parsed.fields.length} field{parsed.fields.length !== 1 ? "s" : ""}
+                    Parsed — {displayFieldCount} field{displayFieldCount !== 1 ? "s" : ""}
+                    {compileMs !== null && (
+                      <span className="ml-1 opacity-60">· {compileMs}ms</span>
+                    )}
                   </span>
                 )}
                 <span className="text-xs font-mono text-background/20 shrink-0 ml-4">
@@ -410,7 +517,7 @@ export function DemoSection() {
               {/* Preview toolbar */}
               <div className="px-5 py-3.5 border-b border-foreground/10 flex items-center justify-between shrink-0">
                 <span className="text-xs font-mono text-muted-foreground">
-                  {parsed.formName || "Preview"}
+                  {displayFormName || "Preview"}
                 </span>
                 <div className="flex border border-foreground/15">
                   {(["ui", "ast"] as const).map((mode) => (
@@ -436,18 +543,68 @@ export function DemoSection() {
                 className="flex-1 p-8 overflow-auto"
                 style={{ minHeight: "480px", maxHeight: "560px" }}
               >
-                {parsed.error ? (
+                {compileError ? (
                   <div className="h-full flex flex-col items-center justify-center text-center gap-4">
                     <div className="font-mono text-xs text-destructive/70 bg-destructive/5 border border-destructive/10 p-6 max-w-sm leading-relaxed">
-                      {parsed.error}
+                      {compileError}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       Fix the DSL to see the form preview
                     </p>
                   </div>
                 ) : previewMode === "ast" ? (
-                  <JsonTree value={buildMockAst(parsed)} />
-                ) : parsed.fields.length === 0 ? (
+                  <JsonTree value={buildMockAst(wasmReady && realAst ? { ...skeleton, formName: realFormName || skeleton.formName, fields: [] } : skeleton)} />
+                ) : wasmReady && realStatements.length > 0 ? (
+                  /* ── Real WASM-compiled form preview ── */
+                  <div className="flex flex-col gap-6">
+                    {displayFormName && (
+                      <h3 className="text-xl font-display border-b border-foreground/10 pb-4">
+                        {displayFormName}
+                      </h3>
+                    )}
+                    <RenderStatements
+                      stmts={realStatements}
+                      values={formValues}
+                      onChange={handleFieldChange}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSubmitClick}
+                      className="mt-2 bg-foreground text-background text-sm font-sans px-6 py-2.5 rounded-full hover:bg-foreground/85 transition-colors self-start"
+                    >
+                      Submit
+                    </button>
+                    {demoNotice && (
+                      <p className="text-xs text-muted-foreground border border-foreground/10 rounded px-3 py-2 mt-1 max-w-sm">
+                        {demoNotice}
+                      </p>
+                    )}
+                  </div>
+                ) : skeleton.fields.length > 0 && !wasmReady ? (
+                  /* ── Skeleton preview while WASM loads ── */
+                  <div className="flex flex-col gap-6">
+                    {skeleton.formName && (
+                      <h3 className="text-xl font-display border-b border-foreground/10 pb-4">
+                        {skeleton.formName}
+                      </h3>
+                    )}
+                    {skeleton.fields.map((field) => (
+                      <PreviewField key={field.name} field={field} />
+                    ))}
+                    <button
+                      type="button"
+                      onClick={handleSubmitClick}
+                      className="mt-2 bg-foreground text-background text-sm font-sans px-6 py-2.5 rounded-full hover:bg-foreground/85 transition-colors self-start"
+                    >
+                      Submit
+                    </button>
+                    {demoNotice && (
+                      <p className="text-xs text-muted-foreground border border-foreground/10 rounded px-3 py-2 mt-1 max-w-sm">
+                        {demoNotice}
+                      </p>
+                    )}
+                  </div>
+                ) : (
                   <div className="h-full flex flex-col items-center justify-center text-center gap-3">
                     <p className="text-muted-foreground text-sm font-mono">
                       Start typing a form definition...
@@ -456,35 +613,16 @@ export function DemoSection() {
                       Try: <code className="font-mono">field email : email</code>
                     </p>
                   </div>
-                ) : (
-                  <div className="flex flex-col gap-6">
-                    {parsed.formName && (
-                      <h3 className="text-xl font-display border-b border-foreground/10 pb-4">
-                        {parsed.formName}
-                      </h3>
-                    )}
-
-                    {parsed.fields.map((field) => (
-                      <PreviewField key={field.name} field={field} />
-                    ))}
-
-                    <button
-                      type="button"
-                      className="mt-2 bg-foreground text-background text-sm font-sans px-6 py-2.5 rounded-full hover:bg-foreground/85 transition-colors self-start"
-                    >
-                      Submit
-                    </button>
-                  </div>
                 )}
               </div>
 
               {/* Preview footer */}
               <div className="px-5 py-2.5 border-t border-foreground/10 flex items-center justify-between shrink-0">
                 <span className="text-xs font-mono text-muted-foreground">
-                  ASTRenderer.tsx
+                  {wasmReady ? "WASM · client-side" : "Loading compiler…"}
                 </span>
                 <span className="text-xs font-mono text-muted-foreground">
-                  WASM · client-side
+                  FormL v1.1
                 </span>
               </div>
             </div>
@@ -498,7 +636,7 @@ export function DemoSection() {
           }`}
           style={{ transitionDelay: "400ms" }}
         >
-          The real parser is a hand-written C++ recursive descent compiler compiled to WebAssembly.
+          The parser is a hand-written C++ recursive descent compiler compiled to WebAssembly. It runs entirely in your browser — no server involved.
         </p>
       </div>
     </section>

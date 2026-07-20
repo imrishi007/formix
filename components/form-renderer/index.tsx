@@ -25,6 +25,9 @@ export type ASTNode = Record<string, unknown>;
 export const INPUT_CLS =
   "w-full rounded border border-[#D4CCB8] bg-[#F5F3EE] px-3 py-2 font-inter text-[12px] text-[#222016] outline-none placeholder:text-[#B4AA96] transition-all duration-150 focus:border-[#7C6FE0] focus:ring-2 focus:ring-[#7C6FE0]/10";
 
+export const INPUT_CLS_ERROR =
+  "w-full rounded border border-[#E05252] bg-[#FDF5F5] px-3 py-2 font-inter text-[12px] text-[#222016] outline-none placeholder:text-[#B4AA96] transition-all duration-150 focus:border-[#E05252] focus:ring-2 focus:ring-[#E05252]/10";
+
 // ── Condition evaluator ───────────────────────────────────────────────────────
 
 /**
@@ -85,14 +88,22 @@ export function DynamicField({
   nameKey,
   values,
   onChange,
+  onBlur,
   repeatIndex,
+  error,
+  touched,
 }: {
   field: ASTNode;
   nameKey: string;
   values: Record<string, string>;
   onChange: (key: string, val: string) => void;
+  onBlur?: (key: string) => void;
   repeatIndex?: number;
+  error?: string;
+  touched?: boolean;
 }) {
+  const showError = !!(touched && error);
+  const inputCls = showError ? INPUT_CLS_ERROR : INPUT_CLS;
   const fieldType = field.fieldType as string;
   const options   = (field.options as string[]) ?? [];
   const ui        = field.ui as ASTNode | undefined;
@@ -117,7 +128,9 @@ export function DynamicField({
           <select
             value={value}
             onChange={(e) => onChange(nameKey, e.target.value)}
-            className={INPUT_CLS + " appearance-none"}
+            onBlur={() => onBlur?.(nameKey)}
+            aria-invalid={showError}
+            className={(showError ? INPUT_CLS_ERROR : INPUT_CLS) + " appearance-none"}
           >
             <option value="">Select...</option>
             {options.map((o) => (
@@ -138,6 +151,7 @@ export function DynamicField({
                 value={o}
                 checked={value === o}
                 onChange={() => onChange(nameKey, o)}
+                onBlur={() => onBlur?.(nameKey)}
                 className="accent-[#7C6FE0]"
               />
               {o}
@@ -156,6 +170,7 @@ export function DynamicField({
                   type="checkbox"
                   checked={ck}
                   onChange={(e) => onChange(`${nameKey}__${o}`, e.target.checked ? "true" : "false")}
+                  onBlur={() => onBlur?.(nameKey)}
                   className="accent-[#7C6FE0]"
                 />
                 {o}
@@ -171,6 +186,7 @@ export function DynamicField({
             type="checkbox"
             checked={value === "true"}
             onChange={(e) => onChange(nameKey, e.target.checked ? "true" : "false")}
+            onBlur={() => onBlur?.(nameKey)}
             className="accent-[#7C6FE0]"
           />
           {placeholder || label}
@@ -182,8 +198,10 @@ export function DynamicField({
           type="number"
           value={value}
           onChange={(e) => onChange(nameKey, e.target.value)}
+          onBlur={() => onBlur?.(nameKey)}
           placeholder={placeholder || "0"}
-          className={INPUT_CLS}
+          aria-invalid={showError}
+          className={inputCls}
         />
       )}
 
@@ -197,13 +215,22 @@ export function DynamicField({
           }
           value={value}
           onChange={(e) => onChange(nameKey, e.target.value)}
+          onBlur={() => onBlur?.(nameKey)}
           placeholder={placeholder}
-          className={INPUT_CLS}
+          aria-invalid={showError}
+          className={inputCls}
         />
       )}
 
       {helpText && (
         <p className="font-inter text-[10px] text-[#8A8070]">{helpText}</p>
+      )}
+
+      {showError && (
+        <p role="alert" className="mt-0.5 flex items-center gap-1 font-inter text-[10px] text-[#E05252]">
+          <span className="inline-block h-3 w-3 flex-none" aria-hidden="true">⚠</span>
+          {error}
+        </p>
       )}
     </div>
   );
@@ -219,11 +246,17 @@ export function RenderStatements({
   stmts,
   values,
   onChange,
+  onBlur,
+  errors,
+  touched,
   depth = 0,
 }: {
   stmts: ASTNode[];
   values: Record<string, string>;
   onChange: (key: string, val: string) => void;
+  onBlur?: (key: string) => void;
+  errors?: Record<string, string>;
+  touched?: Record<string, boolean>;
   depth?: number;
 }) {
   return (
@@ -241,6 +274,9 @@ export function RenderStatements({
               nameKey={fieldName}
               values={values}
               onChange={onChange}
+              onBlur={onBlur}
+              error={errors?.[fieldName]}
+              touched={touched?.[fieldName]}
             />
           );
         }
@@ -294,7 +330,10 @@ export function RenderStatements({
                             nameKey={nk}
                             values={values}
                             onChange={onChange}
+                            onBlur={onBlur}
                             repeatIndex={idx}
+                            error={errors?.[nk]}
+                            touched={touched?.[nk]}
                           />
                         );
                       })}
@@ -335,6 +374,9 @@ export function RenderStatements({
                     stmts={branch}
                     values={values}
                     onChange={onChange}
+                    onBlur={onBlur}
+                    errors={errors}
+                    touched={touched}
                     depth={depth + 1}
                   />
                 </div>
@@ -358,6 +400,9 @@ export function RenderStatements({
                 stmts={sectionStmts}
                 values={values}
                 onChange={onChange}
+                onBlur={onBlur}
+                errors={errors}
+                touched={touched}
                 depth={depth + 1}
               />
             </div>
@@ -378,6 +423,9 @@ export function RenderStatements({
                   stmts={[ls]}
                   values={values}
                   onChange={onChange}
+                  onBlur={onBlur}
+                  errors={errors}
+                  touched={touched}
                   depth={depth + 1}
                 />
               ))}
