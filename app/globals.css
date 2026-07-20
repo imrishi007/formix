@@ -86,9 +86,14 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
+  body {
+    height: 100%;
+  }
   body {
     @apply bg-background text-foreground;
-    min-height: 100vh;
+    min-height: 100%;
+    overflow-x: hidden;
   }
 
   .ide-shell {
@@ -156,6 +161,46 @@
   .ide-shell ::-webkit-scrollbar-thumb:hover {
     background: rgba(139,92,246,0.55);
     background-clip: padding-box;
+  }
+
+  .hero-ide-frame {
+    perspective: 1800px;
+  }
+
+  .hero-ide-window {
+    transform: rotateY(-2deg) rotateX(1deg);
+    transform-origin: center right;
+    box-shadow:
+      0 46px 100px rgba(34, 18, 55, 0.22),
+      0 18px 38px rgba(0, 0, 0, 0.22),
+      inset 0 1px 0 rgba(255,255,255,0.12);
+    animation: hero-window-float 8s ease-in-out infinite;
+  }
+
+  .hero-ide-window::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(120deg, rgba(255,255,255,0.08), transparent 24%, transparent 70%, rgba(139,92,246,0.04));
+    mix-blend-mode: screen;
+  }
+
+  .hero-ide-glow {
+    position: absolute;
+    inset: 7% -3% -8% 7%;
+    border-radius: 40px;
+    background: rgba(139,92,246,0.18);
+    filter: blur(55px);
+  }
+
+  @keyframes hero-window-float {
+    0%, 100% { transform: rotateY(-2deg) rotateX(1deg) translateY(0); }
+    50% { transform: rotateY(-2deg) rotateX(1deg) translateY(-6px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-ide-window { animation: none; }
   }
   
   .text-stroke {

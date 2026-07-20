@@ -7,5 +7,9 @@ export const metadata: Metadata = {
 };
 
 export default function DemoEditorPage() {
-  return <DemoIdeShell />;
+  return (
+    <div style={{ height: "100dvh", overflow: "hidden" }}>
+      <DemoIdeShell />
+    </div>
+  );
 }
