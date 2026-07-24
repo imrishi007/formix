@@ -67,7 +67,11 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
     });
   };
   return (
+<<<<<<< HEAD
     <div className="my-6 overflow-hidden rounded-xl border border-white/[0.09] bg-[#111111] shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
+=======
+    <div className="my-6 overflow-hidden rounded-xl border border-white/[0.09] bg-[#0f172a] shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
+>>>>>>> f6620dd (Complete Formix updates)
       <div className="flex h-9 items-center justify-between border-b border-white/[0.07] bg-white/[0.03] px-4">
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#71717A]">{language || "code"}</span>
         <button type="button" onClick={copy} className="flex items-center gap-1.5 rounded-md px-2 py-1 font-inter text-[10px] text-[#A1A1AA] transition-colors hover:bg-white/[0.08] hover:text-white">
@@ -168,7 +172,11 @@ function MarkdownDocument({ source }: { source: string }) {
 export function MarkdownPreview({ source }: { source: string }) {
   const wordCount = useMemo(() => source.trim() ? source.trim().split(/\s+/).length : 0, [source]);
   return (
+<<<<<<< HEAD
     <div className="formix-scroll h-full min-h-0 overflow-auto bg-[#111111]">
+=======
+    <div className="formix-scroll h-full min-h-0 overflow-auto bg-[#0f172a]">
+>>>>>>> f6620dd (Complete Formix updates)
       <div className="mx-auto min-h-full w-full max-w-3xl px-8 py-10 lg:px-14 lg:py-12">
         <div className="mb-8 flex items-center justify-between border-b border-white/[0.08] pb-5">
           <div><p className="font-inter text-[11px] font-semibold uppercase tracking-[0.16em] text-[#A78BFA]">Markdown Preview</p><p className="mt-1 font-inter text-xs text-[#71717A]">GitHub Flavored Markdown · {wordCount} words</p></div>

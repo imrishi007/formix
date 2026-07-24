@@ -48,6 +48,10 @@ private:
     nlohmann::json serializeFields(std::vector<std::unique_ptr<FieldNode>>& fields);
     nlohmann::json serializeUIBlock(const UIBlockNode& block);
     nlohmann::json serializeValidationBlock(const ValidationBlockNode& block);
+<<<<<<< HEAD
+=======
+    nlohmann::json serializeUploadBlock(const UploadBlockNode& block);
+>>>>>>> f6620dd (Complete Formix updates)
 };
 
 } // namespace forml

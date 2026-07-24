@@ -21,8 +21,13 @@ const RESET = "rgba(212,212,212,0.9)";
 // ── Forml tokenizer ──────────────────────────────────────────────────────────
 function tokenizeFormlLine(line: string): Token[] {
   const keywords = new Set(["form","field","page","section","group","use","var","if","else","repeat","count","on","action","validate","compute","ui","from","map"]);
+<<<<<<< HEAD
   const types    = new Set(["text","integer","float","email","date","boolean","url","select","radio","checkbox","POST","PUT","PATCH"]);
   const attrs    = new Set(["required","min","max","minLength","maxLength","pattern","label","placeholder","helpText","default","bind","endpoint","method","option","load","change","blur","submit","hide","show","clear","set","navigate"]);
+=======
+  const types    = new Set(["text","integer","float","email","date","boolean","url","select","radio","checkbox","file","image","pdf","document","POST","PUT","PATCH"]);
+  const attrs    = new Set(["required","min","max","minLength","maxLength","pattern","accept","maxSize","multiple","label","placeholder","helpText","default","bind","endpoint","method","option","load","change","blur","submit","hide","show","clear","set","navigate"]);
+>>>>>>> f6620dd (Complete Formix updates)
 
   const tokens: Token[] = [];
   let i = 0;
@@ -152,23 +157,38 @@ export function CodeBlock({
   };
 
   return (
+<<<<<<< HEAD
     <div className="relative overflow-hidden border border-foreground/10 bg-[#1e1e1e] rounded-sm my-6">
       {/* Header */}
       {!hideHeader && (
         <div className="flex items-center justify-between px-4 py-2.5 bg-[#161616] border-b border-foreground/10">
+=======
+    <div className="relative overflow-hidden border border-white/10 bg-[#0d1420] rounded-xl my-6">
+      {/* Header */}
+      {!hideHeader && (
+        <div className="flex items-center justify-between px-4 py-2.5 bg-[#111827] border-b border-white/10">
+>>>>>>> f6620dd (Complete Formix updates)
           <div className="flex items-center gap-3">
             {filename && (
               <span className="text-xs font-mono text-foreground/40">{filename}</span>
             )}
             {!filename && langLabel[language] && (
+<<<<<<< HEAD
               <span className="text-[10px] font-mono uppercase tracking-widest text-foreground/30 px-1.5 py-0.5 border border-foreground/10">
+=======
+              <span className="text-xs font-mono uppercase tracking-widest text-foreground/30 px-1.5 py-0.5 border border-foreground/10">
+>>>>>>> f6620dd (Complete Formix updates)
                 {langLabel[language]}
               </span>
             )}
           </div>
           <button
             onClick={handleCopy}
+<<<<<<< HEAD
             className="flex items-center gap-1.5 text-[10px] font-mono text-foreground/30 hover:text-foreground/70 transition-colors"
+=======
+            className="flex items-center gap-1.5 text-xs font-mono text-foreground/30 hover:text-foreground/70 transition-colors"
+>>>>>>> f6620dd (Complete Formix updates)
             aria-label="Copy code"
           >
             {copied ? (

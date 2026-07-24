@@ -5,7 +5,11 @@
 // pulling in the (very heavy) monaco type package at runtime.
 //
 // Used by:
+<<<<<<< HEAD
 //   - components/editor/demo-ide-shell.tsx     (the author IDE)
+=======
+//   - components/workspace/editor-pane.tsx      (the author workspace)
+>>>>>>> f6620dd (Complete Formix updates)
 //   - components/editor/compiler-playground.tsx (the compiler playground)
 //   - lib/monaco-forml-language.ts             (the FormL language service)
 //
@@ -74,12 +78,22 @@ export const FORML_KEYWORDS = [
   "repeat", "count", "if", "else", "on",
   // Field types
   "text", "integer", "float", "email", "date", "boolean", "url",
+<<<<<<< HEAD
   "select", "radio", "checkbox",
+=======
+  "select", "radio", "checkbox", "upload",
+  "file", "image", "pdf", "document", // deprecated, kept for old source
+>>>>>>> f6620dd (Complete Formix updates)
   // Blocks
   "ui", "validate", "action", "submit", "option",
   "compute", "from", "map", "row", "column",
   // Validation rules
   "required", "minLength", "maxLength", "pattern", "min", "max",
+<<<<<<< HEAD
+=======
+  // Upload-block rules (also legacy validate-block rules for file/image/pdf/document)
+  "accept", "maxSize", "multiple", "minFiles", "maxFiles",
+>>>>>>> f6620dd (Complete Formix updates)
   // Trigger events
   "load", "change", "blur",
   // Trigger actions
@@ -91,7 +105,11 @@ export const FORML_KEYWORDS = [
 
 export const FORML_FIELD_TYPES = [
   "text", "integer", "float", "email", "date", "boolean", "url",
+<<<<<<< HEAD
   "select", "radio", "checkbox",
+=======
+  "select", "radio", "checkbox", "upload",
+>>>>>>> f6620dd (Complete Formix updates)
 ] as const;
 
 export const FORML_HTTP_METHODS = ["POST", "PUT", "PATCH"] as const;
@@ -107,9 +125,18 @@ export const MONACO_OPTIONS = {
   contextmenu: true,
   cursorBlinking: "smooth" as const,
   cursorSmoothCaretAnimation: "on" as const,
+<<<<<<< HEAD
   fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
   fontLigatures: true,
   fontSize: 18,
+=======
+  cursorWidth: 2,
+  fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+  fontLigatures: true,
+  fontSize: 18,
+  fontWeight: "500",
+  letterSpacing: 0.2,
+>>>>>>> f6620dd (Complete Formix updates)
   hideCursorInOverviewRuler: true,
   lineDecorationsWidth: 12,
   lineHeight: 30,
@@ -117,22 +144,45 @@ export const MONACO_OPTIONS = {
   lineNumbersMinChars: 3,
   minimap: { enabled: true, renderCharacters: false, maxColumn: 120, scale: 1 },
   overviewRulerBorder: false,
+<<<<<<< HEAD
   overviewRulerLanes: 0,
   quickSuggestions: { other: true, comments: false, strings: true },
   renderLineHighlight: "line" as const,
   renderValidationDecorations: "on" as const,
   renderWhitespace: "none" as const,
+=======
+  // Non-zero so compiler error/warning markers show as a colored strip
+  // alongside the minimap — matches VS Code's "problems at a glance" affordance.
+  overviewRulerLanes: 3,
+  quickSuggestions: { other: true, comments: false, strings: true },
+  renderLineHighlight: "all" as const,
+  renderLineHighlightOnlyWhenFocus: false,
+  renderValidationDecorations: "on" as const,
+  renderWhitespace: "none" as const,
+  matchBrackets: "always" as const,
+>>>>>>> f6620dd (Complete Formix updates)
   scrollbar: {
     alwaysConsumeMouseWheel: false,
     horizontalScrollbarSize: 8,
     verticalScrollbarSize: 8,
+<<<<<<< HEAD
+=======
+    useShadows: true,
+>>>>>>> f6620dd (Complete Formix updates)
   },
   scrollBeyondLastLine: false,
   smoothScrolling: true,
   suggest: { showWords: true },
   parameterHints: { enabled: true },
+<<<<<<< HEAD
   hover: { enabled: true },
   folding: true,
+=======
+  hover: { enabled: true, delay: 200 },
+  folding: true,
+  foldingHighlight: true,
+  showFoldingControls: "mouseover" as const,
+>>>>>>> f6620dd (Complete Formix updates)
   glyphMargin: true,
   bracketPairColorization: { enabled: true },
   guides: { indentation: true, bracketPairs: true, highlightActiveIndentation: true },
@@ -156,7 +206,11 @@ export const FORML_MONARCH_TOKENIZER = {
   tokenizer: {
     root: [
       [
+<<<<<<< HEAD
         /\b(?:form|field|ui|validate|action|submit|option|required|minLength|maxLength|pattern|min|max|POST|PUT|PATCH|text|email|select|radio|checkbox|integer|float|date|boolean|url|label|placeholder|helpText|endpoint|method|default|bind|page|section|group|use|var|repeat|count|if|else|on|compute|from|map|row|column|load|change|blur|hide|show|clear|set|navigate)\b/,
+=======
+        /\b(?:form|field|ui|validate|action|submit|option|required|minLength|maxLength|pattern|min|max|accept|maxSize|multiple|minFiles|maxFiles|POST|PUT|PATCH|text|email|select|radio|checkbox|upload|file|image|pdf|document|integer|float|date|boolean|url|label|placeholder|helpText|endpoint|method|default|bind|page|section|group|use|var|repeat|count|if|else|on|compute|from|map|row|column|load|change|blur|hide|show|clear|set|navigate)\b/,
+>>>>>>> f6620dd (Complete Formix updates)
         "keyword",
       ],
       [/"([^"\\]|\\.)*$/, "string.invalid"],
@@ -193,6 +247,7 @@ export const FORML_THEME: MonacoTheme = {
     { token: "comment", foreground: "71717A", fontStyle: "italic" },
   ],
   colors: {
+<<<<<<< HEAD
     "editor.background": "#1E1E1E",
     "editor.foreground": "#F4F4F5",
     "editorLineNumber.foreground": "#52525B",
@@ -208,15 +263,69 @@ export const FORML_THEME: MonacoTheme = {
     "editorWhitespace.foreground": "#303030",
     "editorWidget.background": "#242424",
     "editorWidget.border": "#3F3F46",
+=======
+    "editor.background": "#0f172a",
+    "editor.foreground": "#F4F4F5",
+    "editorLineNumber.foreground": "#475569",
+    "editorLineNumber.activeForeground": "#a1a1aa",
+    "editorGutter.background": "#0f172a",
+    "editorCursor.foreground": "#C4B5FD",
+    "editor.selectionBackground": "#8B5CF64D",
+    "editor.inactiveSelectionBackground": "#8B5CF626",
+    "editor.lineHighlightBackground": "#16213b",
+    "editor.lineHighlightBorder": "#1e293b",
+    "editorIndentGuide.background1": "#1e293b",
+    "editorIndentGuide.activeBackground1": "#4C3A77",
+    "editorWhitespace.foreground": "#1e293b",
+    "editorWidget.background": "#16213b",
+    "editorWidget.border": "#334155",
+>>>>>>> f6620dd (Complete Formix updates)
     "editorWidget.foreground": "#EDEDEB",
     "scrollbar.shadow": "#00000000",
     "scrollbarSlider.background": "#FFFFFF0A",
     "scrollbarSlider.hoverBackground": "#FFFFFF18",
     "scrollbarSlider.activeBackground": "#FFFFFF28",
     "editorOverviewRuler.border": "#00000000",
+<<<<<<< HEAD
     "focusBorder": "#7C6FE040",
     "editorError.foreground": "#E05252",
     "editorWarning.foreground": "#C4A35A",
+=======
+    "focusBorder": "#8B5CF640",
+    "editorError.foreground": "#E05252",
+    "editorWarning.foreground": "#C4A35A",
+    "editorInfo.foreground": "#8B5CF6",
+    "editorOverviewRuler.errorForeground": "#E05252",
+    "editorOverviewRuler.warningForeground": "#C4A35A",
+    "editorOverviewRuler.infoForeground": "#8B5CF6",
+    // Suggest / hover widgets — explicit so they stay on-theme (inherit: false
+    // means these would otherwise fall back to Monaco's generic defaults).
+    "editorSuggestWidget.background": "#16213b",
+    "editorSuggestWidget.border": "#334155",
+    "editorSuggestWidget.foreground": "#D4D4D8",
+    "editorSuggestWidget.selectedBackground": "#8B5CF633",
+    "editorSuggestWidget.highlightForeground": "#C4B5FD",
+    "editorHoverWidget.background": "#16213b",
+    "editorHoverWidget.border": "#334155",
+    "editorHoverWidget.foreground": "#D4D4D8",
+    // Bracket matching + pair colorization, tuned to the Formix palette
+    // instead of Monaco's default rainbow.
+    "editorBracketMatch.background": "#8B5CF633",
+    "editorBracketMatch.border": "#8B5CF680",
+    "editorBracketHighlight.foreground1": "#C4B5FD",
+    "editorBracketHighlight.foreground2": "#F9C978",
+    "editorBracketHighlight.foreground3": "#A5D6A7",
+    "editorBracketHighlight.foreground4": "#F0ABFC",
+    "editorBracketHighlight.foreground5": "#7DD3FC",
+    "editorBracketHighlight.foreground6": "#FCA5A5",
+    "editorBracketHighlight.unexpectedBracket.foreground": "#E05252",
+    "editorBracketPairGuide.background1": "#C4B5FD1A",
+    "editorBracketPairGuide.background2": "#F9C9781A",
+    "editorBracketPairGuide.background3": "#A5D6A71A",
+    // Folding + gutter
+    "editorGutter.foldingControlForeground": "#71717A",
+    "editor.foldBackground": "#8B5CF60D",
+>>>>>>> f6620dd (Complete Formix updates)
   },
 };
 
@@ -251,6 +360,16 @@ export const FORML_LANGUAGE_CONFIG = {
       action: { indentAction: 1, appendText: "  " }, // 1 = IndentAction.Indent
     },
   ],
+<<<<<<< HEAD
+=======
+  // Lets Monaco auto-dedent as soon as you type a closing brace, and
+  // re-indent pasted/typed lines based on brace nesting — the same
+  // mechanism built-in languages (JSON, TS) use.
+  indentationRules: {
+    increaseIndentPattern: /\{[^}"']*$/,
+    decreaseIndentPattern: /^\s*[}\])]/,
+  },
+>>>>>>> f6620dd (Complete Formix updates)
 };
 
 // ── Registration helper ──────────────────────────────────────────────────────
@@ -288,3 +407,47 @@ export function defineFormixMono(monaco: MonacoLike | unknown): void {
 export function isFormlRegistered(): boolean {
   return _registered;
 }
+<<<<<<< HEAD
+=======
+
+// ── Format Document ──────────────────────────────────────────────────────────
+// A lightweight, brace-depth re-indenter for the editor's "Format Document"
+// command (Shift+Alt+F). This is purely a text transform over already-typed
+// source — it does not parse or validate FormL, so it has no bearing on the
+// compiler pipeline. Comments (`-- ...`) are excluded from brace counting so
+// braces used in example text don't skew indentation.
+
+export function formatFormlSource(source: string): string {
+  const lines = source.split(/\r?\n/);
+  const out: string[] = [];
+  let depth = 0;
+
+  for (const raw of lines) {
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) {
+      out.push("");
+      continue;
+    }
+
+    const commentIdx = trimmed.indexOf("--");
+    const codePart = commentIdx === -1 ? trimmed : trimmed.slice(0, commentIdx);
+
+    const leadingClosers = (codePart.match(/^[}\])]+/) ?? [""])[0].length;
+    const lineDepth = Math.max(0, depth - leadingClosers);
+    out.push("  ".repeat(lineDepth) + trimmed);
+
+    let net = 0;
+    let inString = false;
+    for (let i = 0; i < codePart.length; i++) {
+      const ch = codePart[i];
+      if (ch === '"' && codePart[i - 1] !== "\\") inString = !inString;
+      if (inString) continue;
+      if (ch === "{" || ch === "[" || ch === "(") net++;
+      else if (ch === "}" || ch === "]" || ch === ")") net--;
+    }
+    depth = Math.max(0, depth + net);
+  }
+
+  return out.join("\n");
+}
+>>>>>>> f6620dd (Complete Formix updates)

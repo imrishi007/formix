@@ -88,6 +88,13 @@ class FormCreateInProject(BaseModel):
 class FormUpdate(BaseModel):
     forml_source: str
     compiled_schema: Optional[Any] = None
+<<<<<<< HEAD
+=======
+    # Optional — set when the author accepts the workspace's "rename to match
+    # the DSL's form title" suggestion. Omitted (or None) on every regular
+    # autosave, which leaves the existing title untouched.
+    title: Optional[str] = None
+>>>>>>> f6620dd (Complete Formix updates)
 
 
 class FormLinkRequest(BaseModel):
@@ -104,6 +111,27 @@ class FormCreateResponse(BaseModel):
         from_attributes = True
 
 
+<<<<<<< HEAD
+=======
+class FormDetail(BaseModel):
+    """Full author-view of a form, including forml_source — used to re-open
+    an existing form for editing (as opposed to FormSummary, used in listings,
+    or PublicFormResponse, used by the anonymous respondent route)."""
+    id: str
+    project_id: str
+    title: str
+    forml_source: str
+    compiled_schema: Optional[Any] = None
+    is_published: bool
+    next_form_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+>>>>>>> f6620dd (Complete Formix updates)
 # ── Publish ───────────────────────────────────────────────────────────────────
 
 class PublishRequest(BaseModel):

@@ -955,6 +955,123 @@ emits a typed JSON AST and a diagnostics array.
     method: POST
   }
 }`,
+<<<<<<< HEAD
+=======
+
+  // 13. Native `upload` field type — identity documents (image + pdf)
+  "kyc-verification.forml": `form "KYC Verification" {
+
+  field fullName : text
+    ui {
+      label: "Full Name"
+      placeholder: "Jane Doe"
+    }
+    validate {
+      required
+      minLength: 2
+    }
+
+  field dateOfBirth : date
+    ui {
+      label: "Date of Birth"
+    }
+    validate {
+      required
+    }
+
+  field idDocument : upload {
+    accept: image,pdf
+    maxSize: "10MB"
+    required
+  }
+  ui {
+    label: "Aadhaar / PAN Card"
+    helpText: "Upload a clear photo or scanned PDF of your government ID."
+  }
+
+  action submit {
+    endpoint: "https://api.formix.dev/kyc/verify"
+    method: POST
+  }
+}`,
+
+  // 14. Native `upload` field type — medical report (pdf + image)
+  "medical-report.forml": `form "Medical Report Submission" {
+
+  field patientName : text
+    ui {
+      label: "Patient Name"
+      placeholder: "Jane Doe"
+    }
+    validate {
+      required
+      minLength: 2
+    }
+
+  field visitDate : date
+    ui {
+      label: "Visit Date"
+    }
+    validate {
+      required
+    }
+
+  field report : upload {
+    accept: pdf,image
+    maxSize: "15MB"
+    required
+  }
+  ui {
+    label: "Medical Report"
+    helpText: "Upload a scanned copy or photo of your medical report (PDF or image)."
+  }
+
+  action submit {
+    endpoint: "https://api.formix.dev/medical/submit"
+    method: POST
+  }
+}`,
+
+  // 15. Native `upload` field type — multi-file, multi-category (pdf, zip, image)
+  "project-submission.forml": `form "Project Submission Portal" {
+
+  field studentName : text
+    ui {
+      label: "Full Name"
+      placeholder: "Jane Doe"
+    }
+    validate {
+      required
+      minLength: 2
+    }
+
+  field projectTitle : text
+    ui {
+      label: "Project Title"
+      placeholder: "Final Year Capstone"
+    }
+    validate {
+      required
+    }
+
+  field files : upload {
+    accept: pdf,zip,image
+    multiple: true
+    maxSize: "50MB"
+    minFiles: 1
+    maxFiles: 10
+  }
+  ui {
+    label: "Project Files"
+    helpText: "Upload your report (PDF), source code (ZIP), and any screenshots (image)."
+  }
+
+  action submit {
+    endpoint: "https://api.formix.dev/projects/submit"
+    method: POST
+  }
+}`,
+>>>>>>> f6620dd (Complete Formix updates)
 };
 
 // ── Virtual file system factory ──────────────────────────────────────────────

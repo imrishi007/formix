@@ -12,6 +12,10 @@ import {
   FORML_KEYWORDS,
   FORML_FIELD_TYPES,
   FORML_HTTP_METHODS,
+<<<<<<< HEAD
+=======
+  formatFormlSource,
+>>>>>>> f6620dd (Complete Formix updates)
 } from "./monaco-forml";
 
 // ── Minimal Monaco provider typing ──────────────────────────────────────────
@@ -25,6 +29,10 @@ type IModel = {
   getValueInRange: (range: any) => string;
   getLineContent: (line: number) => string;
   getValue: () => string;
+<<<<<<< HEAD
+=======
+  getFullModelRange: () => any;
+>>>>>>> f6620dd (Complete Formix updates)
 };
 
 // ── Hover docs ───────────────────────────────────────────────────────────────
@@ -55,6 +63,14 @@ const HOVER_DOCS: Record<string, string> = {
   select:   "**`select`** `{ option \"…\" … }`\n\nDropdown selection. List options inside the field block.",
   radio:    "**`radio`** `{ option \"…\" … }`\n\nRadio-button group. List options inside the field block.",
   checkbox: "**`checkbox`** `{ option \"…\" … }`\n\nMulti-select checkboxes. List options inside the field block.",
+<<<<<<< HEAD
+=======
+  upload:   "**`upload`** `{ accept: pdf  maxSize: \"10MB\" }`\n\nFile upload field. Configure with `accept`, `multiple`, `required`, `maxSize`, `minFiles`, `maxFiles` inside its own block:\n\n```\nfield resume : upload {\n  accept: pdf\n  maxSize: \"10MB\"\n}\n```",
+  file:     "**`file`** *(deprecated — use `upload`)* — Generic file upload. Still compiles; automatically converted to `upload { accept: any }`.",
+  image:    "**`image`** *(deprecated — use `upload { accept: image }`)* — File upload defaulting to image types. Still compiles; automatically converted.",
+  pdf:      "**`pdf`** *(deprecated — use `upload { accept: pdf }`)* — File upload defaulting to `application/pdf`. Still compiles; automatically converted.",
+  document: "**`document`** *(deprecated — use `upload { accept: document }`)* — File upload defaulting to common document types. Still compiles; automatically converted.",
+>>>>>>> f6620dd (Complete Formix updates)
 
   // ── UI sub-block keys ─────────────────────────────────────────────────────
   ui:          "**`ui`** `{ … }`\n\nUI annotations block. Supported keys: `label`, `placeholder`, `helpText`.",
@@ -64,12 +80,24 @@ const HOVER_DOCS: Record<string, string> = {
 
   // ── Validation rules ──────────────────────────────────────────────────────
   validate:  "**`validate`** `{ … }`\n\nValidation rules block. Supported: `required`, `minLength`, `maxLength`, `pattern`, `min`, `max`.",
+<<<<<<< HEAD
   required:  "**`required`**\n\nMakes the field mandatory — the form cannot be submitted when this field is empty.",
+=======
+  required:  "**`required`**\n\nMakes the field mandatory. Inside `validate { }` this applies to any field; inside `upload { }` it means at least one file must be selected.",
+>>>>>>> f6620dd (Complete Formix updates)
   minLength: "**`minLength`**: `<n>`\n\nMinimum number of characters for text fields.",
   maxLength: "**`maxLength`**: `<n>`\n\nMaximum number of characters for text fields.",
   pattern:   "**`pattern`**: `\"<regex>\"`\n\nRegular-expression the value must match.",
   min:       "**`min`**: `<n>`\n\nMinimum numeric value (for `integer` and `float` fields).",
   max:       "**`max`**: `<n>`\n\nMaximum numeric value (for `integer` and `float` fields).",
+<<<<<<< HEAD
+=======
+  accept:    "**`accept`**: `image | pdf | document | video | audio | zip | any` (comma-separated)\n\nWhich file categories an `upload` field accepts, e.g. `accept: pdf` or `accept: image,pdf`. Upload fields only.",
+  maxSize:   "**`maxSize`**: `\"<size>\"`\n\nMaximum size per file, e.g. `\"10MB\"`, `\"500KB\"`. Upload fields only.",
+  multiple:  "**`multiple`**: `[true|false]`\n\nAllows selecting more than one file — bare `multiple` or `multiple: true`. Upload fields only.",
+  minFiles:  "**`minFiles`**: `<n>`\n\nMinimum number of files that must be selected. Upload fields only, used with `multiple`.",
+  maxFiles:  "**`maxFiles`**: `<n>`\n\nMaximum number of files that may be selected. Upload fields only, used with `multiple`.",
+>>>>>>> f6620dd (Complete Formix updates)
 
   // ── Actions ───────────────────────────────────────────────────────────────
   action:   "**`action`** `{ endpoint: \"…\" method: POST }`\n\nForm-level action block — defines where the form data is submitted.",
@@ -142,6 +170,25 @@ const SNIPPETS: Record<string, { insert: string; doc: string }> = {
     insert: 'field ${1:name} : date\n  ui { label: "${2:Date}" }',
     doc:    "Date-picker field",
   },
+<<<<<<< HEAD
+=======
+  "field upload": {
+    insert: 'field ${1:attachment} : upload {\n  accept: ${2:any}\n  maxSize: "${3:10MB}"\n}\n  ui { label: "${4:Label}" }',
+    doc:    "Generic file upload field",
+  },
+  "field upload document": {
+    insert: 'field ${1:resume} : upload {\n  accept: pdf\n  maxSize: "${2:10MB}"\n  required\n}\n  ui { label: "${3:Resume}" helpText: "${4:PDF, up to 10MB}" }',
+    doc:    "Document upload field (resume, certificate, etc.)",
+  },
+  "field upload image": {
+    insert: 'field ${1:photo} : upload {\n  accept: image\n  maxSize: "${2:5MB}"\n}\n  ui { label: "${3:Photo}" }',
+    doc:    "Image upload field",
+  },
+  "field upload multiple": {
+    insert: 'field ${1:attachments} : upload {\n  accept: ${2:image,pdf}\n  multiple: true\n  maxSize: "${3:25MB}"\n  minFiles: ${4:1}\n  maxFiles: ${5:5}\n}\n  ui { label: "${6:Attachments}" }',
+    doc:    "Multi-file upload field with min/max file counts",
+  },
+>>>>>>> f6620dd (Complete Formix updates)
   "page": {
     insert: 'page "${1:PageName}" {\n  $0\n}',
     doc:    "Named page block",
@@ -203,7 +250,11 @@ const SNIPPETS: Record<string, { insert: string; doc: string }> = {
 // ── Context detection ─────────────────────────────────────────────────────────
 
 /** Look backwards from position to determine what context we're in. */
+<<<<<<< HEAD
 function detectContext(model: IModel, position: IPosition): "field_type" | "validate_block" | "on_block" | "top_level" | "ui_block" {
+=======
+function detectContext(model: IModel, position: IPosition): "field_type" | "validate_block" | "on_block" | "top_level" | "ui_block" | "upload_block" {
+>>>>>>> f6620dd (Complete Formix updates)
   const line = position.lineNumber;
 
   // Walk backwards up to 20 lines, counting brace depth to find enclosing block.
@@ -218,6 +269,10 @@ function detectContext(model: IModel, position: IPosition): "field_type" | "vali
         if (depth < 0) {
           // We're inside this opening brace. Check what precedes it.
           const before = content.slice(0, c).trim();
+<<<<<<< HEAD
+=======
+          if (/:\s*upload\s*$/.test(before)) return "upload_block";
+>>>>>>> f6620dd (Complete Formix updates)
           if (/\bvalidate\b/.test(before)) return "validate_block";
           if (/\bon\b/.test(before)) return "on_block";
           if (/\bui\b/.test(before)) return "ui_block";
@@ -294,6 +349,25 @@ function buildCompletionProvider(monaco: Monaco) {
 
       const ctx = detectContext(model, position);
 
+<<<<<<< HEAD
+=======
+      // ── Inside upload { } ──────────────────────────────────────────────────
+      if (ctx === "upload_block") {
+        const uploadItems = [
+          "accept", "multiple", "required", "maxSize", "minFiles", "maxFiles",
+        ].map((kw) => ({ ...keyword(kw, ""), range }));
+        const acceptValueItems = ["image", "pdf", "document", "video", "audio", "zip", "any"].map((v) => ({
+          label: v,
+          kind: CIK.EnumMember,
+          insertText: v,
+          documentation: { value: `Accept category: ${v}` },
+          detail: "upload accept value",
+          range,
+        }));
+        return { suggestions: [...uploadItems, ...acceptValueItems] };
+      }
+
+>>>>>>> f6620dd (Complete Formix updates)
       // ── Inside validate { } ───────────────────────────────────────────────
       if (ctx === "validate_block") {
         const validationItems = [
@@ -369,12 +443,37 @@ function buildHoverProvider() {
   };
 }
 
+<<<<<<< HEAD
+=======
+// ── Document formatting provider ──────────────────────────────────────────────
+// Wires formatFormlSource (a brace-depth re-indenter, see lib/monaco-forml.ts)
+// into Monaco's own formatting machinery, so the standard Shift+Alt+F
+// keybinding, the right-click "Format Document" menu entry, and the command
+// palette all work — instead of a bespoke keybinding fighting Monaco's
+// built-in (and otherwise no-op, since no provider existed) format command.
+
+function buildFormattingProvider() {
+  return {
+    provideDocumentFormattingEdits(model: IModel) {
+      const current = model.getValue();
+      const formatted = formatFormlSource(current);
+      if (formatted === current) return [];
+      return [{ range: model.getFullModelRange(), text: formatted }];
+    },
+  };
+}
+
+>>>>>>> f6620dd (Complete Formix updates)
 // ── Registration ──────────────────────────────────────────────────────────────
 
 let _langServiceRegistered = false;
 
 /**
+<<<<<<< HEAD
  * Register the FormL completion + hover providers with Monaco.
+=======
+ * Register the FormL completion + hover + formatting providers with Monaco.
+>>>>>>> f6620dd (Complete Formix updates)
  * Idempotent: safe to call multiple times (e.g. on every editor mount).
  * Must be called AFTER `defineFormixMono` since that registers the language.
  */
@@ -391,4 +490,12 @@ export function registerFormlLanguageService(monaco: Monaco): void {
     "forml",
     buildHoverProvider(),
   );
+<<<<<<< HEAD
+=======
+
+  monaco.languages.registerDocumentFormattingEditProvider(
+    "forml",
+    buildFormattingProvider(),
+  );
+>>>>>>> f6620dd (Complete Formix updates)
 }

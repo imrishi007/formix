@@ -242,6 +242,34 @@ struct ValidationBlockNode {
     std::optional<double>   minLength;
     std::optional<double>   maxLength;
     std::optional<std::string> pattern;
+<<<<<<< HEAD
+=======
+
+    // DEPRECATED — file-upload rules from the pre-`upload` grammar (field :
+    // file/image/pdf/document, with accept/maxSize/multiple inside validate{}).
+    // Still parsed so old .forml source keeps compiling; the semantic analyzer
+    // migrates these into the field's canonical UploadBlockNode (see below)
+    // and new source should express them via `field x : upload { ... }` instead.
+    std::optional<std::string> accept;    // comma-separated MIME types / extensions
+    std::optional<double>      maxSize;   // max size per file, in bytes
+    bool                        multiple = false;  // allow selecting more than one file
+};
+
+
+// UploadBlockNode stores the config for the canonical `upload` field type:
+//   field resume : upload { accept: pdf  maxSize: "10MB" }
+// Every upload field ends up with one of these after semantic analysis —
+// legacy file/image/pdf/document fields are normalized into it too, so
+// downstream stages (serializer, frontend) only ever deal with one shape.
+
+struct UploadBlockNode {
+    std::vector<std::string>   accept;      // category list: image, pdf, document, video, audio, zip, any
+    bool                        multiple = false;
+    bool                        required = false;
+    std::optional<std::string> maxSize;     // human size, e.g. "10MB" (also accepts legacy raw byte counts)
+    std::optional<double>      minFiles;
+    std::optional<double>      maxFiles;
+>>>>>>> f6620dd (Complete Formix updates)
 };
 
 
@@ -362,6 +390,16 @@ enum class FieldType {
     Select,
     Radio,
     Checkbox,
+<<<<<<< HEAD
+=======
+    Upload,     // canonical file-upload type — see UploadBlockNode
+    // DEPRECATED — pre-`upload` file-type keywords, kept only so old source
+    // keeps compiling. The semantic analyzer rewrites these to Upload.
+    File,
+    Image,
+    Pdf,
+    Document,
+>>>>>>> f6620dd (Complete Formix updates)
 };
 
 std::string fieldTypeToString(FieldType t);
@@ -376,6 +414,10 @@ public:
 
     std::optional<UIBlockNode>            uiBlock;
     std::optional<ValidationBlockNode>    validationBlock;
+<<<<<<< HEAD
+=======
+    std::optional<UploadBlockNode>        uploadBlock;
+>>>>>>> f6620dd (Complete Formix updates)
     std::unique_ptr<ComputeBlockNode>     computeBlock;
     std::unique_ptr<TriggerBlockNode>     triggerBlock;
 

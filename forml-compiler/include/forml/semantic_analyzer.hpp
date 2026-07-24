@@ -84,6 +84,22 @@ private:
     // Check 5: repeat count= IDENTIFIER must resolve to a declared field/var.
     void checkRepeatCountRef(const RepeatGroupNode& node);
 
+<<<<<<< HEAD
+=======
+    // Rewrites deprecated file/image/pdf/document fields into the canonical
+    // FieldType::Upload + UploadBlockNode shape (folding in any legacy
+    // validate{accept/maxSize/multiple} rules), so every later stage —
+    // remaining checks here, the JSON serializer, the frontend — only ever
+    // has to understand one upload shape. A no-op for fields already
+    // declared as `upload`. Mutates `field` in place.
+    void normalizeUploadField(FieldNode& field);
+
+    // Check 6: upload-only rules — accept values must be one of the known
+    // categories, maxSize must parse as "<number><B|KB|MB|GB>", and
+    // minFiles must not exceed maxFiles.
+    void checkUploadBlock(const FieldNode& field);
+
+>>>>>>> f6620dd (Complete Formix updates)
     // Walk a condition tree and check any IDENTIFIER leaves.
     void checkConditionRefs(const CondExprNode& cond);
 

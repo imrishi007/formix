@@ -15,10 +15,19 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
+<<<<<<< HEAD
+=======
+from ..deps import get_form_or_403 as _get_form_or_403
+from ..deps import get_project_or_403 as _get_project_or_403
+>>>>>>> f6620dd (Complete Formix updates)
 from ..models import Form, Project, User
 from ..schemas import (
     FormCreateInProject,
     FormCreateResponse,
+<<<<<<< HEAD
+=======
+    FormDetail,
+>>>>>>> f6620dd (Complete Formix updates)
     FormLinkRequest,
     ProjectCreate,
     ProjectDetail,
@@ -28,6 +37,7 @@ from ..schemas import (
 router = APIRouter(tags=["projects"])
 
 
+<<<<<<< HEAD
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_project_or_403(project_id: str, user: User, db: Session) -> Project:
@@ -56,6 +66,8 @@ def _get_form_or_403(form_id: str, user: User, db: Session) -> Form:
     return form
 
 
+=======
+>>>>>>> f6620dd (Complete Formix updates)
 # ── Project endpoints ─────────────────────────────────────────────────────────
 
 @router.post("/projects", response_model=ProjectResponse, status_code=201)
@@ -127,6 +139,57 @@ def create_form_in_project(
     return form
 
 
+<<<<<<< HEAD
+=======
+@router.get("/projects/{project_id}/forms/{form_id}", response_model=FormDetail)
+def get_form_detail(
+    project_id: str,
+    form_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Author-only view of a single form, including forml_source — used by the
+    editor to re-open an existing (possibly unpublished) form. The public
+    GET /forms/{id} route deliberately omits forml_source and requires
+    is_published, so it can't serve this purpose.
+    """
+    _get_project_or_403(project_id, current_user, db)
+    form = db.query(Form).filter(Form.id == form_id, Form.project_id == project_id).first()
+    if not form:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    return form
+
+
+@router.delete("/projects/{project_id}", status_code=204)
+def delete_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a project and (via cascade) all of its forms and submissions."""
+    project = _get_project_or_403(project_id, current_user, db)
+    db.delete(project)
+    db.commit()
+
+
+@router.delete("/projects/{project_id}/forms/{form_id}", status_code=204)
+def delete_form(
+    project_id: str,
+    form_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a single form (and, via cascade, its submissions)."""
+    _get_project_or_403(project_id, current_user, db)
+    form = db.query(Form).filter(Form.id == form_id, Form.project_id == project_id).first()
+    if not form:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    db.delete(form)
+    db.commit()
+
+
+>>>>>>> f6620dd (Complete Formix updates)
 # ── Form linking ──────────────────────────────────────────────────────────────
 
 @router.patch("/forms/{form_id}/link", status_code=200)

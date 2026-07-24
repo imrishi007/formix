@@ -194,7 +194,11 @@ const EditorPanel = memo(function EditorPanel({ filename }: { filename: string }
               <span className="text-white/90">form</span> <span className="text-white/50">"Signup"</span> <span className="text-white/30">{"{"}</span>
             </span>
             <span
+<<<<<<< HEAD
               className="inline-block w-[1.5px] h-3.5 bg-green-400 ml-0.5 mt-0.5 align-middle"
+=======
+              className="inline-block w-[1.5px] h-3.5 bg-[#a78bfa] ml-0.5 mt-0.5 align-middle"
+>>>>>>> f6620dd (Complete Formix updates)
               style={{ animation: "cursor-blink 0.5s infinite step-end, cursor-vis-1 8s infinite step-end" }}
             />
           </div>
@@ -207,7 +211,11 @@ const EditorPanel = memo(function EditorPanel({ filename }: { filename: string }
               <span className="text-white/90">field</span> email : <span className="text-white/60">email</span>
             </span>
             <span
+<<<<<<< HEAD
               className="inline-block w-[1.5px] h-3.5 bg-green-400 ml-0.5 mt-0.5 align-middle"
+=======
+              className="inline-block w-[1.5px] h-3.5 bg-[#a78bfa] ml-0.5 mt-0.5 align-middle"
+>>>>>>> f6620dd (Complete Formix updates)
               style={{ animation: "cursor-blink 0.5s infinite step-end, cursor-vis-2 8s infinite step-end" }}
             />
           </div>
@@ -220,7 +228,11 @@ const EditorPanel = memo(function EditorPanel({ filename }: { filename: string }
               <span className="text-white/90">field</span> password : <span className="text-white/60">text</span>
             </span>
             <span
+<<<<<<< HEAD
               className="inline-block w-[1.5px] h-3.5 bg-green-400 ml-0.5 mt-0.5 align-middle"
+=======
+              className="inline-block w-[1.5px] h-3.5 bg-[#a78bfa] ml-0.5 mt-0.5 align-middle"
+>>>>>>> f6620dd (Complete Formix updates)
               style={{ animation: "cursor-blink 0.5s infinite step-end, cursor-vis-3 8s infinite step-end" }}
             />
           </div>
@@ -232,7 +244,11 @@ const EditorPanel = memo(function EditorPanel({ filename }: { filename: string }
               <span className="text-white/30">{"}"}</span>
             </span>
             <span
+<<<<<<< HEAD
               className="inline-block w-[1.5px] h-3.5 bg-green-400 ml-0.5 mt-0.5 align-middle"
+=======
+              className="inline-block w-[1.5px] h-3.5 bg-[#a78bfa] ml-0.5 mt-0.5 align-middle"
+>>>>>>> f6620dd (Complete Formix updates)
               style={{ animation: "cursor-blink 0.5s infinite step-end, cursor-vis-4 8s infinite step-end" }}
             />
           </div>
@@ -327,15 +343,25 @@ export function AuthLayout({ children, mode }: AuthLayoutProps) {
   const filename = mode === "signin" ? "signin.forml" : "signup.forml";
 
   return (
+<<<<<<< HEAD
     <div className="min-h-screen flex" style={{ background: "#0B0B0B" }}>
+=======
+    <div className="min-h-screen flex" style={{ background: "#0b1220" }}>
+>>>>>>> f6620dd (Complete Formix updates)
 
       {/* ══════════════════════════════════════════════════════
           LEFT PANEL — 40% — Visual Centerpiece
       ══════════════════════════════════════════════════════ */}
       <div
         className="hidden lg:flex flex-col w-[40%] shrink-0 relative overflow-hidden"
+<<<<<<< HEAD
         style={{ background: "#0B0B0B", borderRight: "1px solid rgba(255,255,255,0.06)" }}
       >
+=======
+        style={{ background: "#0b1220", borderRight: "1px solid rgba(255,255,255,0.06)" }}
+      >
+        <div className="glow-accent -left-24 -top-24 h-72 w-72" />
+>>>>>>> f6620dd (Complete Formix updates)
         <BlueprintGrid />
 
         {/* Technical Corner Accents */}
@@ -402,6 +428,7 @@ export function AuthLayout({ children, mode }: AuthLayoutProps) {
       </div>
 
       {/* ══════════════════════════════════════════════════════
+<<<<<<< HEAD
           RIGHT PANEL — 60% — Premium Authentication UX
       ══════════════════════════════════════════════════════ */}
       <div
@@ -426,10 +453,25 @@ export function AuthLayout({ children, mode }: AuthLayoutProps) {
             <span className="font-mono text-[11px] mt-1 text-[#0B0B0B]/40">
               .forml
             </span>
+=======
+          RIGHT PANEL — 60% — Authentication form, theme-aware
+      ══════════════════════════════════════════════════════ */}
+      <div className="relative flex min-h-screen flex-1 flex-col bg-background">
+        {/* Micro coordinate dots — theme-aware via .bg-dot-grid (color-mix on
+            currentColor), replacing a fixed-opacity dark-only dot layer. */}
+        <div className="bg-dot-grid pointer-events-none absolute inset-0 opacity-60" />
+
+        {/* Mobile Header */}
+        <div className="relative z-10 flex items-center justify-between px-8 pt-8 lg:hidden">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="font-display text-2xl tracking-tight text-foreground">Formix</span>
+            <span className="mt-1 font-mono text-xs text-muted-foreground">.forml</span>
+>>>>>>> f6620dd (Complete Formix updates)
           </Link>
         </div>
 
         {/* Centered Auth Card Area */}
+<<<<<<< HEAD
         <div className="relative z-10 flex-1 flex items-center justify-center px-10 sm:px-16 py-20">
           <div className="w-full max-w-[400px]">
             {children}
@@ -461,6 +503,20 @@ export function AuthLayout({ children, mode }: AuthLayoutProps) {
               href="/"
               className="font-mono text-[10px] text-[#0B0B0B]/35 transition-opacity duration-150 hover:opacity-100"
             >
+=======
+        <div className="relative z-10 flex flex-1 items-center justify-center px-10 py-20 sm:px-16">
+          <div className="w-full max-w-[400px]">{children}</div>
+        </div>
+
+        {/* Footer */}
+        <div className="relative z-10 flex items-center justify-between border-t border-border px-12 py-6">
+          <p className="font-mono text-xs text-muted-foreground">© 2026 Formix</p>
+          <div className="flex items-center gap-6">
+            <Link href="/docs" className="font-mono text-xs text-muted-foreground transition-colors hover:text-foreground">
+              Docs
+            </Link>
+            <Link href="/" className="font-mono text-xs text-muted-foreground transition-colors hover:text-foreground">
+>>>>>>> f6620dd (Complete Formix updates)
               ← Back to site
             </Link>
           </div>

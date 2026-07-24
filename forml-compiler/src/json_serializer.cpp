@@ -154,6 +154,37 @@ nlohmann::json JsonSerializer::serializeValidationBlock(const ValidationBlockNod
     if (block.pattern) {
         json["pattern"] = *block.pattern;
     }
+<<<<<<< HEAD
+=======
+    if (block.accept) {
+        json["accept"] = *block.accept;
+    }
+    if (block.maxSize) {
+        json["maxSize"] = *block.maxSize;
+    }
+    if (block.multiple) {
+        json["multiple"] = true;
+    }
+    return json;
+}
+
+nlohmann::json JsonSerializer::serializeUploadBlock(const UploadBlockNode& block) {
+    nlohmann::json json{
+        {"type", "UploadBlock"},
+        {"accept", block.accept},
+        {"multiple", block.multiple},
+        {"required", block.required},
+    };
+    if (block.maxSize) {
+        json["maxSize"] = *block.maxSize;
+    }
+    if (block.minFiles) {
+        json["minFiles"] = *block.minFiles;
+    }
+    if (block.maxFiles) {
+        json["maxFiles"] = *block.maxFiles;
+    }
+>>>>>>> f6620dd (Complete Formix updates)
     return json;
 }
 
@@ -304,6 +335,12 @@ void JsonSerializer::visit(FieldNode& node) {
     if (node.validationBlock) {
         json["validation"] = serializeValidationBlock(*node.validationBlock);
     }
+<<<<<<< HEAD
+=======
+    if (node.uploadBlock) {
+        json["upload"] = serializeUploadBlock(*node.uploadBlock);
+    }
+>>>>>>> f6620dd (Complete Formix updates)
     if (node.computeBlock) {
         json["compute"] = serializeNode(*node.computeBlock);
     }

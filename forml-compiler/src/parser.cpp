@@ -66,6 +66,12 @@ bool Parser::isSoftKeyword(TokenType t) {
         case TokenType::KW_URL:      case TokenType::KW_SELECT:
         case TokenType::KW_RADIO:    case TokenType::KW_CHECKBOX:
         case TokenType::KW_OPTION:
+<<<<<<< HEAD
+=======
+        case TokenType::KW_UPLOAD:
+        case TokenType::KW_FILE:     case TokenType::KW_IMAGE:
+        case TokenType::KW_PDF:      case TokenType::KW_DOCUMENT:
+>>>>>>> f6620dd (Complete Formix updates)
         // data sourcing
         case TokenType::KW_FROM:     case TokenType::KW_MAP:
         case TokenType::KW_LABEL:    case TokenType::KW_VALUE:
@@ -76,6 +82,12 @@ bool Parser::isSoftKeyword(TokenType t) {
         case TokenType::KW_REQUIRED: case TokenType::KW_MIN:
         case TokenType::KW_MAX:      case TokenType::KW_MIN_LENGTH:
         case TokenType::KW_MAX_LENGTH: case TokenType::KW_PATTERN:
+<<<<<<< HEAD
+=======
+        case TokenType::KW_ACCEPT:   case TokenType::KW_MAX_SIZE:
+        case TokenType::KW_MULTIPLE:
+        case TokenType::KW_MIN_FILES: case TokenType::KW_MAX_FILES:
+>>>>>>> f6620dd (Complete Formix updates)
         // layout
         case TokenType::KW_ROW:      case TokenType::KW_COLUMN:
         // actions / events
@@ -283,6 +295,15 @@ std::unique_ptr<FieldNode> Parser::parseField() {
         else if (check(TokenType::KW_FROM))    node->source = parseSourceBlock();
     }
 
+<<<<<<< HEAD
+=======
+    // upload's config block is optional — `field x : upload` alone (no
+    // config) is valid and defaults to accepting any file.
+    if (ft == FieldType::Upload && check(TokenType::LEFT_BRACE)) {
+        node->uploadBlock = parseUploadBlock();
+    }
+
+>>>>>>> f6620dd (Complete Formix updates)
     if (check(TokenType::KW_UI))       node->uiBlock        = parseUIBlock();
     if (check(TokenType::KW_VALIDATE)) node->validationBlock = parseValidationBlock();
     if (check(TokenType::KW_COMPUTE))  node->computeBlock   = parseComputeBlock();
@@ -304,9 +325,23 @@ FieldType Parser::parseType() {
         case TokenType::KW_SELECT:   advance(); return FieldType::Select;
         case TokenType::KW_RADIO:    advance(); return FieldType::Radio;
         case TokenType::KW_CHECKBOX: advance(); return FieldType::Checkbox;
+<<<<<<< HEAD
         default:
             error(peek(), "Expected a field type (text, integer, float, email, "
                           "date, boolean, url, select, radio, checkbox)");
+=======
+        case TokenType::KW_UPLOAD:   advance(); return FieldType::Upload;
+        // Deprecated types — still parsed for backward compatibility; the
+        // semantic analyzer rewrites them to FieldType::Upload.
+        case TokenType::KW_FILE:     advance(); return FieldType::File;
+        case TokenType::KW_IMAGE:    advance(); return FieldType::Image;
+        case TokenType::KW_PDF:      advance(); return FieldType::Pdf;
+        case TokenType::KW_DOCUMENT: advance(); return FieldType::Document;
+        default:
+            error(peek(), "Expected a field type (text, integer, float, email, "
+                          "date, boolean, url, select, radio, checkbox, upload, "
+                          "file, image, pdf, document)");
+>>>>>>> f6620dd (Complete Formix updates)
             return FieldType::Text;
     }
 }
@@ -440,6 +475,19 @@ std::optional<ValidationBlockNode> Parser::parseValidationBlock() {
             advance();
             expect(TokenType::COLON, "Expected ':' after 'pattern'");
             vb.pattern = stripQuotes(expect(TokenType::STRING, "Expected string after 'pattern:'").lexeme);
+<<<<<<< HEAD
+=======
+        } else if (check(TokenType::KW_ACCEPT)) {
+            advance();
+            expect(TokenType::COLON, "Expected ':' after 'accept'");
+            vb.accept = stripQuotes(expect(TokenType::STRING, "Expected string after 'accept:'").lexeme);
+        } else if (check(TokenType::KW_MAX_SIZE)) {
+            advance();
+            expect(TokenType::COLON, "Expected ':' after 'maxSize'");
+            vb.maxSize = std::stod(expect(TokenType::NUMBER, "Expected number after 'maxSize:'").lexeme);
+        } else if (check(TokenType::KW_MULTIPLE)) {
+            advance(); vb.multiple = true;
+>>>>>>> f6620dd (Complete Formix updates)
         } else {
             error(peek(), "Unexpected token '" + peek().lexeme + "' in validate block");
             synchronize();
@@ -452,6 +500,80 @@ std::optional<ValidationBlockNode> Parser::parseValidationBlock() {
     return vb;
 }
 
+<<<<<<< HEAD
+=======
+// ── §4: accept_list ───────────────────────────────────────────────────────────
+// EBNF: accept_list = IDENTIFIER { "," IDENTIFIER } ;
+// Bare, comma-separated category names (image, pdf, document, video, audio,
+// zip, any) — not quoted strings. Several of these lex as soft keywords
+// (image/pdf/document/file, kept for the deprecated field types), so we
+// accept anything expectIdentifierLike() allows rather than requiring a
+// plain IDENTIFIER token.
+std::vector<std::string> Parser::parseAcceptList() {
+    std::vector<std::string> values;
+    values.push_back(expectIdentifierLike().lexeme);
+    while (check(TokenType::COMMA)) {
+        advance();
+        values.push_back(expectIdentifierLike().lexeme);
+    }
+    return values;
+}
+
+// ── §4: upload_block ──────────────────────────────────────────────────────────
+// EBNF: upload_block = "{" { upload_rule } "}" ;
+std::optional<UploadBlockNode> Parser::parseUploadBlock() {
+    expect(TokenType::LEFT_BRACE, "Expected '{' to open upload block");
+    UploadBlockNode ub;
+
+    while (!isAtEnd() && !check(TokenType::RIGHT_BRACE)) {
+        std::size_t before = current_;
+        if (check(TokenType::KW_ACCEPT)) {
+            advance();
+            expect(TokenType::COLON, "Expected ':' after 'accept'");
+            ub.accept = parseAcceptList();
+        } else if (check(TokenType::KW_MULTIPLE)) {
+            advance();
+            if (check(TokenType::COLON)) {
+                advance();
+                ub.multiple = match(TokenType::KW_TRUE);
+                if (!ub.multiple) expect(TokenType::KW_FALSE, "Expected 'true' or 'false' after 'multiple:'");
+            } else {
+                ub.multiple = true;
+            }
+        } else if (check(TokenType::KW_REQUIRED)) {
+            advance();
+            if (check(TokenType::COLON)) {
+                advance();
+                ub.required = match(TokenType::KW_TRUE);
+                if (!ub.required) expect(TokenType::KW_FALSE, "Expected 'true' or 'false' after 'required:'");
+            } else {
+                ub.required = true;
+            }
+        } else if (check(TokenType::KW_MAX_SIZE)) {
+            advance();
+            expect(TokenType::COLON, "Expected ':' after 'maxSize'");
+            ub.maxSize = stripQuotes(expect(TokenType::STRING, "Expected string after 'maxSize:' (e.g. \"10MB\")").lexeme);
+        } else if (check(TokenType::KW_MIN_FILES)) {
+            advance();
+            expect(TokenType::COLON, "Expected ':' after 'minFiles'");
+            ub.minFiles = std::stod(expect(TokenType::NUMBER, "Expected number after 'minFiles:'").lexeme);
+        } else if (check(TokenType::KW_MAX_FILES)) {
+            advance();
+            expect(TokenType::COLON, "Expected ':' after 'maxFiles'");
+            ub.maxFiles = std::stod(expect(TokenType::NUMBER, "Expected number after 'maxFiles:'").lexeme);
+        } else {
+            error(peek(), "Unexpected token '" + peek().lexeme + "' in upload block");
+            synchronize();
+            break;
+        }
+        if (current_ == before && !isAtEnd() && !check(TokenType::RIGHT_BRACE))
+            advance();
+    }
+    expect(TokenType::RIGHT_BRACE, "Expected '}' to close upload block");
+    return ub;
+}
+
+>>>>>>> f6620dd (Complete Formix updates)
 // ── §5: section ───────────────────────────────────────────────────────────────
 // EBNF: section = "section" STRING "{" { statement } "}" ;
 std::unique_ptr<SectionNode> Parser::parseSection() {

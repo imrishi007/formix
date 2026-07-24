@@ -3,7 +3,11 @@
 // components/editor/compiler-playground.tsx
 //
 // The FormL compiler playground — a three-panel view into what the WASM
+<<<<<<< HEAD
 // compiler does with your source. Distinct from DemoIdeShell (the authoring
+=======
+// compiler does with your source. Distinct from WorkspaceShell (the authoring
+>>>>>>> f6620dd (Complete Formix updates)
 // IDE with project / publish flow); this page is for understanding the
 // compiler pipeline itself: source → AST → schema → rendered form, plus
 // real diagnostics.
@@ -17,15 +21,24 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
+<<<<<<< HEAD
   Copy,
+=======
+>>>>>>> f6620dd (Complete Formix updates)
   FileCode2,
   Loader2,
   Play,
   TriangleAlert,
+<<<<<<< HEAD
   X,
   Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+=======
+  Zap,
+} from "lucide-react";
+import { motion } from "framer-motion";
+>>>>>>> f6620dd (Complete Formix updates)
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 import {
@@ -112,8 +125,13 @@ form "Job Application" {
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (
+<<<<<<< HEAD
     <div className="absolute inset-0 flex items-center justify-center bg-[#0D0D0D]">
       <span className="font-mono text-[10px] uppercase tracking-widest text-white/20">
+=======
+    <div className="absolute inset-0 flex items-center justify-center bg-[#0f172a]">
+      <span className="font-mono text-xs uppercase tracking-widest text-white/20">
+>>>>>>> f6620dd (Complete Formix updates)
         Loading editor...
       </span>
     </div>
@@ -178,28 +196,49 @@ function PhaseBadge({ phase, wasmReady, compileMs }: {
   phase: CompilePhase; wasmReady: boolean; compileMs: number | null;
 }) {
   const cfg = !wasmReady
+<<<<<<< HEAD
     ? { text: "Loading WASM…", dot: "bg-[#C4A35A] animate-pulse", color: "text-[#C4A35A]" }
     : phase === "valid"
       ? { text: "Compiled", dot: "bg-[#7C6FE0]", color: "text-[#7C6FE0]" }
       : phase === "error"
         ? { text: "Compile Error", dot: "bg-[#E05252]", color: "text-[#E05252]" }
         : { text: "Ready", dot: "bg-[#4ADE80]", color: "text-[#4ADE80]" };
+=======
+    ? { text: "Loading WASM…", dot: "bg-warning animate-pulse", color: "text-warning" }
+    : phase === "valid"
+      ? { text: "Compiled", dot: "bg-accent", color: "text-accent" }
+      : phase === "error"
+        ? { text: "Compile Error", dot: "bg-destructive", color: "text-destructive" }
+        : { text: "Ready", dot: "bg-success", color: "text-success" };
+>>>>>>> f6620dd (Complete Formix updates)
 
   return (
     <div className={`flex items-center gap-1.5 ${cfg.color}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+<<<<<<< HEAD
       <span className="font-inter text-[10px] font-medium">{cfg.text}</span>
       {wasmReady && phase === "valid" && compileMs !== null && (
         <span className="ml-1 font-mono text-[9px] text-[#666666]">{compileMs}ms</span>
+=======
+      <span className="font-inter text-xs font-medium">{cfg.text}</span>
+      {wasmReady && phase === "valid" && compileMs !== null && (
+        <span className="ml-1 font-mono text-[11px] text-muted-foreground">{compileMs}ms</span>
+>>>>>>> f6620dd (Complete Formix updates)
       )}
     </div>
   );
 }
 
 function DiagIcon({ severity }: { severity: FormlDiagnostic["severity"] }) {
+<<<<<<< HEAD
   if (severity === "error") return <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none text-[#E05252]" />;
   if (severity === "warning") return <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none text-[#C4A35A]" />;
   return <ChevronRight className="mt-0.5 h-3.5 w-3.5 flex-none text-[#888888]" />;
+=======
+  if (severity === "error") return <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none text-destructive" />;
+  if (severity === "warning") return <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none text-warning" />;
+  return <ChevronRight className="mt-0.5 h-3.5 w-3.5 flex-none text-muted-foreground" />;
+>>>>>>> f6620dd (Complete Formix updates)
 }
 
 // ── Right panel: tabbed compiler output ──────────────────────────────────────
@@ -222,9 +261,15 @@ function DiagnosticsContent({
     const warnings = diags.filter((d) => d.severity === "warning");
     if (diags.length === 0) {
       return (
+<<<<<<< HEAD
         <div className="flex items-center gap-2 p-4 text-[#4ADE80]">
           <CheckCircle2 className="h-3.5 w-3.5" />
           <span className="font-inter text-[11px]">No problems detected</span>
+=======
+        <div className="flex items-center gap-2 p-4 text-success">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          <span className="font-inter text-sm">No problems detected</span>
+>>>>>>> f6620dd (Complete Formix updates)
         </div>
       );
     }
@@ -233,6 +278,7 @@ function DiagnosticsContent({
         {[...errors, ...warnings].map((d, i) => (
           <div
             key={i}
+<<<<<<< HEAD
             className="flex items-start gap-2.5 rounded-sm px-2 py-1.5 hover:bg-[#141414]"
           >
             <DiagIcon severity={d.severity} />
@@ -243,6 +289,18 @@ function DiagnosticsContent({
                 {d.message}
               </p>
               <p className="mt-0.5 font-mono text-[10px] text-[#666666]">
+=======
+            className="flex items-start gap-2.5 rounded-sm px-2 py-1.5 hover:bg-muted/50"
+          >
+            <DiagIcon severity={d.severity} />
+            <div className="min-w-0">
+              <p className={`font-inter text-sm ${
+                d.severity === "error" ? "text-destructive" : "text-warning"
+              }`}>
+                {d.message}
+              </p>
+              <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+>>>>>>> f6620dd (Complete Formix updates)
                 Line {d.line}, Col {d.col} · {d.severity}
               </p>
             </div>
@@ -255,7 +313,11 @@ function DiagnosticsContent({
   if (tab === "ast") {
     const ast = compileResult?.ast ?? null;
     return (
+<<<<<<< HEAD
       <pre className="p-4 font-mono text-[10px] leading-relaxed text-[#9A9AAA] overflow-auto">
+=======
+      <pre className="p-4 font-mono text-xs leading-relaxed text-muted-foreground overflow-auto">
+>>>>>>> f6620dd (Complete Formix updates)
         {ast
           ? JSON.stringify(ast, null, 2)
           : "// No AST — fix compile errors first."}
@@ -267,14 +329,22 @@ function DiagnosticsContent({
     const ast = compileResult?.ast as ASTNode | null;
     if (!ast) {
       return (
+<<<<<<< HEAD
         <pre className="p-4 font-mono text-[10px] text-[#555555]">
+=======
+        <pre className="p-4 font-mono text-xs text-muted-foreground">
+>>>>>>> f6620dd (Complete Formix updates)
           // No schema — fix compile errors first.
         </pre>
       );
     }
     const schema = buildSchema(ast);
     return (
+<<<<<<< HEAD
       <pre className="p-4 font-mono text-[10px] leading-relaxed text-[#9A9AAA] overflow-auto">
+=======
+      <pre className="p-4 font-mono text-xs leading-relaxed text-muted-foreground overflow-auto">
+>>>>>>> f6620dd (Complete Formix updates)
         {JSON.stringify(schema, null, 2)}
       </pre>
     );
@@ -282,7 +352,11 @@ function DiagnosticsContent({
 
   // tab === "source" — the raw { ast, diagnostics } envelope the compiler emits.
   return (
+<<<<<<< HEAD
     <pre className="p-4 font-mono text-[10px] leading-relaxed text-[#9A9AAA] overflow-auto">
+=======
+    <pre className="p-4 font-mono text-xs leading-relaxed text-muted-foreground overflow-auto">
+>>>>>>> f6620dd (Complete Formix updates)
       {compileResult
         ? JSON.stringify(
             { ast: compileResult.ast, diagnostics: compileResult.diagnostics },
@@ -308,12 +382,18 @@ function DiagnosticsPanel({
   }, [errorCount]);
 
   return (
+<<<<<<< HEAD
     <div className="flex h-full min-h-0 flex-col bg-[#0D0D0D]">
       <div className="flex h-9 flex-none items-center border-b border-[#252525]">
+=======
+    <div className="flex h-full min-h-0 flex-col bg-card">
+      <div role="tablist" aria-label="Compiler output" className="flex h-9 flex-none items-center border-b border-border px-1">
+>>>>>>> f6620dd (Complete Formix updates)
         {DIAG_TABS.map((t) => (
           <button
             key={t.id}
             type="button"
+<<<<<<< HEAD
             onClick={() => setActiveTab(t.id)}
             className={`relative flex h-full items-center gap-1.5 px-4 font-inter text-[10px] transition-colors duration-150 ${
               activeTab === t.id
@@ -327,18 +407,43 @@ function DiagnosticsPanel({
             {t.label}
             {t.id === "problems" && errorCount > 0 && (
               <span className="flex h-3.5 min-w-[14px] items-center justify-center rounded bg-[#2A1010] px-1 font-mono text-[8px] font-bold text-[#E05252]">
+=======
+            role="tab"
+            aria-selected={activeTab === t.id}
+            onClick={() => setActiveTab(t.id)}
+            className={`relative flex h-full items-center gap-1.5 px-4 font-inter text-xs font-medium transition-colors duration-150 ${
+              activeTab === t.id
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {activeTab === t.id && (
+              <span className="ease-signature absolute inset-x-0 bottom-0 h-[2px] bg-accent" />
+            )}
+            {t.label}
+            {t.id === "problems" && errorCount > 0 && (
+              <span className="flex h-3.5 min-w-[14px] items-center justify-center rounded bg-destructive/15 px-1 font-mono text-[10px] font-bold text-destructive">
+>>>>>>> f6620dd (Complete Formix updates)
                 {errorCount}
               </span>
             )}
             {t.id === "problems" && warnCount > 0 && errorCount === 0 && (
+<<<<<<< HEAD
               <span className="flex h-3.5 min-w-[14px] items-center justify-center rounded bg-[#2A2210] px-1 font-mono text-[8px] font-bold text-[#C4A35A]">
+=======
+              <span className="flex h-3.5 min-w-[14px] items-center justify-center rounded bg-warning/15 px-1 font-mono text-[10px] font-bold text-warning">
+>>>>>>> f6620dd (Complete Formix updates)
                 {warnCount}
               </span>
             )}
           </button>
         ))}
       </div>
+<<<<<<< HEAD
       <div className="min-h-0 flex-1 overflow-auto">
+=======
+      <div className="formix-scroll min-h-0 flex-1 overflow-auto">
+>>>>>>> f6620dd (Complete Formix updates)
         <DiagnosticsContent tab={activeTab} compileResult={compileResult} />
       </div>
     </div>
@@ -372,13 +477,21 @@ function PreviewPanel({
 
   if (!wasmReady) {
     return (
+<<<<<<< HEAD
       <div className="flex h-full items-center justify-center bg-[#F5F3EE] text-[#9A9080]">
         <span className="font-inter text-[11px]">Initializing compiler…</span>
+=======
+      <div className="flex h-full items-center justify-center bg-muted/30 text-muted-foreground">
+        <span className="flex items-center gap-2 font-inter text-sm">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Initializing compiler…
+        </span>
+>>>>>>> f6620dd (Complete Formix updates)
       </div>
     );
   }
 
   return (
+<<<<<<< HEAD
     <div className="flex h-full min-h-0 flex-col bg-[#F5F3EE]">
       <div className="flex h-9 flex-none items-center justify-between border-b border-[#DDD5C0] bg-[#EDEAE2] px-4">
         <span className="font-inter text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7A7060]">
@@ -391,6 +504,20 @@ function PreviewPanel({
         ) : (
           <span className="flex items-center gap-1.5 font-inter text-[10px] text-[#7C6FE0]">
             <span className="h-1.5 w-1.5 rounded-full bg-[#7C6FE0]" /> Live
+=======
+    <div className="flex h-full min-h-0 flex-col bg-muted/30">
+      <div className="flex h-9 flex-none items-center justify-between border-b border-border bg-card px-4">
+        <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Rendered Form
+        </span>
+        {compilePhase === "error" ? (
+          <span className="flex items-center gap-1.5 font-inter text-xs text-destructive">
+            <AlertCircle className="h-3 w-3" /> Fix errors to preview
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 font-inter text-xs text-accent">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Live
+>>>>>>> f6620dd (Complete Formix updates)
           </span>
         )}
       </div>
@@ -399,6 +526,7 @@ function PreviewPanel({
         {compilePhase === "error" ? (
           <div className="flex h-full items-center justify-center">
             <div className="flex max-w-xs flex-col items-center gap-3 text-center">
+<<<<<<< HEAD
               <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#F0CECE] bg-[#FDF0F0]">
                 <AlertCircle className="h-5 w-5 text-[#E05252]" />
               </div>
@@ -406,6 +534,15 @@ function PreviewPanel({
                 Compile Error
               </p>
               <p className="font-inter text-[11px] leading-relaxed text-[#7A7060]">
+=======
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-destructive/30 bg-destructive/5">
+                <AlertCircle className="h-5 w-5 text-destructive" />
+              </div>
+              <p className="font-inter text-sm font-semibold text-foreground">
+                Compile Error
+              </p>
+              <p className="font-inter text-xs leading-relaxed text-muted-foreground">
+>>>>>>> f6620dd (Complete Formix updates)
                 See the Problems tab for details. The preview returns once the
                 source compiles cleanly.
               </p>
@@ -418,12 +555,21 @@ function PreviewPanel({
             transition={{ duration: 0.15 }}
             className="mx-auto w-full max-w-[380px]"
           >
+<<<<<<< HEAD
             <div className="overflow-hidden rounded-lg border border-[#D4CCB8] bg-[#FAF8F2] shadow-[0_8px_32px_rgba(0,0,0,0.08)]">
               <div className="border-b border-[#E4DCD0] bg-[#F0EDE5] px-6 py-5">
                 <span className="inline-flex items-center gap-1 rounded border border-[#7C6FE0]/30 bg-[#7C6FE0]/10 px-2 py-0.5 font-inter text-[9px] font-semibold uppercase tracking-[0.14em] text-[#7C6FE0]">
                   Preview
                 </span>
                 <h2 className="mt-2.5 font-inter text-[20px] font-bold tracking-tight text-[#1A1410]">
+=======
+            <div className="shadow-elevated overflow-hidden rounded-2xl border border-border bg-card">
+              <div className="border-b border-border px-6 py-5">
+                <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">
+                  Preview
+                </span>
+                <h2 className="mt-2.5 font-inter text-xl font-bold tracking-tight text-foreground">
+>>>>>>> f6620dd (Complete Formix updates)
                   {formTitle}
                 </h2>
               </div>
@@ -435,15 +581,26 @@ function PreviewPanel({
                     onChange={handleChange}
                   />
                 ) : (
+<<<<<<< HEAD
                   <p className="font-inter text-[11px] text-[#B4AA96]">
+=======
+                  <p className="font-inter text-xs text-muted-foreground">
+>>>>>>> f6620dd (Complete Formix updates)
                     No renderable statements yet.
                   </p>
                 )}
               </div>
+<<<<<<< HEAD
               <div className="border-t border-[#E4DCD0] px-6 py-4">
                 <button
                   type="button"
                   className="w-full rounded-md bg-[#7C6FE0] py-2.5 font-inter text-[12px] font-semibold text-white transition-all duration-150 hover:bg-[#6B5FD0] active:scale-[0.98]"
+=======
+              <div className="border-t border-border px-6 py-5">
+                <button
+                  type="button"
+                  className="w-full rounded-lg bg-accent py-2.5 font-inter text-sm font-semibold text-accent-foreground transition-all duration-150 hover:opacity-90 active:scale-[0.98]"
+>>>>>>> f6620dd (Complete Formix updates)
                 >
                   Submit Form
                 </button>
@@ -467,6 +624,7 @@ function TopBar({
   onManualCompile: () => void;
 }) {
   return (
+<<<<<<< HEAD
     <div className="flex h-10 flex-none items-center justify-between border-b border-[#252525] bg-[#0D0D0D] px-4">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
@@ -480,23 +638,50 @@ function TopBar({
           <span className="text-[#555555]">playground</span>
           <ChevronRight className="h-3 w-3 text-[#3A3A3A]" />
           <span className="text-[#999999]">compiler.fls</span>
+=======
+    <header className="flex h-14 flex-none items-center justify-between border-b border-border bg-card px-4">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 ring-1 ring-accent/25">
+            <span className="font-inter text-[10px] font-black tracking-tighter text-accent">FX</span>
+          </div>
+          <span className="font-inter text-sm font-semibold tracking-tight text-foreground">Formix</span>
+        </div>
+        <span className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-1 font-inter text-sm">
+          <span className="text-muted-foreground">playground</span>
+          <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
+          <span className="rounded-md bg-muted px-2 py-1 text-foreground">compiler.forml</span>
+>>>>>>> f6620dd (Complete Formix updates)
         </div>
       </div>
 
       <div className="flex items-center gap-3">
         <PhaseBadge phase={phase} wasmReady={wasmReady} compileMs={compileMs} />
+<<<<<<< HEAD
         <span className="h-4 w-px bg-[#2A2A2A]" />
+=======
+        <span className="h-4 w-px bg-border" />
+>>>>>>> f6620dd (Complete Formix updates)
         <button
           type="button"
           onClick={onManualCompile}
           disabled={!wasmReady}
+<<<<<<< HEAD
           className="flex items-center gap-1.5 rounded-md bg-[#7C6FE0] px-3 py-1.5 font-inter text-[10px] font-semibold text-white transition-all duration-150 hover:bg-[#8A7DF0] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30"
+=======
+          className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 font-inter text-xs font-semibold text-accent-foreground transition-all duration-150 hover:opacity-90 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
+>>>>>>> f6620dd (Complete Formix updates)
         >
           <Play className="h-3 w-3" />
           Compile
         </button>
       </div>
+<<<<<<< HEAD
     </div>
+=======
+    </header>
+>>>>>>> f6620dd (Complete Formix updates)
   );
 }
 
@@ -509,6 +694,7 @@ function StatusBar({
   compileMs: number | null;
 }) {
   return (
+<<<<<<< HEAD
     <div className="flex h-6 flex-none items-center justify-between border-t border-[#252525] bg-[#0D0D0D] px-3">
       <div className="flex items-center gap-3">
         <span className="flex items-center gap-1.5 font-inter text-[9px] text-[#555555]">
@@ -523,10 +709,28 @@ function StatusBar({
         ) : (
           <span className="font-inter text-[9px] text-[#7C6FE0]">
             ✓ Ready{compileMs !== null ? ` · ${compileMs}ms last compile` : ""}
+=======
+    <div className="flex h-7 flex-none items-center justify-between border-t border-border bg-card px-3 font-mono text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-3">
+        <span className="flex items-center gap-1.5">
+          <Zap className="h-2.5 w-2.5" />
+          WASM compiler
+        </span>
+        <span className="h-3 w-px bg-border" />
+        {!wasmReady ? (
+          <span className="flex items-center gap-1.5">
+            <Loader2 className="h-2.5 w-2.5 animate-spin" /> Loading…
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 text-accent">
+            <span className="h-1.5 w-1.5 rounded-full bg-success" />
+            Ready{compileMs !== null ? ` · ${compileMs}ms last compile` : ""}
+>>>>>>> f6620dd (Complete Formix updates)
           </span>
         )}
       </div>
       <div className="flex items-center gap-3">
+<<<<<<< HEAD
         <span className="font-inter text-[9px] text-[#666666]">
           Ln {cursor.line}, Col {cursor.column}
         </span>
@@ -534,6 +738,11 @@ function StatusBar({
         <span className="font-inter text-[9px] text-[#555555]">
           {phase === "error" ? "1 error" : "No errors"}
         </span>
+=======
+        <span>Ln {cursor.line}, Col {cursor.column}</span>
+        <span className="h-3 w-px bg-border" />
+        <span>{phase === "error" ? "1 error" : "No errors"}</span>
+>>>>>>> f6620dd (Complete Formix updates)
       </div>
     </div>
   );
@@ -541,8 +750,13 @@ function StatusBar({
 
 function PartitionHandle() {
   return (
+<<<<<<< HEAD
     <PanelResizeHandle className="group relative flex w-[3px] shrink-0 cursor-col-resize items-stretch justify-center bg-transparent">
       <span className="h-full w-px bg-[#252525] transition-all duration-150 group-hover:w-[2px] group-hover:bg-[#7C6FE0]/40" />
+=======
+    <PanelResizeHandle className="group relative flex w-1.5 shrink-0 cursor-col-resize items-stretch justify-center bg-transparent">
+      <span className="h-full w-px bg-border transition-all duration-150 group-hover:w-0.5 group-hover:bg-accent/60" />
+>>>>>>> f6620dd (Complete Formix updates)
     </PanelResizeHandle>
   );
 }
@@ -595,7 +809,11 @@ export function CompilerPlayground() {
   const warnCount  = compileResult?.diagnostics.filter((d) => d.severity === "warning").length ?? 0;
 
   return (
+<<<<<<< HEAD
     <div className="relative flex h-screen flex-col overflow-hidden bg-[#0D0D0D] font-inter text-[#EDEDEB]">
+=======
+    <div className="relative flex h-screen flex-col overflow-hidden bg-background font-inter text-foreground">
+>>>>>>> f6620dd (Complete Formix updates)
       <TopBar
         phase={compilePhase}
         wasmReady={wasmReady}
@@ -604,9 +822,15 @@ export function CompilerPlayground() {
       />
 
       {loadError && (
+<<<<<<< HEAD
         <div className="flex flex-none items-center gap-2 border-b border-[#3D1A1A] bg-[#1E0E0E] px-4 py-2 text-[#E05252]">
           <AlertCircle className="h-3.5 w-3.5" />
           <span className="font-inter text-[11px]">
+=======
+        <div role="alert" className="flex flex-none items-center gap-2 border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-destructive">
+          <AlertCircle className="h-3.5 w-3.5" />
+          <span className="font-inter text-xs">
+>>>>>>> f6620dd (Complete Formix updates)
             Failed to load the WASM compiler from /wasm/forml.js. Check your network connection and reload.
           </span>
         </div>
@@ -616,11 +840,19 @@ export function CompilerPlayground() {
         <PanelGroup direction="horizontal" className="min-h-0 flex-1">
           {/* Editor */}
           <Panel defaultSize={48} minSize={28}>
+<<<<<<< HEAD
             <div className="relative flex h-full min-h-0 flex-col bg-[#0D0D0D]">
               <div className="flex h-9 flex-none items-center gap-2 border-b border-[#252525] px-4">
                 <FileCode2 className="h-3.5 w-3.5 text-[#9090A8]" />
                 <span className="font-inter text-[11px] text-[#999999]">compiler.fls</span>
                 <span className="ml-auto font-mono text-[9px] uppercase tracking-widest text-[#444444]">FormL</span>
+=======
+            <div className="relative flex h-full min-h-0 flex-col bg-[#0f172a]">
+              <div className="flex h-9 flex-none items-center gap-2 border-b border-white/[0.08] px-4">
+                <FileCode2 className="h-3.5 w-3.5 text-white/40" />
+                <span className="font-inter text-xs text-white/60">compiler.forml</span>
+                <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-white/25">FormL</span>
+>>>>>>> f6620dd (Complete Formix updates)
               </div>
               <div className="relative min-h-0 flex-1">
                 <MonacoEditor
@@ -659,8 +891,13 @@ export function CompilerPlayground() {
                   warnCount={warnCount}
                 />
               </Panel>
+<<<<<<< HEAD
               <PanelResizeHandle className="group relative flex h-[3px] shrink-0 cursor-row-resize items-center justify-center bg-transparent">
                 <span className="h-px w-full bg-[#252525] transition-all duration-150 group-hover:h-[2px] group-hover:bg-[#7C6FE0]/40" />
+=======
+              <PanelResizeHandle className="group relative flex h-1.5 shrink-0 cursor-row-resize items-center justify-center bg-transparent">
+                <span className="h-px w-full bg-border transition-all duration-150 group-hover:h-0.5 group-hover:bg-accent/60" />
+>>>>>>> f6620dd (Complete Formix updates)
               </PanelResizeHandle>
               <Panel defaultSize={45} minSize={20}>
                 <PreviewPanel

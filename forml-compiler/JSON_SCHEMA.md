@@ -79,18 +79,35 @@ Optional child blocks are omitted when absent. Empty repeated child collections 
 {
   "type": "Field",
   "name": "field_name",
+<<<<<<< HEAD
   "fieldType": "text|integer|float|email|date|boolean|url|select|radio|checkbox",
+=======
+  "fieldType": "text|integer|float|email|date|boolean|url|select|radio|checkbox|upload",
+>>>>>>> f6620dd (Complete Formix updates)
   "options": [ "Option label" ],
   "source": "SourceBlock",
   "ui": "UIBlock",
   "validation": "ValidationBlock",
+<<<<<<< HEAD
+=======
+  "upload": "UploadBlock",
+>>>>>>> f6620dd (Complete Formix updates)
   "compute": "ComputeBlock",
   "trigger": "TriggerBlock",
   "location": { "line": 1, "column": 1 }
 }
 ```
 
+<<<<<<< HEAD
 `"source"`, `"ui"`, `"validation"`, `"compute"`, and `"trigger"` are omitted when absent.
+=======
+`"source"`, `"ui"`, `"validation"`, `"upload"`, `"compute"`, and `"trigger"` are omitted when absent.
+
+`upload` is the only file-upload field type. The deprecated `file`/`image`/`pdf`/`document`
+keywords still lex and parse (so old `.forml` source keeps compiling), but the semantic
+analyzer rewrites them to `fieldType: "upload"` with an equivalent `UploadBlock` before
+this JSON is produced — nothing downstream of the AST ever sees the old field types.
+>>>>>>> f6620dd (Complete Formix updates)
 
 ### UIBlock
 
@@ -127,6 +144,31 @@ Each property is omitted when absent.
 
 Each property is omitted when absent. `"required"` is emitted only when true.
 
+<<<<<<< HEAD
+=======
+### UploadBlock
+
+`UploadBlockNode` is a plain AST support struct, not an `ASTNode`, but it is still serialized
+with a `"type"` field. Present only on `fieldType: "upload"` fields.
+
+```json
+{
+  "type": "UploadBlock",
+  "accept": [ "image", "pdf" ],
+  "multiple": true,
+  "required": true,
+  "maxSize": "10MB",
+  "minFiles": 1.0,
+  "maxFiles": 5.0
+}
+```
+
+`"accept"`, `"multiple"`, and `"required"` are always present (`"accept"` defaults to
+`["any"]`, the other two default to `false`). `"maxSize"`, `"minFiles"`, and `"maxFiles"`
+are omitted when absent. `"accept"` entries are one of: `image`, `pdf`, `document`, `video`,
+`audio`, `zip`, `any`. `"maxSize"` is a human size string like `"10MB"` or `"500KB"`.
+
+>>>>>>> f6620dd (Complete Formix updates)
 ### Section
 
 ```json

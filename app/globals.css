@@ -3,6 +3,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
+<<<<<<< HEAD
 :root {
   --background: oklch(0.985 0.002 90);
   --foreground: oklch(0.12 0.01 60);
@@ -37,6 +38,119 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+=======
+/*
+ * ─────────────────────────────────────────────────────────────────────────
+ * FORMIX STUDIO — design system
+ * ─────────────────────────────────────────────────────────────────────────
+ * One premium dark theme, always on — no light/dark split. Deep graphite
+ * canvas (#0F172A page / #111827 panels) with a single signature accent:
+ * elegant violet (#7C3AED) carrying a subtle blue co-accent (#3B82F6) for
+ * gradients, glows, and secondary highlights. Surfaces are glass — soft
+ * translucency, backdrop blur, and hairline borders — rather than flat
+ * opaque cards, so depth reads from layered light instead of a light/dark
+ * swap. Three-tier elevation: background (page) < card (raised surface) <
+ * popover (floating: menus/dialogs/tooltips), each a visible step "lighter"
+ * than the last.
+ *
+ * Typography: Inter for UI text, JetBrains Mono for code/data, Instrument
+ * Serif reserved for editorial display moments (marketing headlines only).
+ * Use Tailwind's default text-xs…text-5xl scale — arbitrary text-[Npx]
+ * values are reserved for genuine one-off display treatments, not routine
+ * UI copy.
+ *
+ * Motion: --ease-signature is the house curve (a confident, slightly
+ * overshooting ease-out) for reveals and emphasis; ordinary hover/press
+ * feedback stays on Tailwind's default duration-150/duration-200 + ease-out.
+ * Icons: lucide-react throughout, sized to the type scale (14px dense UI,
+ * 16px default, 20px section headers, 24–32px empty-state glyphs).
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+:root {
+  --background: #0b1220;
+  --foreground: #f1f5f9;
+  --card: #111827;
+  --card-foreground: #f1f5f9;
+  --popover: #16213b;
+  --popover-foreground: #f1f5f9;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #1a2540;
+  --secondary-foreground: #e2e8f0;
+  --muted: #16213b;
+  --muted-foreground: #94a3b8;
+  --accent: #7c3aed;
+  --accent-foreground: #ffffff;
+  --accent-blue: #3b82f6;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: rgba(148, 163, 184, 0.14);
+  --input: rgba(148, 163, 184, 0.14);
+  --ring: #7c3aed;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --chart-1: #7c3aed;
+  --chart-2: #3b82f6;
+  --chart-3: #a78bfa;
+  --chart-4: #60a5fa;
+  --chart-5: #c4b5fd;
+  --radius: 0.75rem;
+  --ease-signature: cubic-bezier(0.22, 1, 0.36, 1);
+  --shadow-color: 262 60% 4%;
+  --glass-bg: linear-gradient(180deg, rgba(148, 163, 184, 0.08), rgba(148, 163, 184, 0.02));
+  --glass-border: rgba(148, 163, 184, 0.14);
+  --sidebar: #0e1626;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #7c3aed;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(124, 58, 237, 0.12);
+  --sidebar-accent-foreground: #f1f5f9;
+  --sidebar-border: rgba(148, 163, 184, 0.14);
+  --sidebar-ring: #7c3aed;
+}
+
+/* Formix has one theme: premium dark. .dark mirrors :root exactly so
+   next-themes' forced "dark" class (see ThemeProvider) and any `dark:`
+   utility variants resolve identically to the base palette — there is no
+   second palette to fall back to. */
+.dark {
+  --background: #0b1220;
+  --foreground: #f1f5f9;
+  --card: #111827;
+  --card-foreground: #f1f5f9;
+  --popover: #16213b;
+  --popover-foreground: #f1f5f9;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #1a2540;
+  --secondary-foreground: #e2e8f0;
+  --muted: #16213b;
+  --muted-foreground: #94a3b8;
+  --accent: #7c3aed;
+  --accent-foreground: #ffffff;
+  --accent-blue: #3b82f6;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: rgba(148, 163, 184, 0.14);
+  --input: rgba(148, 163, 184, 0.14);
+  --ring: #7c3aed;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --chart-1: #7c3aed;
+  --chart-2: #3b82f6;
+  --chart-3: #a78bfa;
+  --chart-4: #60a5fa;
+  --chart-5: #c4b5fd;
+  --shadow-color: 262 60% 4%;
+  --sidebar: #0e1626;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #7c3aed;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(124, 58, 237, 0.12);
+  --sidebar-accent-foreground: #f1f5f9;
+  --sidebar-border: rgba(148, 163, 184, 0.14);
+  --sidebar-ring: #7c3aed;
+>>>>>>> f6620dd (Complete Formix updates)
 }
 
 @theme inline {
@@ -58,8 +172,16 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+<<<<<<< HEAD
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+=======
+  --color-accent-blue: var(--accent-blue);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+>>>>>>> f6620dd (Complete Formix updates)
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -96,6 +218,7 @@
     overflow-x: hidden;
   }
 
+<<<<<<< HEAD
   .ide-shell {
     --ide-bg: #111111;
     --ide-surface: #1B1B1B;
@@ -113,6 +236,10 @@
     color-scheme: light;
   }
   html {
+=======
+  html {
+    color-scheme: dark;
+>>>>>>> f6620dd (Complete Formix updates)
     scroll-behavior: smooth;
   }
 }
@@ -339,5 +466,231 @@
     background-image: radial-gradient(circle, rgba(0,0,0,0.1) 1px, transparent 1px);
     background-size: 28px 28px;
   }
+<<<<<<< HEAD
+=======
+
+  /* ── Formix Studio: shared motifs ──────────────────────────────────── */
+
+  /* Signature ease — reveals and emphasis moments, not routine hover/press. */
+  .ease-signature {
+    transition-timing-function: var(--ease-signature);
+  }
+
+  /* Theme-aware dot grid — the "blueprint" motif used for empty states,
+     hero backdrops, and auth panels. Unlike .auth-dot-grid this reads the
+     current foreground color, so it stays visible in both themes instead
+     of disappearing against a dark background. */
+  .bg-dot-grid {
+    background-image: radial-gradient(circle, color-mix(in oklch, var(--foreground) 14%, transparent) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  /* Soft, tinted elevation for premium surfaces (hero cards, dialogs, the
+     publish success card) — used selectively, not as the default card
+     shadow. Warmer / more colorful than a flat black drop shadow. */
+  .shadow-elevated {
+    box-shadow:
+      0 1px 2px hsl(var(--shadow-color) / 0.06),
+      0 12px 32px -8px hsl(var(--shadow-color) / 0.18),
+      0 24px 64px -16px hsl(var(--shadow-color) / 0.16);
+  }
+
+  .shadow-elevated-lg {
+    box-shadow:
+      0 2px 4px hsl(var(--shadow-color) / 0.08),
+      0 24px 48px -12px hsl(var(--shadow-color) / 0.22),
+      0 48px 96px -24px hsl(var(--shadow-color) / 0.2);
+  }
+
+  /* ── Glass surfaces ─────────────────────────────────────────────────
+     The house "premium" surface: translucent, blurred, hairline-bordered.
+     Used for nav bars, cards, dialogs, and panels in place of flat opaque
+     fills so depth reads from layered light rather than a color swap. */
+  .glass-panel {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+  }
+
+  .glass-card {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.04) inset,
+      0 1px 2px hsl(var(--shadow-color) / 0.1),
+      0 16px 40px -12px hsl(var(--shadow-color) / 0.5);
+  }
+
+  /* Violet → blue gradient, the one signature gradient used sparingly for
+     hero CTAs, active states, and brand marks. */
+  .gradient-accent {
+    background: linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%);
+  }
+
+  .text-gradient-accent {
+    background: linear-gradient(135deg, #c4b5fd 0%, #93c5fd 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .border-gradient-accent {
+    position: relative;
+    border: 1px solid transparent;
+    background:
+      linear-gradient(var(--card), var(--card)) padding-box,
+      linear-gradient(135deg, rgba(124, 58, 237, 0.6), rgba(59, 130, 246, 0.4)) border-box;
+  }
+
+  /* Soft violet halo behind hero art / empty states — the "futuristic glow"
+     motif, always used blurred and low-opacity, never as a flat fill. */
+  .glow-accent {
+    position: absolute;
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgba(124, 58, 237, 0.35), transparent 70%);
+    filter: blur(60px);
+    pointer-events: none;
+  }
+
+  .glow-on-hover {
+    transition: box-shadow 0.3s var(--ease-signature), transform 0.3s var(--ease-signature);
+  }
+
+  .glow-on-hover:hover {
+    box-shadow:
+      0 0 0 1px rgba(124, 58, 237, 0.4),
+      0 8px 28px -6px rgba(124, 58, 237, 0.5);
+    transform: translateY(-2px);
+  }
+
+  /* Faint animated shimmer sweep across gradient CTAs — off by default,
+     opt-in via .shimmer so it never fights with reduced-motion users. */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.16) 50%, transparent 80%);
+    background-size: 200% 100%;
+    animation: shimmer-sweep 4.5s ease-in-out infinite;
+  }
+
+  @keyframes shimmer-sweep {
+    0% { background-position: 150% 0; }
+    60%, 100% { background-position: -50% 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .shimmer::after { animation: none; }
+  }
+
+  /* ── Homepage 2.0 (app/page.tsx + components/home/*) ─────────────────────
+     A handful of motifs unique to the new homepage: an orbiting-keyword
+     ring behind the hero, a "comet" that travels along the pipeline's
+     connector lines, drifting gradient blobs for ambient depth, and a
+     mouse-tracked spotlight for feature cards. Everything here still reads
+     off the shared --accent/--accent-blue tokens — no new colors. */
+
+  @keyframes orbit-rotate {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  @keyframes orbit-rotate-reverse {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(-360deg); }
+  }
+  .orbit-track {
+    animation-name: orbit-rotate;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+  .orbit-counter {
+    animation-name: orbit-rotate-reverse;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+
+  @keyframes flow-comet {
+    0%   { left: -8%; opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { left: 108%; opacity: 0; }
+  }
+  .flow-comet {
+    position: absolute;
+    top: 50%;
+    translate: 0 -50%;
+    animation-name: flow-comet;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    animation-iteration-count: infinite;
+  }
+
+  @keyframes flow-comet-vertical {
+    0%   { top: -8%; opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { top: 108%; opacity: 0; }
+  }
+  .flow-comet-vertical {
+    position: absolute;
+    left: 50%;
+    translate: -50% 0;
+    animation-name: flow-comet-vertical;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    animation-iteration-count: infinite;
+  }
+
+  @keyframes blob-drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33%       { transform: translate(4%, -6%) scale(1.08); }
+    66%       { transform: translate(-3%, 4%) scale(0.94); }
+  }
+  .blob-drift {
+    animation: blob-drift 20s ease-in-out infinite;
+  }
+  .blob-drift-slow {
+    animation: blob-drift 28s ease-in-out infinite reverse;
+  }
+
+  .card-spotlight {
+    position: relative;
+    isolation: isolate;
+  }
+  .card-spotlight::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: radial-gradient(360px circle at var(--spot-x, 50%) var(--spot-y, 50%), rgba(124, 58, 237, 0.16), transparent 65%);
+    opacity: 0;
+    transition: opacity 0.4s var(--ease-signature);
+    pointer-events: none;
+  }
+  .card-spotlight:hover::before {
+    opacity: 1;
+  }
+
+  @keyframes rise-fade {
+    from { opacity: 0; transform: translateY(28px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .rise-fade {
+    animation: rise-fade 0.7s var(--ease-signature) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orbit-track, .orbit-counter, .flow-comet, .flow-comet-vertical, .blob-drift, .blob-drift-slow, .rise-fade {
+      animation: none;
+    }
+  }
+>>>>>>> f6620dd (Complete Formix updates)
 }
 

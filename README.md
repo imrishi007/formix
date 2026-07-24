@@ -173,4 +173,8 @@ For the WASM build see `forml-compiler/build.bat`.
 - Auth is email/password + JWT only. No OAuth, no password reset.
 - Multi-form chaining is linear (A → B → C), not conditional.
 - Unary minus in computed fields (`compute = -5`) is not supported.
+<<<<<<< HEAD
 - No AI / natural-language-to-FormL generation yet.
+=======
+- The in-editor "Formix AI" panel generates/explains/fixes/improves FormL with a local heuristic engine (`lib/ai-engine.ts`), not a hosted LLM — see that file's header comment for the integration seam if a real backend is added later.
+>>>>>>> f6620dd (Complete Formix updates)

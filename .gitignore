@@ -43,6 +43,12 @@ backend/formix.db
 *.db
 *.sqlite3
 
+<<<<<<< HEAD
+=======
+# Respondent-uploaded files (runtime-generated, never commit)
+backend/uploads/
+
+>>>>>>> f6620dd (Complete Formix updates)
 # Compiled binaries (C++ build artifacts)
 *.exe
 *.o

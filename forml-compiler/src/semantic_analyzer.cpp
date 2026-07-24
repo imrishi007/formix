@@ -1,5 +1,12 @@
 #include "forml/semantic_analyzer.hpp"
 
+<<<<<<< HEAD
+=======
+#include <algorithm>
+#include <cctype>
+#include <unordered_set>
+
+>>>>>>> f6620dd (Complete Formix updates)
 namespace forml {
 
 namespace {
@@ -12,6 +19,111 @@ bool isTextLikeField(FieldType type) {
     return type == FieldType::Text || type == FieldType::Email;
 }
 
+<<<<<<< HEAD
+=======
+bool isLegacyUploadField(FieldType type) {
+    return type == FieldType::File || type == FieldType::Image
+        || type == FieldType::Pdf  || type == FieldType::Document;
+}
+
+bool isFileLikeField(FieldType type) {
+    return type == FieldType::Upload || isLegacyUploadField(type);
+}
+
+// Default `accept` category implied by a deprecated field-type keyword,
+// used only when the legacy field has no explicit validate{accept: ...}.
+std::string legacyDefaultAcceptCategory(FieldType type) {
+    switch (type) {
+        case FieldType::Image:    return "image";
+        case FieldType::Pdf:      return "pdf";
+        case FieldType::Document: return "document";
+        default:                  return "any";  // File
+    }
+}
+
+// Splits a comma-separated legacy accept string ("image, pdf") into trimmed
+// category names.
+std::vector<std::string> splitCommaList(const std::string& s) {
+    std::vector<std::string> out;
+    std::string current;
+    auto flush = [&]() {
+        std::size_t start = current.find_first_not_of(" \t");
+        std::size_t end   = current.find_last_not_of(" \t");
+        if (start != std::string::npos) out.push_back(current.substr(start, end - start + 1));
+        current.clear();
+    };
+    for (char c : s) {
+        if (c == ',') flush();
+        else current += c;
+    }
+    flush();
+    return out;
+}
+
+bool isValidAcceptCategory(const std::string& category) {
+    static const std::unordered_set<std::string> allowed = {
+        "image", "pdf", "document", "video", "audio", "zip", "any"
+    };
+    return allowed.count(category) > 0;
+}
+
+// Lowercases a string (ASCII only — MIME types and extensions are ASCII).
+std::string toLower(const std::string& s) {
+    std::string out = s;
+    for (char& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
+bool endsWithAny(const std::string& s, std::initializer_list<const char*> suffixes) {
+    for (const char* suf : suffixes) {
+        std::string suffix(suf);
+        if (s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0)
+            return true;
+    }
+    return false;
+}
+
+// Best-effort mapping from a legacy free-form accept token (a MIME type like
+// "image/png" or an extension like ".pdf" — the pre-`upload` grammar allowed
+// anything here) to one of the new fixed categories. Returns std::nullopt if
+// nothing matches, in which case the caller falls back to "any" rather than
+// erroring — old forms must keep compiling even if we can't classify every
+// legacy accept token precisely.
+std::optional<std::string> mapLegacyAcceptToken(const std::string& raw) {
+    const std::string t = toLower(raw);
+    if (isValidAcceptCategory(t)) return t;
+    if (t.rfind("image/", 0) == 0 || endsWithAny(t, {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"}))
+        return "image";
+    if (t == "application/pdf" || endsWithAny(t, {".pdf"}))
+        return "pdf";
+    if (t.rfind("video/", 0) == 0 || endsWithAny(t, {".mp4", ".mov", ".avi", ".webm", ".mkv"}))
+        return "video";
+    if (t.rfind("audio/", 0) == 0 || endsWithAny(t, {".mp3", ".wav", ".ogg", ".m4a"}))
+        return "audio";
+    if (t == "application/zip" || t == "application/x-zip-compressed" || endsWithAny(t, {".zip"}))
+        return "zip";
+    if (t.find("word") != std::string::npos || t.find("document") != std::string::npos ||
+        t == "text/plain" || endsWithAny(t, {".doc", ".docx", ".txt", ".rtf", ".odt"}))
+        return "document";
+    return std::nullopt;
+}
+
+// Accepts "<number><unit>" or "<number> <unit>", unit in {B, KB, MB, GB},
+// case-insensitive — e.g. "10MB", "500 KB", "2GB".
+bool isValidMaxSizeFormat(const std::string& s) {
+    std::size_t i = 0;
+    const std::size_t n = s.size();
+    const std::size_t digitsStart = i;
+    while (i < n && (std::isdigit(static_cast<unsigned char>(s[i])) || s[i] == '.')) i++;
+    if (i == digitsStart) return false;
+    while (i < n && s[i] == ' ') i++;
+    if (i == n) return false;
+    std::string unit = s.substr(i);
+    for (char& c : unit) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return unit == "B" || unit == "KB" || unit == "MB" || unit == "GB";
+}
+
+>>>>>>> f6620dd (Complete Formix updates)
 void collectFieldsFromNode(const ASTNode* node,
                            std::unordered_map<std::string, FieldType>& allFields) {
     if (!node) {
@@ -203,14 +315,108 @@ void SemanticAnalyzer::visitField(FieldNode& node,
         error("Duplicate field name '" + node.name + "' in this scope", node.line, node.column);
     }
 
+<<<<<<< HEAD
     if (node.validationBlock) {
         checkValidationTypeCompat(node);
     }
+=======
+    // Rewrite deprecated file/image/pdf/document fields to the canonical
+    // Upload shape before any other check runs, so everything downstream —
+    // including checkValidationTypeCompat below — only ever sees `upload`.
+    normalizeUploadField(node);
+
+    if (node.validationBlock) {
+        checkValidationTypeCompat(node);
+    }
+    checkUploadBlock(node);
+>>>>>>> f6620dd (Complete Formix updates)
     if (node.computeBlock && node.computeBlock->expr) {
         checkExprRefs(*node.computeBlock->expr);
     }
 }
 
+<<<<<<< HEAD
+=======
+void SemanticAnalyzer::normalizeUploadField(FieldNode& field) {
+    if (field.fieldType == FieldType::Upload) {
+        if (!field.uploadBlock) {
+            field.uploadBlock = UploadBlockNode{};
+        }
+        if (field.uploadBlock->accept.empty()) {
+            field.uploadBlock->accept = { "any" };
+        }
+        // `validate { required }` still works alongside the new syntax.
+        if (field.validationBlock && field.validationBlock->required) {
+            field.uploadBlock->required = true;
+        }
+        return;
+    }
+
+    if (!isLegacyUploadField(field.fieldType)) {
+        return;
+    }
+
+    UploadBlockNode ub;
+    ub.accept = { legacyDefaultAcceptCategory(field.fieldType) };
+
+    if (field.validationBlock) {
+        ValidationBlockNode& vb = *field.validationBlock;
+        if (vb.accept) {
+            std::vector<std::string> mapped;
+            for (const auto& token : splitCommaList(*vb.accept)) {
+                auto category = mapLegacyAcceptToken(token);
+                if (category && std::find(mapped.begin(), mapped.end(), *category) == mapped.end()) {
+                    mapped.push_back(*category);
+                }
+            }
+            // Never fail an old form over an accept string we can't classify —
+            // fall back to "any" rather than erroring or dropping the rule.
+            ub.accept = mapped.empty() ? std::vector<std::string>{"any"} : mapped;
+            vb.accept.reset();
+        }
+        if (vb.maxSize) {
+            ub.maxSize = std::to_string(static_cast<long long>(*vb.maxSize)) + "B";
+            vb.maxSize.reset();
+        }
+        if (vb.multiple) {
+            ub.multiple = true;
+            vb.multiple = false;
+        }
+        if (vb.required) {
+            ub.required = true;
+        }
+    }
+
+    field.fieldType = FieldType::Upload;
+    field.uploadBlock = ub;
+}
+
+void SemanticAnalyzer::checkUploadBlock(const FieldNode& field) {
+    if (!field.uploadBlock) {
+        return;
+    }
+    const auto& ub = *field.uploadBlock;
+
+    for (const auto& category : ub.accept) {
+        if (!isValidAcceptCategory(category)) {
+            error("Unknown 'accept' value '" + category + "' — expected one of: "
+                  "image, pdf, document, video, audio, zip, any", field.line, field.column);
+        }
+    }
+
+    if (ub.maxSize && !isValidMaxSizeFormat(*ub.maxSize)) {
+        error("'maxSize' must be a number followed by a unit (B, KB, MB, GB) — e.g. \"10MB\", got \"" +
+              *ub.maxSize + "\"", field.line, field.column);
+    }
+
+    if (ub.minFiles && ub.maxFiles && *ub.minFiles > *ub.maxFiles) {
+        error("'minFiles' (" + std::to_string(static_cast<long long>(*ub.minFiles)) +
+              ") cannot exceed 'maxFiles' (" + std::to_string(static_cast<long long>(*ub.maxFiles)) + ")",
+              field.line, field.column);
+    }
+}
+
+>>>>>>> f6620dd (Complete Formix updates)
 void SemanticAnalyzer::visitSection(SectionNode& node,
                                     std::unordered_set<std::string>&) {
     std::unordered_set<std::string> seenFields;
@@ -269,6 +475,10 @@ void SemanticAnalyzer::checkValidationTypeCompat(const FieldNode& field) {
     const auto& vb = *field.validationBlock;
     const bool textLike = isTextLikeField(field.fieldType);
     const bool numeric = isNumericField(field.fieldType);
+<<<<<<< HEAD
+=======
+    const bool fileLike = isFileLikeField(field.fieldType);
+>>>>>>> f6620dd (Complete Formix updates)
 
     if (vb.min && !numeric) {
         error("Validation rule 'min' is only valid on integer/float fields", field.line, field.column);
@@ -285,6 +495,18 @@ void SemanticAnalyzer::checkValidationTypeCompat(const FieldNode& field) {
     if (vb.pattern && !textLike) {
         error("Validation rule 'pattern' is only valid on text/email fields", field.line, field.column);
     }
+<<<<<<< HEAD
+=======
+    if (vb.accept && !fileLike) {
+        error("Validation rule 'accept' is only valid on upload fields", field.line, field.column);
+    }
+    if (vb.maxSize && !fileLike) {
+        error("Validation rule 'maxSize' is only valid on upload fields", field.line, field.column);
+    }
+    if (vb.multiple && !fileLike) {
+        error("Validation rule 'multiple' is only valid on upload fields", field.line, field.column);
+    }
+>>>>>>> f6620dd (Complete Formix updates)
 }
 
 void SemanticAnalyzer::checkIdentifierRef(const std::string& name, int line, int col,

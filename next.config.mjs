@@ -1,8 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+<<<<<<< HEAD
   typescript: {
     ignoreBuildErrors: true,
   },
+=======
+>>>>>>> f6620dd (Complete Formix updates)
   images: {
     unoptimized: true,
   },

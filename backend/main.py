@@ -18,6 +18,10 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+<<<<<<< HEAD
+=======
+from fastapi.staticfiles import StaticFiles
+>>>>>>> f6620dd (Complete Formix updates)
 
 # Load .env from the backend/ directory (if present) before any other imports
 # that might read env vars.  python-dotenv is a no-op if the file is absent.
@@ -34,11 +38,21 @@ from .routers import auth as auth_router
 from .routers import projects as projects_router
 
 
+<<<<<<< HEAD
+=======
+UPLOAD_DIR = Path(__file__).parent / "uploads"
+
+
+>>>>>>> f6620dd (Complete Formix updates)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create all tables on startup if they don't exist yet.
     # SQLAlchemy's create_all is idempotent — safe to call every time.
     Base.metadata.create_all(bind=engine)
+<<<<<<< HEAD
+=======
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+>>>>>>> f6620dd (Complete Formix updates)
     yield
 
 
@@ -69,6 +83,14 @@ app.include_router(auth_router.router)        # /auth/register, /auth/login
 app.include_router(projects_router.router)    # /projects/*, /forms/{id}/link
 app.include_router(forms_router.router)       # /forms/*, /submissions/by-session/*
 
+<<<<<<< HEAD
+=======
+# Serves respondent-uploaded files (resumes, photos, etc.) back by their
+# stored URL — mounted after the routers so /forms/* etc. still take priority.
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+
+>>>>>>> f6620dd (Complete Formix updates)
 
 @app.get("/health")
 def health():

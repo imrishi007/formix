@@ -4,20 +4,126 @@
 // Used by:
 //   - hooks/use-form-validation.ts  (React hook wrapper)
 //   - app/f/[formId]/form-renderer.tsx  (respondent page)
+<<<<<<< HEAD
 //   - components/editor/demo-ide-shell.tsx PreviewPanel  (author preview)
+=======
+//   - components/workspace/preview-pane.tsx  (author preview)
+>>>>>>> f6620dd (Complete Formix updates)
 
 import type { ASTNode } from "@/components/form-renderer";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function getValidationRules(field: ASTNode): ASTNode {
+<<<<<<< HEAD
   return (field.validate as ASTNode) ?? {};
+=======
+  // The compiler serializes a field's validate{} block under the "validation"
+  // key (see forml-compiler/JSON_SCHEMA.md) — not "validate".
+  return (field.validation as ASTNode) ?? {};
+>>>>>>> f6620dd (Complete Formix updates)
 }
 
 function isEmpty(value: string): boolean {
   return value.trim() === "";
 }
 
+<<<<<<< HEAD
+=======
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ── Upload field config ──────────────────────────────────────────────────────
+// The compiler serializes `field x : upload { ... }` under the "upload" key
+// (see forml-compiler/JSON_SCHEMA.md) as { accept: string[], multiple,
+// required, maxSize?: string, minFiles?: number, maxFiles?: number }. Legacy
+// file/image/pdf/document fields are normalized into this exact same shape
+// by the semantic analyzer, so this is the only upload shape the frontend
+// ever needs to understand.
+
+export interface UploadConfig {
+  accept: string[];
+  multiple: boolean;
+  required: boolean;
+  maxSize?: string;
+  minFiles?: number;
+  maxFiles?: number;
+}
+
+function getUploadConfig(field: ASTNode): UploadConfig | null {
+  const upload = field.upload as ASTNode | undefined;
+  if (!upload) return null;
+  return {
+    accept: (upload.accept as string[]) ?? ["any"],
+    multiple: !!upload.multiple,
+    required: !!upload.required,
+    maxSize: upload.maxSize as string | undefined,
+    minFiles: upload.minFiles as number | undefined,
+    maxFiles: upload.maxFiles as number | undefined,
+  };
+}
+
+/** Parses a human size string ("10MB", "500 KB", "2GB", or a bare byte
+ *  count) into bytes. Returns null if unparseable. */
+export function parseSizeString(size: string): number | null {
+  const m = size.trim().match(/^([\d.]+)\s*(B|KB|MB|GB)?$/i);
+  if (!m) return null;
+  const value = Number(m[1]);
+  if (isNaN(value)) return null;
+  const unit = (m[2] ?? "B").toUpperCase();
+  const multiplier = { B: 1, KB: 1024, MB: 1024 * 1024, GB: 1024 * 1024 * 1024 }[unit] ?? 1;
+  return value * multiplier;
+}
+
+/** Maps each `accept` category to a predicate over a File's name/MIME type. */
+const ACCEPT_CATEGORY_MATCHERS: Record<string, (file: { name: string; type: string }) => boolean> = {
+  image: (f) => f.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(f.name),
+  pdf: (f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name),
+  document: (f) =>
+    f.type === "application/pdf" ||
+    f.type === "text/plain" ||
+    f.type.startsWith("application/msword") ||
+    f.type.includes("wordprocessingml") ||
+    /\.(docx?|pdf|txt|rtf|odt)$/i.test(f.name),
+  video: (f) => f.type.startsWith("video/") || /\.(mp4|mov|avi|webm|mkv)$/i.test(f.name),
+  audio: (f) => f.type.startsWith("audio/") || /\.(mp3|wav|ogg|m4a)$/i.test(f.name),
+  zip: (f) => f.type === "application/zip" || f.type === "application/x-zip-compressed" || /\.zip$/i.test(f.name),
+  any: () => true,
+};
+
+/** Checks a File against an `accept` category list (["image","pdf"], or
+ *  ["any"]). Unknown categories are ignored (never block upload). */
+export function fileMatchesAccept(file: { name: string; type: string }, accept: string[]): boolean {
+  if (accept.length === 0 || accept.includes("any")) return true;
+  return accept.some((category) => ACCEPT_CATEGORY_MATCHERS[category]?.(file) ?? true);
+}
+
+/** Maps `accept` categories to a native `<input accept="...">` attribute
+ *  value. Returns undefined for "any" (no restriction, browser accepts everything). */
+export function acceptToHtmlAttr(accept: string[]): string | undefined {
+  if (accept.length === 0 || accept.includes("any")) return undefined;
+  const HTML_ACCEPT: Record<string, string> = {
+    image: "image/*",
+    pdf: "application/pdf,.pdf",
+    document: ".doc,.docx,.pdf,.txt,.rtf,.odt",
+    video: "video/*",
+    audio: "audio/*",
+    zip: ".zip,application/zip",
+  };
+  const parts = accept.map((c) => HTML_ACCEPT[c]).filter(Boolean);
+  return parts.length > 0 ? parts.join(",") : undefined;
+}
+
+/** Human-readable summary of an accept list, e.g. "image, pdf" or "any file type". */
+export function describeAccept(accept: string[]): string {
+  if (accept.length === 0 || accept.includes("any")) return "any file type";
+  return accept.join(", ");
+}
+
+>>>>>>> f6620dd (Complete Formix updates)
 /** Collect every leaf field name key that appears in the flat statements list. */
 function collectFieldKeys(stmts: ASTNode[], values: Record<string, string>): string[] {
   const keys: string[] = [];
@@ -83,20 +189,55 @@ function findFieldNode(name: string, stmts: ASTNode[]): ASTNode | null {
   return null;
 }
 
+<<<<<<< HEAD
+=======
+/** True if any Field anywhere in the (possibly nested) statement tree is an
+ *  upload type. Used to decide whether a submission needs the multipart
+ *  endpoint (lib/api.ts submitFormWithFiles) instead of the plain JSON one. */
+export function formHasFileFields(stmts: ASTNode[]): boolean {
+  for (const stmt of stmts) {
+    const type = stmt.type as string;
+    if (type === "Field") {
+      if ((stmt.fieldType as string) === "upload") return true;
+    } else if (type === "RepeatGroup") {
+      if (formHasFileFields((stmt.fields as ASTNode[]) ?? [])) return true;
+    } else if (type === "Conditional") {
+      const thenStmts = (stmt.then as ASTNode[]) ?? [];
+      const elseStmts = (stmt.else as ASTNode[]) ?? [];
+      if (formHasFileFields([...thenStmts, ...elseStmts])) return true;
+    } else if (type === "Section" || type === "Layout") {
+      if (formHasFileFields((stmt.statements as ASTNode[]) ?? [])) return true;
+    }
+  }
+  return false;
+}
+
+>>>>>>> f6620dd (Complete Formix updates)
 // ── Core validation logic ─────────────────────────────────────────────────────
 
 /**
  * Validates a single field value against the field's AST validation rules.
  *
+<<<<<<< HEAD
  * @param field    The AST FieldNode (must have `.fieldType` and optionally `.validate`).
  * @param nameKey  The key used to look up the value in the values map (may include repeat suffix).
  * @param values   The current form values map.
+=======
+ * @param field    The AST FieldNode (must have `.fieldType` and optionally `.validation`).
+ * @param nameKey  The key used to look up the value in the values map (may include repeat suffix).
+ * @param values   The current form values map.
+ * @param files    Selected files for upload fields, keyed the same way as `values`.
+>>>>>>> f6620dd (Complete Formix updates)
  * @returns        An error string if invalid, or null if valid.
  */
 export function validateField(
   field: ASTNode,
   nameKey: string,
   values: Record<string, string>,
+<<<<<<< HEAD
+=======
+  files: Record<string, File[]> = {},
+>>>>>>> f6620dd (Complete Formix updates)
 ): string | null {
   const fieldType = (field.fieldType as string) ?? "text";
   const rules = getValidationRules(field);
@@ -114,6 +255,42 @@ export function validateField(
     return null;
   }
 
+<<<<<<< HEAD
+=======
+  // Upload fields track selections in `files`, not `values` — no string value to check.
+  if (fieldType === "upload") {
+    const upload = getUploadConfig(field);
+    const selected = files[nameKey] ?? [];
+
+    if (upload?.required && selected.length === 0) {
+      return `${label} is required.`;
+    }
+    if (selected.length === 0) return null;
+
+    if (upload && !upload.multiple && selected.length > 1) {
+      return `${label} accepts only one file.`;
+    }
+    if (upload?.minFiles !== undefined && selected.length < upload.minFiles) {
+      return `${label} needs at least ${upload.minFiles} file${upload.minFiles === 1 ? "" : "s"}.`;
+    }
+    if (upload?.maxFiles !== undefined && selected.length > upload.maxFiles) {
+      return `${label} accepts at most ${upload.maxFiles} file${upload.maxFiles === 1 ? "" : "s"}.`;
+    }
+
+    const maxSizeBytes = upload?.maxSize ? parseSizeString(upload.maxSize) : null;
+
+    for (const f of selected) {
+      if (maxSizeBytes !== null && f.size > maxSizeBytes) {
+        return `${label}: "${f.name}" exceeds the ${formatBytes(maxSizeBytes)} size limit.`;
+      }
+      if (upload && !fileMatchesAccept(f, upload.accept)) {
+        return `${label}: "${f.name}" is not an accepted file type (expected ${describeAccept(upload.accept)}).`;
+      }
+    }
+    return null;
+  }
+
+>>>>>>> f6620dd (Complete Formix updates)
   const value = values[nameKey] ?? "";
 
   // ── required ─────────────────────────────────────────────────────────────
@@ -206,11 +383,19 @@ export function validateField(
  *
  * @param stmts   Top-level statement list (e.g. form.pages[*].statements + form.statements).
  * @param values  Current form values map.
+<<<<<<< HEAD
+=======
+ * @param files   Selected files for upload fields, keyed the same way as `values`.
+>>>>>>> f6620dd (Complete Formix updates)
  * @returns       A map from field name key → error string. Empty map = no errors.
  */
 export function validateForm(
   stmts: ASTNode[],
   values: Record<string, string>,
+<<<<<<< HEAD
+=======
+  files: Record<string, File[]> = {},
+>>>>>>> f6620dd (Complete Formix updates)
 ): Record<string, string> {
   const errors: Record<string, string> = {};
   const keys = collectFieldKeys(stmts, values);
@@ -219,7 +404,11 @@ export function validateForm(
     const fieldNode = findFieldNode(key, stmts);
     if (!fieldNode) continue;
 
+<<<<<<< HEAD
     const error = validateField(fieldNode, key, values);
+=======
+    const error = validateField(fieldNode, key, values, files);
+>>>>>>> f6620dd (Complete Formix updates)
     if (error) errors[key] = error;
   }
 
