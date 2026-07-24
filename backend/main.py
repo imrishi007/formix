@@ -32,6 +32,7 @@ from .database import Base, engine
 from .routers import forms as forms_router
 from .routers import auth as auth_router
 from .routers import projects as projects_router
+from .routers import generators as generators_router
 
 
 @asynccontextmanager
@@ -68,6 +69,8 @@ app.add_middleware(
 app.include_router(auth_router.router)        # /auth/register, /auth/login
 app.include_router(projects_router.router)    # /projects/*, /forms/{id}/link
 app.include_router(forms_router.router)       # /forms/*, /submissions/by-session/*
+app.include_router(generators_router.router)  # /generators/generate
+
 
 
 @app.get("/health")

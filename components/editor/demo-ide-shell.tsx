@@ -31,14 +31,17 @@ import {
   Plus,
   Search,
   Settings2,
+  Sparkles,
   Terminal,
   Trash2,
   TriangleAlert,
+  Wand2,
   X,
   Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
+import { AIChatPanel } from "@/components/editor/ai-chat-panel";
 
 import {
   useFormlCompiler,
@@ -69,7 +72,7 @@ import { MarkdownPreview } from "@/components/editor/markdown-preview";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SidebarTool = "files";
+type SidebarTool = "files" | "ai";
 type CompilePhase = "idle" | "parsing" | "semantic" | "valid" | "error";
 type DiagTab = "problems" | "ast" | "json" | "tokens";
 type PublishState = "idle" | "publishing" | "done" | "error";
@@ -1155,13 +1158,15 @@ function PublishModal({ url, embed, onClose }: {
 
 // ─── Top Bar ──────────────────────────────────────────────────────────────────
 
-function TopBar({ activeFile, compilePhase, wasmReady, onManualCompile, onPublish, publishState }: {
+function TopBar({ activeFile, compilePhase, wasmReady, onManualCompile, onPublish, publishState, activeTool, onToggleAI }: {
   activeFile: string;
   compilePhase: CompilePhase;
   wasmReady: boolean;
   onManualCompile: () => void;
   onPublish: () => void;
   publishState: PublishState;
+  activeTool: SidebarTool;
+  onToggleAI: () => void;
 }) {
   const phaseLabel = {
     idle:     wasmReady ? "Ready" : "Loading...",
@@ -1203,8 +1208,22 @@ function TopBar({ activeFile, compilePhase, wasmReady, onManualCompile, onPublis
         </div>
       </div>
 
-      {/* Right: status + run button + publish button */}
+      {/* Right: AI Chat + status + run button + publish button */}
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onToggleAI}
+          title="Open Formix AI Assistant"
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 font-inter text-[11px] font-semibold transition-all duration-150 ${
+            activeTool === "ai"
+              ? "border-[#8B5CF6] bg-[#8B5CF6]/20 text-[#C4B5FD] shadow-[0_0_15px_rgba(139,92,246,0.3)]"
+              : "border-white/[0.1] bg-[#1B1B1B] text-[#D4D4D8] hover:border-[#8B5CF6]/50 hover:bg-[#8B5CF6]/10 hover:text-white"
+          }`}
+        >
+          <Sparkles className="h-3.5 w-3.5 text-[#C4B5FD]" />
+          AI Assistant
+        </button>
+        <span className="mx-1 h-5 w-px bg-white/[0.08]" />
         <button type="button" title="Git branch" className="hidden items-center gap-1.5 rounded-lg px-2.5 py-2 font-inter text-[11px] text-[#A1A1AA] transition-colors hover:bg-white/[0.06] hover:text-white sm:flex">
           <GitFork className="h-3.5 w-3.5" /> main
         </button>
@@ -1449,29 +1468,55 @@ export function DemoIdeShell() {
         onManualCompile={handleManualCompile}
         onPublish={handlePublish}
         publishState={publishState}
+        activeTool={activeTool}
+        onToggleAI={() => {
+          setExplorerOpen(true);
+          setActiveTool((prev) => (prev === "ai" ? "files" : "ai"));
+        }}
       />
 
       <div className="flex min-h-0 flex-1 gap-3 p-3">
         {/* Activity Bar */}
-        <aside className="flex w-12 flex-none flex-col items-center rounded-2xl border border-white/[0.08] bg-[#1B1B1B] py-3 shadow-[0_16px_40px_rgba(0,0,0,0.18)]">
+        <aside className="flex w-12 flex-none flex-col items-center gap-2 rounded-2xl border border-white/[0.08] bg-[#1B1B1B] py-3 shadow-[0_16px_40px_rgba(0,0,0,0.18)]">
           <ActivityBtn
             active={activeTool === "files"}
             icon={<Files className="h-4 w-4" />}
             label="Files"
-            onClick={() => setActiveTool("files")}
+            onClick={() => {
+              setExplorerOpen(true);
+              setActiveTool("files");
+            }}
+          />
+          <ActivityBtn
+            active={activeTool === "ai"}
+            icon={<Sparkles className="h-4 w-4 text-[#C4B5FD]" />}
+            label="AI Assistant"
+            onClick={() => {
+              setExplorerOpen(true);
+              setActiveTool("ai");
+            }}
           />
         </aside>
 
         <div className="flex min-h-0 flex-1 flex-col">
           <PanelGroup direction="horizontal" className="min-h-0 flex-1">
-            <Panel ref={explorerPanelRef} defaultSize={18} minSize={14} maxSize={30} collapsible>
-              <ExplorerPanel
-                files={files}
-                activeFile={activeTab}
-                onSelectFile={handleSelectFile}
-                onCreateFile={handleCreateFile}
-                onDeleteFile={handleDeleteFile}
-              />
+            <Panel ref={explorerPanelRef} defaultSize={22} minSize={16} maxSize={35} collapsible>
+              {activeTool === "files" ? (
+                <ExplorerPanel
+                  files={files}
+                  activeFile={activeTab}
+                  onSelectFile={handleSelectFile}
+                  onCreateFile={handleCreateFile}
+                  onDeleteFile={handleDeleteFile}
+                />
+              ) : (
+                <AIChatPanel
+                  currentCode={activeFile?.content ?? ""}
+                  onApplyCode={(code) => handleContentChange(activeTab, code)}
+                  compile={compile}
+                  onClose={() => setActiveTool("files")}
+                />
+              )}
             </Panel>
 
             <PartitionHandle />

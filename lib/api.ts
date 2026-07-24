@@ -149,3 +149,29 @@ export function submitForm(
 export function getResponses(id: string): Promise<SubmissionRecord[]> {
   return request<SubmissionRecord[]>(`/forms/${id}/responses`);
 }
+
+// ── AI Generator Types & Function ──────────────────────────────────────────────
+
+export interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+export interface GenerateFormlResponse {
+  reply: string;
+  extracted_code?: string;
+}
+
+/**
+ * Generate or edit FormL code using the Groq AI service on the backend.
+ */
+export function generateFormlCode(
+  messages: ChatMessage[],
+  currentCode?: string,
+): Promise<GenerateFormlResponse> {
+  return request<GenerateFormlResponse>("/generators/generate", {
+    method: "POST",
+    body: JSON.stringify({ messages, current_code: currentCode }),
+  });
+}
+
