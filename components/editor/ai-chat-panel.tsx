@@ -90,9 +90,9 @@ export function AIChatPanel({
     if (!userPromptText) setInputPrompt("");
     setLoading(true);
 
-    // Build chat payload for API
+    // Build chat payload for API (exclude welcome message)
     const historyPayload: ChatMessage[] = messages
-      .filter((m) => m.role === "user" || m.role === "assistant")
+      .filter((m) => m.id !== "welcome" && (m.role === "user" || m.role === "assistant"))
       .map((m) => ({
         role: m.role as "user" | "assistant",
         content: m.text,
@@ -138,6 +138,8 @@ export function AIChatPanel({
             lastErrors = errors.map(
               (e) => `Line ${e.line}, Col ${e.col}: ${e.message}`
             );
+            // Update currentPromptCode context for next retry iteration
+            currentPromptCode = finalCode;
 
             // Append error feedback message for the next iteration
             historyPayload.push({
@@ -157,8 +159,8 @@ export function AIChatPanel({
         }
       }
 
-      // Automatically inject code into editor if we have code
-      if (finalCode) {
+      // Automatically inject code into editor ONLY if compilation was validated
+      if (finalCode && isValidated) {
         onApplyCode(finalCode);
       }
 
@@ -195,6 +197,39 @@ export function AIChatPanel({
     navigator.clipboard.writeText(code);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Simple formatter to convert markdown bold and backticks into styled JSX
+  const renderFormattedText = (content: string) => {
+    const lines = content.split("\n");
+    return lines.map((line, idx) => {
+      // Split line by **bold** and `code` patterns
+      const parts = line.split(/(\*\*.*?\*\*|`.*?`)/g);
+      return (
+        <p key={idx} className={idx > 0 ? "mt-1.5" : ""}>
+          {parts.map((part, pIdx) => {
+            if (part.startsWith("**") && part.endsWith("**")) {
+              return (
+                <strong key={pIdx} className="font-semibold text-white">
+                  {part.slice(2, -2)}
+                </strong>
+              );
+            }
+            if (part.startsWith("`") && part.endsWith("`")) {
+              return (
+                <code
+                  key={pIdx}
+                  className="rounded bg-white/[0.1] px-1 py-0.5 font-mono text-[11px] text-[#C4B5FD]"
+                >
+                  {part.slice(1, -1)}
+                </code>
+              );
+            }
+            return part;
+          })}
+        </p>
+      );
+    });
   };
 
   return (
@@ -253,7 +288,7 @@ export function AIChatPanel({
                   : "bg-[#222222] text-[#D4D4D8] border border-white/[0.06] rounded-tl-xs"
               }`}
             >
-              <div className="whitespace-pre-wrap font-sans">{msg.text}</div>
+              <div className="font-sans">{renderFormattedText(msg.text)}</div>
 
               {/* Code Snippet & Validation Status */}
               {msg.code && (

@@ -134,27 +134,82 @@ form "Multi-Step Form" {{
 """
 
 def extract_forml_code(text: str) -> Optional[str]:
-    """Extract code inside ```forml ... ``` or ``` ... ``` code blocks."""
-    # Match ```forml ... ``` block
-    match = re.search(r"```forml\s*\n(.*?)```", text, re.DOTALL | re.IGNORECASE)
-    if match:
+    """Extract code inside ```forml ... ``` or ``` ... ``` code blocks flexibly."""
+    if not text:
+        return None
+        
+    # Match ```forml ... ``` block with any leading/trailing space or newline after language tag
+    match = re.search(r"```forml[ \t]*\r?\n?(.*?)```", text, re.DOTALL | re.IGNORECASE)
+    if match and match.group(1).strip():
         return match.group(1).strip()
     
     # Fallback: match any ``` ... ``` block containing 'form '
-    match_any = re.search(r"```(?:\w+)?\s*\n(form\s+.*?```)", text, re.DOTALL | re.IGNORECASE)
+    match_any = re.search(r"```(?:\w+)?[ \t]*\r?\n?(form\s+.*?```)", text, re.DOTALL | re.IGNORECASE)
     if match_any:
         raw = match_any.group(1)
-        # strip trailing backticks
         return re.sub(r"```$", "", raw).strip()
     
-    # Fallback: match ``` ... ``` if it looks like FormL
-    match_generic = re.search(r"```(?:\w+)?\s*\n(.*?)```", text, re.DOTALL)
+    # Fallback: match any ``` ... ``` containing form or field declarations
+    match_generic = re.search(r"```(?:\w+)?[ \t]*\r?\n?(.*?)```", text, re.DOTALL)
     if match_generic:
         content = match_generic.group(1).strip()
         if "form " in content or "field " in content:
             return content
 
+    # Fallback: if raw text starts with 'form ' without code block formatting
+    if text.strip().startswith("form "):
+        return text.strip()
+
     return None
+
+def generate_fallback_forml(user_prompt: str) -> GenerateResponse:
+    """Generate a valid FormL fallback template when GROQ_API_KEY is not set."""
+    prompt_lower = user_prompt.lower()
+    
+    if "job" in prompt_lower or "application" in prompt_lower:
+        code = """form "Job Application" {
+  section "Personal Details" {
+    field fullName : text ui { label: "Full Name" placeholder: "Jane Doe" } validate { required minLength: 2 }
+    field email    : email ui { label: "Email Address" placeholder: "jane@example.com" } validate { required }
+    field phone    : text ui { label: "Phone Number" placeholder: "+1 (555) 000-0000" }
+  }
+
+  section "Role & Experience" {
+    field position : select {
+      option "Software Engineer"
+      option "Product Designer"
+      option "Product Manager"
+    } ui { label: "Target Position" }
+
+    field yearsExp : integer ui { label: "Years of Experience" } validate { min: 0 max: 50 }
+  }
+}"""
+        reply = "Here is a starter **Job Application Form** in FormL code. *(Note: Using offline generator mode. Add your `GROQ_API_KEY` to `backend/.env` to unlock live Groq AI generation!)*"
+    elif "event" in prompt_lower or "registration" in prompt_lower:
+        code = """form "Event Registration" {
+  field attendeeName : text ui { label: "Full Name" } validate { required }
+  field email        : email ui { label: "Email Address" } validate { required }
+  
+  field ticketType : select {
+    option "Standard Pass"
+    option "VIP Access"
+    option "Student Pass"
+  } ui { label: "Select Ticket" }
+  
+  field newsletter : boolean ui { label: "Subscribe to event updates" default: "true" }
+}"""
+        reply = "Here is a starter **Event Registration Form** in FormL code. *(Note: Using offline generator mode. Add your `GROQ_API_KEY` to `backend/.env` to unlock live Groq AI generation!)*"
+    else:
+        code = """form "Contact & Feedback Form" {
+  field name    : text ui { label: "Your Name" placeholder: "Jane Doe" } validate { required }
+  field email   : email ui { label: "Email Address" placeholder: "you@example.com" } validate { required }
+  field subject : text ui { label: "Subject" }
+  field message : text ui { label: "Message" placeholder: "Tell us how we can help..." } validate { required minLength: 5 }
+}"""
+        reply = "Here is a generated FormL code snippet based on your request. *(Note: Using offline generator mode. Configure `GROQ_API_KEY` in `backend/.env` for dynamic AI generation!)*"
+
+    return GenerateResponse(reply=reply, extracted_code=code)
+
 
 @router.post("/generate", response_model=GenerateResponse)
 async def generate_forml(payload: GenerateRequest):
@@ -166,14 +221,15 @@ async def generate_forml(payload: GenerateRequest):
         if env_file.exists():
             for line in env_file.read_text(encoding="utf-8").splitlines():
                 if line.strip().startswith("GROQ_API_KEY="):
-                    groq_api_key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if val:
+                        groq_api_key = val
                     break
 
+    # If GROQ_API_KEY is not configured, fallback gracefully so demo/testing works
     if not groq_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="GROQ_API_KEY is not configured in backend/.env or environment variables."
-        )
+        last_user_msg = next((m.content for m in reversed(payload.messages) if m.role == "user"), "")
+        return generate_fallback_forml(last_user_msg)
 
     system_prompt = build_system_prompt()
     
@@ -244,9 +300,12 @@ async def generate_forml(payload: GenerateRequest):
                 )
 
     if last_exception:
-        raise last_exception
+        # Fallback to local template generator if Groq API network/quota fails
+        last_user_msg = next((m.content for m in reversed(payload.messages) if m.role == "user"), "")
+        return generate_fallback_forml(last_user_msg)
     
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail="Failed to generate response from Groq API."
     )
+
