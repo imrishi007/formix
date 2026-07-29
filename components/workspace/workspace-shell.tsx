@@ -85,6 +85,8 @@ export function WorkspaceShell() {
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
   const [projectDetails, setProjectDetails] = useState<Map<string, ProjectDetail>>(new Map());
   const [loadingProjects, setLoadingProjects] = useState(true);
+  const [projectLoadError, setProjectLoadError] = useState<string | null>(null);
+  const [loadRetry, setLoadRetry] = useState(0); // bump to retry
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeFormId, setActiveFormId] = useState<string | null>(null);
   const [activeFormTitle, setActiveFormTitle] = useState<string | null>(null);
@@ -259,6 +261,7 @@ export function WorkspaceShell() {
     if (!user) return;
     let cancelled = false;
     setLoadingProjects(true);
+    setProjectLoadError(null);
     const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const wantedProjectId = params?.get("project") ?? null;
     const wantedFormId = params?.get("form") ?? null;
@@ -283,12 +286,12 @@ export function WorkspaceShell() {
       })
       .catch((err) => {
         if (cancelled) return;
-        toast.error(`Couldn't load your projects — ${describeError(err)}`);
+        setProjectLoadError(describeError(err));
       })
       .finally(() => { if (!cancelled) setLoadingProjects(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, loadRetry]);
 
   const handleCreateProject = useCallback(async (title: string) => {
     try {
@@ -502,6 +505,23 @@ export function WorkspaceShell() {
 
   if (authLoading || !user) {
     return <FullPageLoader label="Loading workspace…" />;
+  }
+
+  if (projectLoadError && !loadingProjects) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-background text-foreground">
+        <div className="flex flex-col items-center gap-2 text-center max-w-md px-6">
+          <p className="text-lg font-semibold text-destructive">Failed to load workspace</p>
+          <p className="text-sm text-muted-foreground">{projectLoadError}</p>
+        </div>
+        <button
+          onClick={() => setLoadRetry((n) => n + 1)}
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   return (

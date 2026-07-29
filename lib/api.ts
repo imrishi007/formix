@@ -277,15 +277,21 @@ async function request<T>(
   let res: Response;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30_000); // 30s — handles Render cold-start
+    const timeoutId = setTimeout(() => controller.abort(), 65_000); // 65s — Render free tier can take ~40s to cold-start
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
-  } catch {
-    throw new ApiError(0, `Could not reach the Formix server at ${API_BASE} — is the backend running?`);
+  } catch (fetchErr) {
+    const isTimeout = fetchErr instanceof DOMException && fetchErr.name === "AbortError";
+    throw new ApiError(
+      0,
+      isTimeout
+        ? `The server is taking a while to wake up (Render cold start) — please try again in a moment.`
+        : `Could not reach the Formix server at ${API_BASE} — is the backend running?`,
+    );
   }
 
   if (!res.ok) {
