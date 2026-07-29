@@ -17,20 +17,55 @@ export const API_BASE =
 // A plain localStorage key, not React state — lib/auth-context.tsx wraps this
 // in a context/hook for components, but request() below needs to read it
 // synchronously on every call without importing React context machinery.
+//
+// Alongside the token we store a client-side expiry timestamp (30 days) so
+// the app can pre-validate the session on mount without a server round-trip.
+// This prevents the user from being silently logged out whenever they reopen
+// the browser within the 30-day window.
 
 const TOKEN_STORAGE_KEY = "formix_auth_token";
+const TOKEN_EXPIRY_KEY = "formix_auth_token_expiry";
+
+/** Session lifetime on the client — must match FORMIX_JWT_EXPIRE_MINUTES (43200 = 30 days). */
+export const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days in ms
 
 export function getStoredToken(): string | null {
   if (typeof window === "undefined") return null;
+  // If the client-side expiry timestamp says the token is stale, clear it now
+  // so we never send a known-expired token to the server.
+  const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
+  if (expiry && Date.now() > parseInt(expiry, 10)) {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(TOKEN_EXPIRY_KEY);
+    return null;
+  }
   return localStorage.getItem(TOKEN_STORAGE_KEY);
 }
 
 export function setStoredToken(token: string): void {
-  if (typeof window !== "undefined") localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  if (typeof window === "undefined") return;
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  // Record a hard expiry 30 days from now. Even if the JWT's own exp claim
+  // is longer/shorter, this ensures the client never holds a stale token.
+  localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + SESSION_DURATION_MS));
 }
 
 export function clearStoredToken(): void {
-  if (typeof window !== "undefined") localStorage.removeItem(TOKEN_STORAGE_KEY);
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+  localStorage.removeItem(TOKEN_EXPIRY_KEY);
+}
+
+/** Returns true if a stored token exists and has not yet passed its client-side expiry. */
+export function isSessionValid(): boolean {
+  if (typeof window === "undefined") return false;
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+  if (!token) return false;
+  const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
+  // Tokens stored before the expiry key was introduced have no expiry record;
+  // treat them as valid so existing users are not silently logged out on upgrade.
+  if (!expiry) return true;
+  return Date.now() < parseInt(expiry, 10);
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -224,11 +259,11 @@ export class ApiError extends Error {
 }
 
 /** Dispatched on `window` whenever a request that carried a Bearer token
- *  comes back 401 — i.e. the stored session is expired/invalid, as opposed
- *  to a bad-credentials 401 from /auth/login. lib/auth-context.tsx listens
- *  for this to clear its state and bounce to sign-in instead of leaving the
- *  app silently broken (every subsequent request would otherwise also fail
- *  with the same stale token). */
+ *  comes back 401 AND the client-side expiry confirms the token has expired.
+ *  lib/auth-context.tsx listens for this to clear its state and bounce to
+ *  sign-in. We intentionally do NOT fire this on every 401 — a 401 while
+ *  the token is still within its 30-day window is most likely a transient
+ *  backend error, not an expired session. */
 export const AUTH_EXPIRED_EVENT = "formix:auth-expired";
 
 async function request<T>(
@@ -256,7 +291,11 @@ async function request<T>(
       message = body?.detail ?? message;
     } catch { /* non-JSON error body */ }
 
-    if (res.status === 401 && token) {
+    // Only treat a 401 as an expired/invalid session when the client-side
+    // expiry confirms the token is no longer valid. A 401 while the token is
+    // still within its 30-day window is most likely a transient server error;
+    // clearing the session in that case would log the user out unnecessarily.
+    if (res.status === 401 && token && !isSessionValid()) {
       clearStoredToken();
       if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
     }

@@ -26,6 +26,7 @@ import {
   getStoredToken,
   setStoredToken,
   clearStoredToken,
+  isSessionValid,
   ApiError,
   AUTH_EXPIRED_EVENT,
   type UserResponse,
@@ -55,13 +56,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedToken = getStoredToken();
     const storedUser = localStorage.getItem(USER_STORAGE_KEY);
     if (storedToken && storedUser) {
+      // getStoredToken() already checks the client-side expiry timestamp and
+      // returns null if the 30-day window has passed, so if we reach here the
+      // session is still within its valid lifetime — restore it unconditionally.
       try {
         setUser(JSON.parse(storedUser));
         setToken(storedToken);
       } catch {
+        // Corrupted user JSON — clear everything and let the user log in again.
         clearStoredToken();
         localStorage.removeItem(USER_STORAGE_KEY);
       }
+    } else if (!isSessionValid()) {
+      // No valid token at all — make sure stale user data is also gone.
+      localStorage.removeItem(USER_STORAGE_KEY);
     }
     setIsLoading(false);
   }, []);
