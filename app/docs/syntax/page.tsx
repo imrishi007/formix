@@ -103,7 +103,7 @@ export default function SyntaxPage() {
         <h2 className="text-2xl font-display tracking-tight mt-12 mb-4">Whitespace &amp; Comments</h2>
         <p className="text-muted-foreground leading-relaxed mb-4">
           Forml is whitespace-insensitive — indentation is for readability only. Comments are
-          not yet part of v1.1 but are reserved as <code className="font-mono text-sm bg-foreground/[0.06] px-1 py-0.5">// line comments</code>.
+          not yet part of v1.1 but are reserved as <code className="font-mono text-sm bg-foreground/[0.06] px-1 py-0.5">{"// line comments"}</code>.
         </p>
 
         <CodeBlock

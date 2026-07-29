@@ -8,11 +8,7 @@ interface EbnfRuleProps {
 
 export function EbnfRule({ name, definition, description }: EbnfRuleProps) {
   return (
-<<<<<<< HEAD
-    <div className="my-4 border border-foreground/10 overflow-hidden rounded-sm">
-=======
     <div className="my-4 border border-foreground/10 overflow-hidden rounded-lg">
->>>>>>> f6620dd (Complete Formix updates)
       {/* Rule header */}
       <div className="flex items-center gap-3 px-4 py-2.5 bg-foreground/[0.02] border-b border-foreground/10">
         <span className="w-2 h-2 rounded-full bg-foreground/20 shrink-0" />

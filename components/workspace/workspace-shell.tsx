@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileCode2, Files, Loader2 } from "lucide-react";
+import { FileCode2, Files } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 import { toast } from "sonner";
@@ -46,6 +46,7 @@ import { PublishDialog } from "@/components/workspace/publish-dialog";
 import { SubmissionsPanel } from "@/components/workspace/submissions-panel";
 import { AiPanel } from "@/components/workspace/ai-panel";
 import { RenameSuggestion } from "@/components/workspace/rename-suggestion";
+import { FullPageLoader } from "@/components/ui/full-page-loader";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -218,32 +219,6 @@ export function WorkspaceShell() {
     if (!activeFormId) { setCompilePhase("idle"); setCompileResult(null); }
   }, [activeFormId]);
 
-  // Initial load: fetch projects, auto-select the first one.
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    setLoadingProjects(true);
-    getProjects()
-      .then(async (list) => {
-        if (cancelled) return;
-        setProjects(list);
-        if (list.length > 0) {
-          setActiveProjectId(list[0].id);
-          const detail = await reloadProjectDetail(list[0].id);
-          if (!cancelled && detail.forms.length > 0) {
-            handleSelectForm(list[0].id, detail.forms[0].id, detail.forms[0].title);
-          }
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        toast.error(`Couldn't load your projects — ${describeError(err)}`);
-      })
-      .finally(() => { if (!cancelled) setLoadingProjects(false); });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
-
   const handleSelectProject = useCallback(async (projectId: string) => {
     setActiveProjectId(projectId);
     if (projectDetails.has(projectId)) return;
@@ -276,6 +251,44 @@ export function WorkspaceShell() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runCompile]);
+
+  // Initial load: fetch projects, then select either the project/form named
+  // in the URL (?project=&form=, e.g. a deep link from the dashboard's "Edit"
+  // action) or fall back to the first project/form as before.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    setLoadingProjects(true);
+    const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const wantedProjectId = params?.get("project") ?? null;
+    const wantedFormId = params?.get("form") ?? null;
+    getProjects()
+      .then(async (list) => {
+        if (cancelled) return;
+        setProjects(list);
+        if (list.length > 0) {
+          const targetProjectId = wantedProjectId && list.some((p) => p.id === wantedProjectId)
+            ? wantedProjectId
+            : list[0].id;
+          setActiveProjectId(targetProjectId);
+          const detail = await reloadProjectDetail(targetProjectId);
+          if (cancelled) return;
+          const wantedForm = wantedFormId ? detail.forms.find((f) => f.id === wantedFormId) : undefined;
+          if (wantedForm) {
+            handleSelectForm(targetProjectId, wantedForm.id, wantedForm.title);
+          } else if (detail.forms.length > 0) {
+            handleSelectForm(targetProjectId, detail.forms[0].id, detail.forms[0].title);
+          }
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        toast.error(`Couldn't load your projects — ${describeError(err)}`);
+      })
+      .finally(() => { if (!cancelled) setLoadingProjects(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const handleCreateProject = useCallback(async (title: string) => {
     try {
@@ -368,9 +381,12 @@ export function WorkspaceShell() {
   }, [activeFormId, compile, runCompile, appendLog, scheduleTitleDetection]);
 
   const manualCompileHandlerRef = useRef(() => {});
-  manualCompileHandlerRef.current = useCallback(() => {
+  const manualCompileHandler = useCallback(() => {
     if (activeFormId) runCompile(source);
   }, [activeFormId, runCompile, source]);
+  useEffect(() => {
+    manualCompileHandlerRef.current = manualCompileHandler;
+  });
 
   // ── Rename confirmation (only shown when the form already has submissions) ──
   const [renameConfirm, setRenameConfirm] = useState<{ formId: string; title: string; count: number } | null>(null);
@@ -485,17 +501,7 @@ export function WorkspaceShell() {
   const ast = useMemo<ASTNode | null>(() => (compileResult?.ast as ASTNode | null) ?? null, [compileResult]);
 
   if (authLoading || !user) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-background">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/15 ring-1 ring-accent/25">
-          <span className="font-inter text-xs font-black tracking-tighter text-accent">FX</span>
-        </div>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          <span className="text-xs">Loading workspace…</span>
-        </div>
-      </div>
-    );
+    return <FullPageLoader label="Loading workspace…" />;
   }
 
   return (

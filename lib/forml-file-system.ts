@@ -955,8 +955,6 @@ emits a typed JSON AST and a diagnostics array.
     method: POST
   }
 }`,
-<<<<<<< HEAD
-=======
 
   // 13. Native `upload` field type — identity documents (image + pdf)
   "kyc-verification.forml": `form "KYC Verification" {
@@ -1071,7 +1069,6 @@ emits a typed JSON AST and a diagnostics array.
     method: POST
   }
 }`,
->>>>>>> f6620dd (Complete Formix updates)
 };
 
 // ── Virtual file system factory ──────────────────────────────────────────────

@@ -1,12 +1,9 @@
 #include "forml/semantic_analyzer.hpp"
 
-<<<<<<< HEAD
-=======
 #include <algorithm>
 #include <cctype>
 #include <unordered_set>
 
->>>>>>> f6620dd (Complete Formix updates)
 namespace forml {
 
 namespace {
@@ -19,8 +16,6 @@ bool isTextLikeField(FieldType type) {
     return type == FieldType::Text || type == FieldType::Email;
 }
 
-<<<<<<< HEAD
-=======
 bool isLegacyUploadField(FieldType type) {
     return type == FieldType::File || type == FieldType::Image
         || type == FieldType::Pdf  || type == FieldType::Document;
@@ -123,7 +118,6 @@ bool isValidMaxSizeFormat(const std::string& s) {
     return unit == "B" || unit == "KB" || unit == "MB" || unit == "GB";
 }
 
->>>>>>> f6620dd (Complete Formix updates)
 void collectFieldsFromNode(const ASTNode* node,
                            std::unordered_map<std::string, FieldType>& allFields) {
     if (!node) {
@@ -315,11 +309,6 @@ void SemanticAnalyzer::visitField(FieldNode& node,
         error("Duplicate field name '" + node.name + "' in this scope", node.line, node.column);
     }
 
-<<<<<<< HEAD
-    if (node.validationBlock) {
-        checkValidationTypeCompat(node);
-    }
-=======
     // Rewrite deprecated file/image/pdf/document fields to the canonical
     // Upload shape before any other check runs, so everything downstream —
     // including checkValidationTypeCompat below — only ever sees `upload`.
@@ -329,14 +318,11 @@ void SemanticAnalyzer::visitField(FieldNode& node,
         checkValidationTypeCompat(node);
     }
     checkUploadBlock(node);
->>>>>>> f6620dd (Complete Formix updates)
     if (node.computeBlock && node.computeBlock->expr) {
         checkExprRefs(*node.computeBlock->expr);
     }
 }
 
-<<<<<<< HEAD
-=======
 void SemanticAnalyzer::normalizeUploadField(FieldNode& field) {
     if (field.fieldType == FieldType::Upload) {
         if (!field.uploadBlock) {
@@ -416,7 +402,6 @@ void SemanticAnalyzer::checkUploadBlock(const FieldNode& field) {
     }
 }
 
->>>>>>> f6620dd (Complete Formix updates)
 void SemanticAnalyzer::visitSection(SectionNode& node,
                                     std::unordered_set<std::string>&) {
     std::unordered_set<std::string> seenFields;
@@ -475,10 +460,7 @@ void SemanticAnalyzer::checkValidationTypeCompat(const FieldNode& field) {
     const auto& vb = *field.validationBlock;
     const bool textLike = isTextLikeField(field.fieldType);
     const bool numeric = isNumericField(field.fieldType);
-<<<<<<< HEAD
-=======
     const bool fileLike = isFileLikeField(field.fieldType);
->>>>>>> f6620dd (Complete Formix updates)
 
     if (vb.min && !numeric) {
         error("Validation rule 'min' is only valid on integer/float fields", field.line, field.column);
@@ -495,8 +477,6 @@ void SemanticAnalyzer::checkValidationTypeCompat(const FieldNode& field) {
     if (vb.pattern && !textLike) {
         error("Validation rule 'pattern' is only valid on text/email fields", field.line, field.column);
     }
-<<<<<<< HEAD
-=======
     if (vb.accept && !fileLike) {
         error("Validation rule 'accept' is only valid on upload fields", field.line, field.column);
     }
@@ -506,7 +486,6 @@ void SemanticAnalyzer::checkValidationTypeCompat(const FieldNode& field) {
     if (vb.multiple && !fileLike) {
         error("Validation rule 'multiple' is only valid on upload fields", field.line, field.column);
     }
->>>>>>> f6620dd (Complete Formix updates)
 }
 
 void SemanticAnalyzer::checkIdentifierRef(const std::string& name, int line, int col,

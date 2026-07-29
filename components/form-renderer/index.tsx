@@ -3,24 +3,12 @@
 /**
  * components/form-renderer/index.tsx
  *
-<<<<<<< HEAD
- * Shared schema-driven form renderer extracted from demo-ide-shell.tsx.
- * Used by:
- *   - PreviewPanel inside the IDE editor (demo-ide-shell.tsx)
-=======
  * Shared schema-driven form renderer. Used by:
  *   - components/workspace/preview-pane.tsx (the workspace's live preview)
->>>>>>> f6620dd (Complete Formix updates)
  *   - The public respondent page (app/f/[formId]/form-renderer.tsx)
  *
  * Nothing in this file touches the Monaco editor, the WASM compiler,
  * diagnostic state, or cursor position — it is intentionally editor-free.
-<<<<<<< HEAD
- */
-
-import { motion, AnimatePresence } from "framer-motion";
-import { ChevronRight } from "lucide-react";
-=======
  * Styling is expressed entirely through design tokens (bg-background,
  * text-foreground, border-border, etc. from app/globals.css) so both
  * consumers stay light/dark aware for free.
@@ -30,7 +18,6 @@ import { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, Paperclip, X } from "lucide-react";
 import { acceptToHtmlAttr, formatBytes } from "@/lib/forml-validate";
->>>>>>> f6620dd (Complete Formix updates)
 
 // ── Shared type ───────────────────────────────────────────────────────────────
 
@@ -40,17 +27,10 @@ export type ASTNode = Record<string, unknown>;
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
 export const INPUT_CLS =
-<<<<<<< HEAD
-  "w-full rounded border border-[#D4CCB8] bg-[#F5F3EE] px-3 py-2 font-inter text-[12px] text-[#222016] outline-none placeholder:text-[#B4AA96] transition-all duration-150 focus:border-[#7C6FE0] focus:ring-2 focus:ring-[#7C6FE0]/10";
-
-export const INPUT_CLS_ERROR =
-  "w-full rounded border border-[#E05252] bg-[#FDF5F5] px-3 py-2 font-inter text-[12px] text-[#222016] outline-none placeholder:text-[#B4AA96] transition-all duration-150 focus:border-[#E05252] focus:ring-2 focus:ring-[#E05252]/10";
-=======
   "w-full rounded-lg border border-border bg-background px-3 py-2 font-inter text-sm text-foreground outline-none placeholder:text-muted-foreground/60 transition-all duration-150 focus:border-ring focus:ring-2 focus:ring-ring/15";
 
 export const INPUT_CLS_ERROR =
   "w-full rounded-lg border border-destructive bg-destructive/5 px-3 py-2 font-inter text-sm text-foreground outline-none placeholder:text-muted-foreground/60 transition-all duration-150 focus:border-destructive focus:ring-2 focus:ring-destructive/15";
->>>>>>> f6620dd (Complete Formix updates)
 
 // ── Condition evaluator ───────────────────────────────────────────────────────
 
@@ -100,8 +80,6 @@ export function evalCondition(
   return false;
 }
 
-<<<<<<< HEAD
-=======
 // ── FileUploadInput ───────────────────────────────────────────────────────────
 
 /** Native file input styled to match the rest of the form, with a running
@@ -186,13 +164,12 @@ function FileUploadInput({
   );
 }
 
->>>>>>> f6620dd (Complete Formix updates)
 // ── DynamicField ──────────────────────────────────────────────────────────────
 
 /**
  * Renders a single form field from an AST Field node.
  * Supports: text, email, url, date, integer, float, select, radio,
- *           checkbox (multi), boolean (single toggle).
+ *           checkbox (multi), boolean (single toggle), upload.
  */
 export function DynamicField({
   field,
@@ -203,11 +180,8 @@ export function DynamicField({
   repeatIndex,
   error,
   touched,
-<<<<<<< HEAD
-=======
   files,
   onFileChange,
->>>>>>> f6620dd (Complete Formix updates)
 }: {
   field: ASTNode;
   nameKey: string;
@@ -217,35 +191,20 @@ export function DynamicField({
   repeatIndex?: number;
   error?: string;
   touched?: boolean;
-<<<<<<< HEAD
-=======
   /** Selected files for upload fields, keyed the same way as `values`. */
   files?: Record<string, File[]>;
   onFileChange?: (key: string, files: File[]) => void;
->>>>>>> f6620dd (Complete Formix updates)
 }) {
   const showError = !!(touched && error);
   const inputCls = showError ? INPUT_CLS_ERROR : INPUT_CLS;
   const fieldType = field.fieldType as string;
   const options   = (field.options as string[]) ?? [];
   const ui        = field.ui as ASTNode | undefined;
-<<<<<<< HEAD
-=======
   const upload    = field.upload as ASTNode | undefined;
->>>>>>> f6620dd (Complete Formix updates)
   const label     = (ui?.label as string) ?? (field.name as string);
   const placeholder = (ui?.placeholder as string) ?? "";
   const helpText  = (ui?.helpText as string) ?? "";
   const value     = values[nameKey] ?? "";
-<<<<<<< HEAD
-
-  return (
-    <div className="space-y-1.5">
-      <label className="flex items-baseline gap-1.5 font-inter text-[11px] font-semibold tracking-wide text-[#3D3528]">
-        {label}
-        {repeatIndex !== undefined && (
-          <span className="font-inter text-[9px] font-normal text-[#9A9080]">
-=======
   const isFileField = fieldType === "upload";
 
   return (
@@ -254,7 +213,6 @@ export function DynamicField({
         {label}
         {repeatIndex !== undefined && (
           <span className="font-inter text-xs font-normal text-muted-foreground">
->>>>>>> f6620dd (Complete Formix updates)
             item {repeatIndex + 1}
           </span>
         )}
@@ -267,33 +225,21 @@ export function DynamicField({
             onChange={(e) => onChange(nameKey, e.target.value)}
             onBlur={() => onBlur?.(nameKey)}
             aria-invalid={showError}
-<<<<<<< HEAD
-            className={(showError ? INPUT_CLS_ERROR : INPUT_CLS) + " appearance-none"}
-=======
             className={inputCls + " appearance-none"}
->>>>>>> f6620dd (Complete Formix updates)
           >
             <option value="">Select...</option>
             {options.map((o) => (
               <option key={o} value={o}>{o}</option>
             ))}
           </select>
-<<<<<<< HEAD
-          <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[#7C6FE0]" />
-=======
           <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-accent" />
->>>>>>> f6620dd (Complete Formix updates)
         </div>
       )}
 
       {fieldType === "radio" && (
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           {options.map((o) => (
-<<<<<<< HEAD
-            <label key={o} className="flex items-center gap-1.5 font-inter text-[12px] text-[#222016] cursor-pointer">
-=======
             <label key={o} className="flex cursor-pointer items-center gap-1.5 font-inter text-sm text-foreground">
->>>>>>> f6620dd (Complete Formix updates)
               <input
                 type="radio"
                 name={nameKey}
@@ -301,11 +247,7 @@ export function DynamicField({
                 checked={value === o}
                 onChange={() => onChange(nameKey, o)}
                 onBlur={() => onBlur?.(nameKey)}
-<<<<<<< HEAD
-                className="accent-[#7C6FE0]"
-=======
                 className="accent-accent"
->>>>>>> f6620dd (Complete Formix updates)
               />
               {o}
             </label>
@@ -318,21 +260,13 @@ export function DynamicField({
           {options.map((o) => {
             const ck = values[`${nameKey}__${o}`] === "true";
             return (
-<<<<<<< HEAD
-              <label key={o} className="flex items-center gap-2 font-inter text-[12px] text-[#222016] cursor-pointer">
-=======
               <label key={o} className="flex cursor-pointer items-center gap-2 font-inter text-sm text-foreground">
->>>>>>> f6620dd (Complete Formix updates)
                 <input
                   type="checkbox"
                   checked={ck}
                   onChange={(e) => onChange(`${nameKey}__${o}`, e.target.checked ? "true" : "false")}
                   onBlur={() => onBlur?.(nameKey)}
-<<<<<<< HEAD
-                  className="accent-[#7C6FE0]"
-=======
                   className="accent-accent"
->>>>>>> f6620dd (Complete Formix updates)
                 />
                 {o}
               </label>
@@ -342,28 +276,18 @@ export function DynamicField({
       )}
 
       {fieldType === "boolean" && (
-<<<<<<< HEAD
-        <label className="flex items-center gap-2 font-inter text-[12px] text-[#222016] cursor-pointer">
-=======
         <label className="flex cursor-pointer items-center gap-2 font-inter text-sm text-foreground">
->>>>>>> f6620dd (Complete Formix updates)
           <input
             type="checkbox"
             checked={value === "true"}
             onChange={(e) => onChange(nameKey, e.target.checked ? "true" : "false")}
             onBlur={() => onBlur?.(nameKey)}
-<<<<<<< HEAD
-            className="accent-[#7C6FE0]"
-=======
             className="accent-accent"
->>>>>>> f6620dd (Complete Formix updates)
           />
           {placeholder || label}
         </label>
       )}
 
-<<<<<<< HEAD
-=======
       {isFileField && (
         <FileUploadInput
           nameKey={nameKey}
@@ -376,7 +300,6 @@ export function DynamicField({
         />
       )}
 
->>>>>>> f6620dd (Complete Formix updates)
       {(fieldType === "integer" || fieldType === "float") && (
         <input
           type="number"
@@ -389,11 +312,7 @@ export function DynamicField({
         />
       )}
 
-<<<<<<< HEAD
-      {!["select", "radio", "checkbox", "boolean", "integer", "float"].includes(fieldType) && (
-=======
       {!["select", "radio", "checkbox", "boolean", "integer", "float", "upload"].includes(fieldType) && (
->>>>>>> f6620dd (Complete Formix updates)
         <input
           type={
             fieldType === "email" ? "email"
@@ -411,19 +330,11 @@ export function DynamicField({
       )}
 
       {helpText && (
-<<<<<<< HEAD
-        <p className="font-inter text-[10px] text-[#8A8070]">{helpText}</p>
-      )}
-
-      {showError && (
-        <p role="alert" className="mt-0.5 flex items-center gap-1 font-inter text-[10px] text-[#E05252]">
-=======
         <p className="font-inter text-xs text-muted-foreground">{helpText}</p>
       )}
 
       {showError && (
         <p role="alert" className="mt-0.5 flex items-center gap-1 font-inter text-xs text-destructive">
->>>>>>> f6620dd (Complete Formix updates)
           <span className="inline-block h-3 w-3 flex-none" aria-hidden="true">⚠</span>
           {error}
         </p>
@@ -446,11 +357,8 @@ export function RenderStatements({
   errors,
   touched,
   depth = 0,
-<<<<<<< HEAD
-=======
   files,
   onFileChange,
->>>>>>> f6620dd (Complete Formix updates)
 }: {
   stmts: ASTNode[];
   values: Record<string, string>;
@@ -459,12 +367,9 @@ export function RenderStatements({
   errors?: Record<string, string>;
   touched?: Record<string, boolean>;
   depth?: number;
-<<<<<<< HEAD
-=======
   /** Selected files for upload fields, keyed the same way as `values`. */
   files?: Record<string, File[]>;
   onFileChange?: (key: string, files: File[]) => void;
->>>>>>> f6620dd (Complete Formix updates)
 }) {
   return (
     <>
@@ -484,11 +389,8 @@ export function RenderStatements({
               onBlur={onBlur}
               error={errors?.[fieldName]}
               touched={touched?.[fieldName]}
-<<<<<<< HEAD
-=======
               files={files}
               onFileChange={onFileChange}
->>>>>>> f6620dd (Complete Formix updates)
             />
           );
         }
@@ -502,19 +404,11 @@ export function RenderStatements({
           return (
             <div key={key} className="space-y-3">
               {count === 0 && (
-<<<<<<< HEAD
-                <div className="flex items-center gap-2 rounded border border-dashed border-[#D0C8B4] bg-[#F8F6F0] px-4 py-3">
-                  <span className="text-[#C0B8A0] text-[18px]">↑</span>
-                  <p className="font-inter text-[11px] text-[#9A9080]">
-                    Set{" "}
-                    <code className="rounded bg-[#EDE8E0] px-1 font-mono text-[10px] text-[#4A4030]">
-=======
                 <div className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-muted/50 px-4 py-3">
                   <span className="text-[18px] text-muted-foreground/60">↑</span>
                   <p className="font-inter text-sm text-muted-foreground">
                     Set{" "}
                     <code className="rounded bg-muted px-1 font-mono text-xs text-foreground">
->>>>>>> f6620dd (Complete Formix updates)
                       {countRef}
                     </code>{" "}
                     to a number to generate sections here
@@ -529,15 +423,6 @@ export function RenderStatements({
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.22, delay: idx * 0.05 }}
-<<<<<<< HEAD
-                    className="overflow-hidden rounded border border-[#D4CCB8] bg-[#F5F3EE]"
-                  >
-                    <div className="flex items-center gap-2 border-b border-[#E4DCD0] bg-[#EDE9E2] px-4 py-2">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#7C6FE0] font-inter text-[10px] font-bold text-white">
-                        {idx + 1}
-                      </span>
-                      <span className="font-inter text-[11px] font-medium text-[#3D3528]">
-=======
                     className="overflow-hidden rounded-lg border border-border bg-muted/30"
                   >
                     <div className="flex items-center gap-2 border-b border-border bg-muted px-4 py-2">
@@ -545,7 +430,6 @@ export function RenderStatements({
                         {idx + 1}
                       </span>
                       <span className="font-inter text-sm font-medium text-foreground">
->>>>>>> f6620dd (Complete Formix updates)
                         {countRef.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())} {idx + 1}
                       </span>
                     </div>
@@ -564,11 +448,8 @@ export function RenderStatements({
                             repeatIndex={idx}
                             error={errors?.[nk]}
                             touched={touched?.[nk]}
-<<<<<<< HEAD
-=======
                             files={files}
                             onFileChange={onFileChange}
->>>>>>> f6620dd (Complete Formix updates)
                           />
                         );
                       })}
@@ -601,13 +482,8 @@ export function RenderStatements({
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-<<<<<<< HEAD
-                <div className="space-y-4 border-l-2 border-[#7C6FE0]/40 pl-3">
-                  <p className="font-mono text-[9px] uppercase tracking-wider text-[#9A9080]">
-=======
                 <div className="space-y-4 border-l-2 border-accent/40 pl-3">
                   <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
->>>>>>> f6620dd (Complete Formix updates)
                     {condMet ? "if" : "else"}
                   </p>
                   <RenderStatements
@@ -618,11 +494,8 @@ export function RenderStatements({
                     errors={errors}
                     touched={touched}
                     depth={depth + 1}
-<<<<<<< HEAD
-=======
                     files={files}
                     onFileChange={onFileChange}
->>>>>>> f6620dd (Complete Formix updates)
                   />
                 </div>
               </motion.div>
@@ -636,17 +509,10 @@ export function RenderStatements({
           return (
             <div key={key} className="space-y-4">
               <div className="flex items-center gap-2">
-<<<<<<< HEAD
-                <span className="flex-none font-inter text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7C6FE0]">
-                  {sectionName}
-                </span>
-                <span className="h-px flex-1 bg-[#E0D8C8]" />
-=======
                 <span className="flex-none font-inter text-xs font-semibold uppercase tracking-[0.14em] text-accent">
                   {sectionName}
                 </span>
                 <span className="h-px flex-1 bg-border" />
->>>>>>> f6620dd (Complete Formix updates)
               </div>
               <RenderStatements
                 stmts={sectionStmts}
@@ -656,11 +522,8 @@ export function RenderStatements({
                 errors={errors}
                 touched={touched}
                 depth={depth + 1}
-<<<<<<< HEAD
-=======
                 files={files}
                 onFileChange={onFileChange}
->>>>>>> f6620dd (Complete Formix updates)
               />
             </div>
           );
@@ -684,11 +547,8 @@ export function RenderStatements({
                   errors={errors}
                   touched={touched}
                   depth={depth + 1}
-<<<<<<< HEAD
-=======
                   files={files}
                   onFileChange={onFileChange}
->>>>>>> f6620dd (Complete Formix updates)
                 />
               ))}
             </div>

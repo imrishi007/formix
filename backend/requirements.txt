@@ -7,3 +7,6 @@ python-multipart
 bcrypt
 python-jose[cryptography]
 python-dotenv
+alembic
+openpyxl
+user-agents

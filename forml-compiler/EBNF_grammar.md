@@ -84,12 +84,8 @@ field        = "field" IDENTIFIER ":" type
                [ trigger_block ] ;
 
 type         = "text" | "integer" | "float" | "email"
-<<<<<<< HEAD
-             | "date" | "boolean" | "url" | select_type ;
-=======
              | "date" | "boolean" | "url" | select_type | upload_type
              | "file" | "image" | "pdf" | "document" ;  /* deprecated, see below */
->>>>>>> f6620dd (Complete Formix updates)
 
 select_type  = ( "select" | "radio" | "checkbox" )
                ( "{" option { option } "}" | source_block ) ;
@@ -99,8 +95,6 @@ option       = "option" STRING ;
 source_block = "from" ( "url" STRING | "var" IDENTIFIER )
                [ "map" "{" "label" ":" IDENTIFIER ","
                "value" ":" IDENTIFIER "}" ] ;
-<<<<<<< HEAD
-=======
 
 upload_type  = "upload" [ "{" { upload_rule } "}" ] ;
 upload_rule  = "accept"   ":" accept_list
@@ -111,7 +105,6 @@ upload_rule  = "accept"   ":" accept_list
              | "maxFiles" ":" NUMBER ;
 accept_list  = accept_value { "," accept_value } ;
 accept_value = "image" | "pdf" | "document" | "video" | "audio" | "zip" | "any" ;
->>>>>>> f6620dd (Complete Formix updates)
 ```
 
 - `field` decouples data schema (`type`) from presentation (`ui_block`) and behavior
@@ -120,8 +113,6 @@ accept_value = "image" | "pdf" | "document" | "video" | "audio" | "zip" | "any" 
   `option`s or dynamically via `source_block`.
 - `source_block` fetches options from a REST endpoint (`url`) or a pre-defined array
   (`var`), with an optional `map` to translate arbitrary JSON keys into `label`/`value`.
-<<<<<<< HEAD
-=======
 - `upload_type` is the canonical file-upload field — `field resume : upload { accept: pdf
   maxSize: "10MB" }`. Its config block is optional; a bare `field x : upload` accepts any
   file. `multiple` and `required` may be written bare (like `validate`'s `required`) or with
@@ -131,12 +122,6 @@ accept_value = "image" | "pdf" | "document" | "video" | "audio" | "zip" | "any" 
   `upload` (folding any legacy `validate { accept/maxSize/multiple }` rules into the new
   `upload` block) before the AST reaches the JSON serializer. New source, and anything the
   AI generates, should always use `upload` directly.
-- `file` / `image` / `pdf` / `document` are upload field types (CV, certificates,
-  photos, scanned documents). All four share the same AST shape; `image`/`pdf`/`document`
-  are sugar over `file` that just imply a sensible default `accept` filter, which an
-  explicit `accept` validation rule can still override. See `accept`/`maxSize`/`multiple`
-  in §5 for upload-specific validation.
->>>>>>> f6620dd (Complete Formix updates)
 
 ## 5. Presentation, Layout, and Validation
 
@@ -151,12 +136,8 @@ ui_rule          = "label"       ":" STRING
 validation_block = "validate" "{" { validation_rule } "}" ;
 validation_rule  = "required" | "min" ":" NUMBER | "max" ":" NUMBER
                  | "minLength" ":" NUMBER | "maxLength" ":" NUMBER
-<<<<<<< HEAD
-                 | "pattern" ":" STRING ;
-=======
                  | "pattern" ":" STRING
                  | "accept" ":" STRING | "maxSize" ":" NUMBER | "multiple" ;
->>>>>>> f6620dd (Complete Formix updates)
 
 section          = "section" STRING "{" { statement } "}" ;
 layout_block     = ( "row" | "column" ) "{" { statement } "}" ;
@@ -164,15 +145,11 @@ layout_block     = ( "row" | "column" ) "{" { statement } "}" ;
 
 - `ui_block` controls rendering; `bind` enables two-way data binding to external state.
 - `layout_block` provides native grid support (`row`/`column`) without raw CSS.
-<<<<<<< HEAD
-- `validation_block` enforces constraints prior to submission.
-=======
 - `validation_block` enforces constraints prior to submission. `accept`, `maxSize`, and
   `multiple` are upload-only rules (valid only on `file`/`image`/`pdf`/`document` fields):
   `accept` is a comma-separated list of MIME types or extensions (e.g. `"application/pdf"`
   or `".pdf,.doc,.docx"`), `maxSize` is the maximum size per file in bytes, and `multiple`
   (no argument, like `required`) allows selecting more than one file.
->>>>>>> f6620dd (Complete Formix updates)
 
 ## 6. Logic, Math, and Dynamics
 

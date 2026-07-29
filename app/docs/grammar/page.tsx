@@ -84,7 +84,7 @@ export default function GrammarPage() {
           <p className="text-sm text-muted-foreground leading-relaxed mb-12">
             <strong className="text-foreground">Terminals</strong> are literal characters/strings
             that appear in actual <code className="font-mono bg-foreground/[0.06] px-1 py-0.5 text-xs">.forml</code> source
-            (e.g. <code className="font-mono bg-foreground/[0.06] px-1 py-0.5 text-xs">"form"</code>,{" "}
+            (e.g. <code className="font-mono bg-foreground/[0.06] px-1 py-0.5 text-xs">&quot;form&quot;</code>,{" "}
             <code className="font-mono bg-foreground/[0.06] px-1 py-0.5 text-xs">{'"{"'}</code>).{" "}
             <strong className="text-foreground">Non-terminals</strong> are abstract symbols built
             from other rules (e.g. <code className="font-mono bg-foreground/[0.06] px-1 py-0.5 text-xs">field</code>,{" "}

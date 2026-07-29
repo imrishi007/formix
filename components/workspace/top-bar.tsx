@@ -7,7 +7,7 @@
  */
 
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Loader2, Play, CheckCircle2, AlertCircle, Globe, Inbox, LogOut, Sparkles, User as UserIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Play, CheckCircle2, AlertCircle, Globe, Inbox, LayoutDashboard, LogOut, Sparkles, User as UserIcon } from "lucide-react";
 import type { ProjectResponse } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
@@ -148,6 +148,12 @@ export function TopBar({
           <Inbox className="h-3.5 w-3.5" /> Submissions
         </Button>
 
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/dashboard">
+            <LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
+          </Link>
+        </Button>
+
         <Button
           size="sm"
           onClick={onPublish}
@@ -173,6 +179,11 @@ export function TopBar({
           <DropdownMenuContent align="end" className="min-w-48">
             <DropdownMenuLabel className="truncate font-normal text-muted-foreground">{user?.email}</DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard">
+                <LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={logout}>
               <LogOut className="h-3.5 w-3.5" /> Log out
             </DropdownMenuItem>

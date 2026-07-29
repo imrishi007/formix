@@ -2,12 +2,9 @@ import React from "react"
 import type { Metadata } from 'next'
 import { Instrument_Sans, Instrument_Serif, JetBrains_Mono, Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
-<<<<<<< HEAD
-=======
 import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/lib/auth-context'
 import { Toaster } from '@/components/ui/sonner'
->>>>>>> f6620dd (Complete Formix updates)
 import './globals.css'
 
 const instrumentSans = Instrument_Sans({ 
@@ -42,11 +39,6 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-<<<<<<< HEAD
-    <html lang="en">
-      <body className={`${instrumentSans.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} ${inter.variable} font-sans antialiased`}>
-        {children}
-=======
     <html lang="en" suppressHydrationWarning>
       <body className={`${instrumentSans.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} ${inter.variable} font-sans antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange>
@@ -55,7 +47,6 @@ export default function RootLayout({
             <Toaster />
           </AuthProvider>
         </ThemeProvider>
->>>>>>> f6620dd (Complete Formix updates)
         <Analytics />
       </body>
     </html>

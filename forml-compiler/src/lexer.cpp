@@ -32,14 +32,11 @@ const std::unordered_map<std::string, TokenType> Lexer::keywords_ = {
     { "radio",       TokenType::KW_RADIO       },
     { "checkbox",    TokenType::KW_CHECKBOX    },
     { "option",      TokenType::KW_OPTION      },
-<<<<<<< HEAD
-=======
     { "upload",      TokenType::KW_UPLOAD      },
     { "file",        TokenType::KW_FILE        },      // deprecated, kept for back-compat
     { "image",       TokenType::KW_IMAGE       },      // deprecated, kept for back-compat
     { "pdf",         TokenType::KW_PDF         },      // deprecated, kept for back-compat
     { "document",    TokenType::KW_DOCUMENT    },      // deprecated, kept for back-compat
->>>>>>> f6620dd (Complete Formix updates)
 
     // §4 Data sourcing
     { "from",        TokenType::KW_FROM        },
@@ -60,14 +57,11 @@ const std::unordered_map<std::string, TokenType> Lexer::keywords_ = {
     { "minLength",   TokenType::KW_MIN_LENGTH  },
     { "maxLength",   TokenType::KW_MAX_LENGTH  },
     { "pattern",     TokenType::KW_PATTERN     },
-<<<<<<< HEAD
-=======
     { "accept",      TokenType::KW_ACCEPT      },
     { "maxSize",     TokenType::KW_MAX_SIZE    },
     { "multiple",    TokenType::KW_MULTIPLE    },
     { "minFiles",    TokenType::KW_MIN_FILES   },
     { "maxFiles",    TokenType::KW_MAX_FILES   },
->>>>>>> f6620dd (Complete Formix updates)
 
     // §5 Layout
     { "row",         TokenType::KW_ROW         },

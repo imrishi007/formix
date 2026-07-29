@@ -16,8 +16,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
+import { Menu, X, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth-context";
 
 const LINKS = [
   { label: "Why Formix", href: "#features" },
@@ -28,6 +29,7 @@ const LINKS = [
 ];
 
 export function HomeNav() {
+  const { user } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -66,12 +68,25 @@ export function HomeNav() {
         </nav>
 
         <div className="hidden flex-none items-center gap-4 md:flex">
-          <Link href="/auth/signin" className="whitespace-nowrap font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground">
-            Sign in
-          </Link>
-          <Button asChild size="sm" className="rounded-full px-5">
-            <Link href="/editor/demo">Open Editor</Link>
-          </Button>
+          {user ? (
+            <>
+              <Link href="/editor/demo" className="whitespace-nowrap font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground">
+                Editor
+              </Link>
+              <Button asChild size="sm" className="rounded-full px-5">
+                <Link href="/dashboard"><LayoutDashboard className="h-3.5 w-3.5" /> Dashboard</Link>
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link href="/auth/signin" className="whitespace-nowrap font-mono text-xs uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground">
+                Sign in
+              </Link>
+              <Button asChild size="sm" className="rounded-full px-5">
+                <Link href="/editor/demo">Open Editor</Link>
+              </Button>
+            </>
+          )}
         </div>
 
         <button
@@ -105,12 +120,25 @@ export function HomeNav() {
             </a>
           ))}
           <div className="mt-6 flex flex-col gap-3 border-t border-white/10 pt-8">
-            <Link href="/auth/signin" onClick={() => setOpen(false)} className="font-mono text-sm uppercase tracking-widest text-muted-foreground">
-              Sign in
-            </Link>
-            <Button asChild size="lg" className="rounded-full" onClick={() => setOpen(false)}>
-              <Link href="/editor/demo">Open Editor</Link>
-            </Button>
+            {user ? (
+              <>
+                <Link href="/editor/demo" onClick={() => setOpen(false)} className="font-mono text-sm uppercase tracking-widest text-muted-foreground">
+                  Editor
+                </Link>
+                <Button asChild size="lg" className="rounded-full" onClick={() => setOpen(false)}>
+                  <Link href="/dashboard">Dashboard</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Link href="/auth/signin" onClick={() => setOpen(false)} className="font-mono text-sm uppercase tracking-widest text-muted-foreground">
+                  Sign in
+                </Link>
+                <Button asChild size="lg" className="rounded-full" onClick={() => setOpen(false)}>
+                  <Link href="/editor/demo">Open Editor</Link>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>

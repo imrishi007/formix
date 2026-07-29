@@ -48,7 +48,9 @@ export function useAiChat(formId: string | null, getContext: () => AiContext) {
   const [isStreaming, setIsStreaming] = useState(false);
   const cancelRef = useRef<() => void>(() => {});
   const getContextRef = useRef(getContext);
-  getContextRef.current = getContext;
+  useEffect(() => {
+    getContextRef.current = getContext;
+  });
 
   // Switching forms: stop any in-flight stream and load that form's history.
   useEffect(() => {

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { ArrowLeft, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { DocsSidebar } from "./docs-sidebar";
@@ -66,11 +65,7 @@ export function DocsNav({ breadcrumbs = [] }: DocsNavProps) {
               href="/editor/demo"
               className="hidden sm:flex items-center gap-2 text-xs font-mono text-foreground/50 hover:text-foreground transition-colors border border-foreground/15 px-3 py-1.5 rounded-full hover:border-foreground/30"
             >
-<<<<<<< HEAD
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-=======
               <span className="w-1.5 h-1.5 rounded-full bg-success" />
->>>>>>> f6620dd (Complete Formix updates)
               Open Editor
             </Link>
           </div>

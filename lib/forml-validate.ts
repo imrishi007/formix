@@ -4,32 +4,22 @@
 // Used by:
 //   - hooks/use-form-validation.ts  (React hook wrapper)
 //   - app/f/[formId]/form-renderer.tsx  (respondent page)
-<<<<<<< HEAD
-//   - components/editor/demo-ide-shell.tsx PreviewPanel  (author preview)
-=======
 //   - components/workspace/preview-pane.tsx  (author preview)
->>>>>>> f6620dd (Complete Formix updates)
 
 import type { ASTNode } from "@/components/form-renderer";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function getValidationRules(field: ASTNode): ASTNode {
-<<<<<<< HEAD
-  return (field.validate as ASTNode) ?? {};
-=======
   // The compiler serializes a field's validate{} block under the "validation"
   // key (see forml-compiler/JSON_SCHEMA.md) — not "validate".
   return (field.validation as ASTNode) ?? {};
->>>>>>> f6620dd (Complete Formix updates)
 }
 
 function isEmpty(value: string): boolean {
   return value.trim() === "";
 }
 
-<<<<<<< HEAD
-=======
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -123,7 +113,6 @@ export function describeAccept(accept: string[]): string {
   return accept.join(", ");
 }
 
->>>>>>> f6620dd (Complete Formix updates)
 /** Collect every leaf field name key that appears in the flat statements list. */
 function collectFieldKeys(stmts: ASTNode[], values: Record<string, string>): string[] {
   const keys: string[] = [];
@@ -189,8 +178,6 @@ function findFieldNode(name: string, stmts: ASTNode[]): ASTNode | null {
   return null;
 }
 
-<<<<<<< HEAD
-=======
 /** True if any Field anywhere in the (possibly nested) statement tree is an
  *  upload type. Used to decide whether a submission needs the multipart
  *  endpoint (lib/api.ts submitFormWithFiles) instead of the plain JSON one. */
@@ -212,32 +199,22 @@ export function formHasFileFields(stmts: ASTNode[]): boolean {
   return false;
 }
 
->>>>>>> f6620dd (Complete Formix updates)
 // ── Core validation logic ─────────────────────────────────────────────────────
 
 /**
  * Validates a single field value against the field's AST validation rules.
  *
-<<<<<<< HEAD
- * @param field    The AST FieldNode (must have `.fieldType` and optionally `.validate`).
- * @param nameKey  The key used to look up the value in the values map (may include repeat suffix).
- * @param values   The current form values map.
-=======
  * @param field    The AST FieldNode (must have `.fieldType` and optionally `.validation`).
  * @param nameKey  The key used to look up the value in the values map (may include repeat suffix).
  * @param values   The current form values map.
  * @param files    Selected files for upload fields, keyed the same way as `values`.
->>>>>>> f6620dd (Complete Formix updates)
  * @returns        An error string if invalid, or null if valid.
  */
 export function validateField(
   field: ASTNode,
   nameKey: string,
   values: Record<string, string>,
-<<<<<<< HEAD
-=======
   files: Record<string, File[]> = {},
->>>>>>> f6620dd (Complete Formix updates)
 ): string | null {
   const fieldType = (field.fieldType as string) ?? "text";
   const rules = getValidationRules(field);
@@ -255,8 +232,6 @@ export function validateField(
     return null;
   }
 
-<<<<<<< HEAD
-=======
   // Upload fields track selections in `files`, not `values` — no string value to check.
   if (fieldType === "upload") {
     const upload = getUploadConfig(field);
@@ -290,7 +265,6 @@ export function validateField(
     return null;
   }
 
->>>>>>> f6620dd (Complete Formix updates)
   const value = values[nameKey] ?? "";
 
   // ── required ─────────────────────────────────────────────────────────────
@@ -383,19 +357,13 @@ export function validateField(
  *
  * @param stmts   Top-level statement list (e.g. form.pages[*].statements + form.statements).
  * @param values  Current form values map.
-<<<<<<< HEAD
-=======
  * @param files   Selected files for upload fields, keyed the same way as `values`.
->>>>>>> f6620dd (Complete Formix updates)
  * @returns       A map from field name key → error string. Empty map = no errors.
  */
 export function validateForm(
   stmts: ASTNode[],
   values: Record<string, string>,
-<<<<<<< HEAD
-=======
   files: Record<string, File[]> = {},
->>>>>>> f6620dd (Complete Formix updates)
 ): Record<string, string> {
   const errors: Record<string, string> = {};
   const keys = collectFieldKeys(stmts, values);
@@ -404,11 +372,7 @@ export function validateForm(
     const fieldNode = findFieldNode(key, stmts);
     if (!fieldNode) continue;
 
-<<<<<<< HEAD
-    const error = validateField(fieldNode, key, values);
-=======
     const error = validateField(fieldNode, key, values, files);
->>>>>>> f6620dd (Complete Formix updates)
     if (error) errors[key] = error;
   }
 

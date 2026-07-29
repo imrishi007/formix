@@ -36,7 +36,7 @@ function DiagnosticsContent({ tab, compileResult, activeFormTitle, log }: {
     if (log.length === 0) {
       return (
         <div className="p-4 font-mono text-xs text-muted-foreground">
-          // Console output appears here as you compile and publish.
+          {"// Console output appears here as you compile and publish."}
         </div>
       );
     }
@@ -96,7 +96,7 @@ function DiagnosticsContent({ tab, compileResult, activeFormTitle, log }: {
   }
   if (tab === "json") {
     const ast = compileResult?.ast as ASTNode | null;
-    if (!ast) return <pre className="p-4 font-mono text-xs text-muted-foreground">// No schema — fix compile errors first.</pre>;
+    if (!ast) return <pre className="p-4 font-mono text-xs text-muted-foreground">{"// No schema — fix compile errors first."}</pre>;
     const stmts = ((ast.statements as ASTNode[]) ?? []).filter((s) => s.type === "Field");
     const schema = {
       $schema: "https://formix.dev/schema/v1",
@@ -114,7 +114,7 @@ function DiagnosticsContent({ tab, compileResult, activeFormTitle, log }: {
   }
   if (tab === "tokens") {
     const ast = compileResult?.ast as ASTNode | null;
-    if (!ast) return <pre className="p-4 font-mono text-xs text-muted-foreground">// Compile to see tokens.</pre>;
+    if (!ast) return <pre className="p-4 font-mono text-xs text-muted-foreground">{"// Compile to see tokens."}</pre>;
     const stmts = ((ast.statements as ASTNode[]) ?? []).filter((s) => s.type === "Field");
     const tokens = [
       { token: "form", type: "KEYWORD" },

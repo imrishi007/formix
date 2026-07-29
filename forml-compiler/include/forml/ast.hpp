@@ -242,8 +242,6 @@ struct ValidationBlockNode {
     std::optional<double>   minLength;
     std::optional<double>   maxLength;
     std::optional<std::string> pattern;
-<<<<<<< HEAD
-=======
 
     // DEPRECATED — file-upload rules from the pre-`upload` grammar (field :
     // file/image/pdf/document, with accept/maxSize/multiple inside validate{}).
@@ -269,7 +267,6 @@ struct UploadBlockNode {
     std::optional<std::string> maxSize;     // human size, e.g. "10MB" (also accepts legacy raw byte counts)
     std::optional<double>      minFiles;
     std::optional<double>      maxFiles;
->>>>>>> f6620dd (Complete Formix updates)
 };
 
 
@@ -390,8 +387,6 @@ enum class FieldType {
     Select,
     Radio,
     Checkbox,
-<<<<<<< HEAD
-=======
     Upload,     // canonical file-upload type — see UploadBlockNode
     // DEPRECATED — pre-`upload` file-type keywords, kept only so old source
     // keeps compiling. The semantic analyzer rewrites these to Upload.
@@ -399,7 +394,6 @@ enum class FieldType {
     Image,
     Pdf,
     Document,
->>>>>>> f6620dd (Complete Formix updates)
 };
 
 std::string fieldTypeToString(FieldType t);
@@ -414,10 +408,7 @@ public:
 
     std::optional<UIBlockNode>            uiBlock;
     std::optional<ValidationBlockNode>    validationBlock;
-<<<<<<< HEAD
-=======
     std::optional<UploadBlockNode>        uploadBlock;
->>>>>>> f6620dd (Complete Formix updates)
     std::unique_ptr<ComputeBlockNode>     computeBlock;
     std::unique_ptr<TriggerBlockNode>     triggerBlock;
 

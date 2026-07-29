@@ -91,25 +91,15 @@ function NavGroupItem({ group }: { group: NavGroup }) {
               <Link
                 key={item.href}
                 href={item.href}
-<<<<<<< HEAD
-                className={`flex items-center justify-between py-1.5 px-2 text-sm rounded-sm transition-all duration-200 ${
-                  isActive
-                    ? "text-foreground bg-foreground/[0.06] font-medium"
-=======
                 className={`relative flex items-center justify-between py-1.5 px-2 text-sm rounded-lg transition-all duration-200 ${
                   isActive
                     ? "text-foreground bg-accent/10 font-medium before:absolute before:left-0 before:top-1/2 before:h-4 before:w-0.5 before:-translate-x-2 before:-translate-y-1/2 before:rounded-full before:bg-accent"
->>>>>>> f6620dd (Complete Formix updates)
                     : "text-foreground/55 hover:text-foreground hover:bg-foreground/[0.03]"
                 }`}
               >
                 <span>{item.title}</span>
                 {item.badge && (
-<<<<<<< HEAD
-                  <span className="text-[9px] font-mono uppercase tracking-wider text-foreground/30 border border-foreground/15 px-1.5 py-0.5 rounded-sm">
-=======
                   <span className="text-xs font-mono uppercase tracking-wider text-foreground/30 border border-foreground/15 px-1.5 py-0.5 rounded-lg">
->>>>>>> f6620dd (Complete Formix updates)
                     {item.badge}
                   </span>
                 )}
@@ -129,15 +119,6 @@ export function DocsSidebar() {
       <div className="px-4 py-5 border-b border-foreground/10">
         <Link href="/" className="flex items-center gap-2 group">
           <span className="font-display text-lg tracking-tight">Formix</span>
-<<<<<<< HEAD
-          <span className="text-muted-foreground font-mono text-[10px] mt-0.5">.forml</span>
-        </Link>
-        <div className="mt-2 flex items-center gap-2">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-foreground/30 border border-foreground/15 px-1.5 py-0.5">
-            Docs
-          </span>
-          <span className="text-[10px] font-mono text-foreground/25">v1.1</span>
-=======
           <span className="text-muted-foreground font-mono text-xs mt-0.5">.forml</span>
         </Link>
         <div className="mt-2 flex items-center gap-2">
@@ -145,7 +126,6 @@ export function DocsSidebar() {
             Docs
           </span>
           <span className="text-xs font-mono text-foreground/25">v1.1</span>
->>>>>>> f6620dd (Complete Formix updates)
         </div>
       </div>
 
@@ -162,11 +142,7 @@ export function DocsSidebar() {
           href="/editor/demo"
           className="flex items-center gap-2 text-xs text-foreground/40 hover:text-foreground transition-colors font-mono"
         >
-<<<<<<< HEAD
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-=======
           <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
->>>>>>> f6620dd (Complete Formix updates)
           Open Editor
         </Link>
         <Link

@@ -38,24 +38,11 @@ export interface FormValidationState {
  *
  * @param stmts  Flat list of AST statements (pages + root statements).
  * @param values Current form values.
-<<<<<<< HEAD
-=======
  * @param files  Selected files for upload fields, keyed the same way as `values`.
->>>>>>> f6620dd (Complete Formix updates)
  */
 export function useFormValidation(
   stmts: ASTNode[],
   values: Record<string, string>,
-<<<<<<< HEAD
-): FormValidationState {
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
-
-  // Recompute errors whenever values or stmts change.
-  const errors = useMemo(
-    () => validateForm(stmts, values),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stmts, values],
-=======
   files: Record<string, File[]> = {},
 ): FormValidationState {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -63,9 +50,7 @@ export function useFormValidation(
   // Recompute errors whenever values, files, or stmts change.
   const errors = useMemo(
     () => validateForm(stmts, values, files),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [stmts, values, files],
->>>>>>> f6620dd (Complete Formix updates)
   );
 
   const markTouched = useCallback((key: string) => {

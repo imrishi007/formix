@@ -15,19 +15,13 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
-<<<<<<< HEAD
-=======
 from ..deps import get_form_or_403 as _get_form_or_403
 from ..deps import get_project_or_403 as _get_project_or_403
->>>>>>> f6620dd (Complete Formix updates)
 from ..models import Form, Project, User
 from ..schemas import (
     FormCreateInProject,
     FormCreateResponse,
-<<<<<<< HEAD
-=======
     FormDetail,
->>>>>>> f6620dd (Complete Formix updates)
     FormLinkRequest,
     ProjectCreate,
     ProjectDetail,
@@ -37,37 +31,6 @@ from ..schemas import (
 router = APIRouter(tags=["projects"])
 
 
-<<<<<<< HEAD
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _get_project_or_403(project_id: str, user: User, db: Session) -> Project:
-    """Load a project and verify the requesting user is the owner."""
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail="Project not found")
-    if project.owner_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail="You do not have access to this project")
-    return project
-
-
-def _get_form_or_403(form_id: str, user: User, db: Session) -> Form:
-    """Load a form and verify the requesting user owns its parent project."""
-    form = db.query(Form).filter(Form.id == form_id).first()
-    if not form:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail="Form not found")
-    # Verify ownership via the project
-    project = db.query(Project).filter(Project.id == form.project_id).first()
-    if not project or project.owner_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail="You do not have access to this form")
-    return form
-
-
-=======
->>>>>>> f6620dd (Complete Formix updates)
 # ── Project endpoints ─────────────────────────────────────────────────────────
 
 @router.post("/projects", response_model=ProjectResponse, status_code=201)
@@ -132,6 +95,7 @@ def create_form_in_project(
         title=body.title,
         forml_source=body.forml_source,
         compiled_schema=body.compiled_schema,
+        **({"duplicate_mode": body.duplicate_mode} if body.duplicate_mode else {}),
     )
     db.add(form)
     db.commit()
@@ -139,8 +103,6 @@ def create_form_in_project(
     return form
 
 
-<<<<<<< HEAD
-=======
 @router.get("/projects/{project_id}/forms/{form_id}", response_model=FormDetail)
 def get_form_detail(
     project_id: str,
@@ -189,7 +151,6 @@ def delete_form(
     db.commit()
 
 
->>>>>>> f6620dd (Complete Formix updates)
 # ── Form linking ──────────────────────────────────────────────────────────────
 
 @router.patch("/forms/{form_id}/link", status_code=200)

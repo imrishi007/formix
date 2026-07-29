@@ -66,12 +66,9 @@ bool Parser::isSoftKeyword(TokenType t) {
         case TokenType::KW_URL:      case TokenType::KW_SELECT:
         case TokenType::KW_RADIO:    case TokenType::KW_CHECKBOX:
         case TokenType::KW_OPTION:
-<<<<<<< HEAD
-=======
         case TokenType::KW_UPLOAD:
         case TokenType::KW_FILE:     case TokenType::KW_IMAGE:
         case TokenType::KW_PDF:      case TokenType::KW_DOCUMENT:
->>>>>>> f6620dd (Complete Formix updates)
         // data sourcing
         case TokenType::KW_FROM:     case TokenType::KW_MAP:
         case TokenType::KW_LABEL:    case TokenType::KW_VALUE:
@@ -82,12 +79,9 @@ bool Parser::isSoftKeyword(TokenType t) {
         case TokenType::KW_REQUIRED: case TokenType::KW_MIN:
         case TokenType::KW_MAX:      case TokenType::KW_MIN_LENGTH:
         case TokenType::KW_MAX_LENGTH: case TokenType::KW_PATTERN:
-<<<<<<< HEAD
-=======
         case TokenType::KW_ACCEPT:   case TokenType::KW_MAX_SIZE:
         case TokenType::KW_MULTIPLE:
         case TokenType::KW_MIN_FILES: case TokenType::KW_MAX_FILES:
->>>>>>> f6620dd (Complete Formix updates)
         // layout
         case TokenType::KW_ROW:      case TokenType::KW_COLUMN:
         // actions / events
@@ -295,15 +289,12 @@ std::unique_ptr<FieldNode> Parser::parseField() {
         else if (check(TokenType::KW_FROM))    node->source = parseSourceBlock();
     }
 
-<<<<<<< HEAD
-=======
     // upload's config block is optional — `field x : upload` alone (no
     // config) is valid and defaults to accepting any file.
     if (ft == FieldType::Upload && check(TokenType::LEFT_BRACE)) {
         node->uploadBlock = parseUploadBlock();
     }
 
->>>>>>> f6620dd (Complete Formix updates)
     if (check(TokenType::KW_UI))       node->uiBlock        = parseUIBlock();
     if (check(TokenType::KW_VALIDATE)) node->validationBlock = parseValidationBlock();
     if (check(TokenType::KW_COMPUTE))  node->computeBlock   = parseComputeBlock();
@@ -325,11 +316,6 @@ FieldType Parser::parseType() {
         case TokenType::KW_SELECT:   advance(); return FieldType::Select;
         case TokenType::KW_RADIO:    advance(); return FieldType::Radio;
         case TokenType::KW_CHECKBOX: advance(); return FieldType::Checkbox;
-<<<<<<< HEAD
-        default:
-            error(peek(), "Expected a field type (text, integer, float, email, "
-                          "date, boolean, url, select, radio, checkbox)");
-=======
         case TokenType::KW_UPLOAD:   advance(); return FieldType::Upload;
         // Deprecated types — still parsed for backward compatibility; the
         // semantic analyzer rewrites them to FieldType::Upload.
@@ -341,7 +327,6 @@ FieldType Parser::parseType() {
             error(peek(), "Expected a field type (text, integer, float, email, "
                           "date, boolean, url, select, radio, checkbox, upload, "
                           "file, image, pdf, document)");
->>>>>>> f6620dd (Complete Formix updates)
             return FieldType::Text;
     }
 }
@@ -475,8 +460,6 @@ std::optional<ValidationBlockNode> Parser::parseValidationBlock() {
             advance();
             expect(TokenType::COLON, "Expected ':' after 'pattern'");
             vb.pattern = stripQuotes(expect(TokenType::STRING, "Expected string after 'pattern:'").lexeme);
-<<<<<<< HEAD
-=======
         } else if (check(TokenType::KW_ACCEPT)) {
             advance();
             expect(TokenType::COLON, "Expected ':' after 'accept'");
@@ -487,7 +470,6 @@ std::optional<ValidationBlockNode> Parser::parseValidationBlock() {
             vb.maxSize = std::stod(expect(TokenType::NUMBER, "Expected number after 'maxSize:'").lexeme);
         } else if (check(TokenType::KW_MULTIPLE)) {
             advance(); vb.multiple = true;
->>>>>>> f6620dd (Complete Formix updates)
         } else {
             error(peek(), "Unexpected token '" + peek().lexeme + "' in validate block");
             synchronize();
@@ -500,8 +482,6 @@ std::optional<ValidationBlockNode> Parser::parseValidationBlock() {
     return vb;
 }
 
-<<<<<<< HEAD
-=======
 // ── §4: accept_list ───────────────────────────────────────────────────────────
 // EBNF: accept_list = IDENTIFIER { "," IDENTIFIER } ;
 // Bare, comma-separated category names (image, pdf, document, video, audio,
@@ -573,7 +553,6 @@ std::optional<UploadBlockNode> Parser::parseUploadBlock() {
     return ub;
 }
 
->>>>>>> f6620dd (Complete Formix updates)
 // ── §5: section ───────────────────────────────────────────────────────────────
 // EBNF: section = "section" STRING "{" { statement } "}" ;
 std::unique_ptr<SectionNode> Parser::parseSection() {

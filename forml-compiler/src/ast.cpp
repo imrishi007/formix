@@ -48,8 +48,6 @@ std::string fieldTypeToString(FieldType t) {
         case FieldType::Select:   return "select";
         case FieldType::Radio:    return "radio";
         case FieldType::Checkbox: return "checkbox";
-<<<<<<< HEAD
-=======
         case FieldType::Upload:   return "upload";
         // Legacy types are normalized to Upload by the semantic analyzer
         // before serialization, but fall back to their old names if this is
@@ -58,7 +56,6 @@ std::string fieldTypeToString(FieldType t) {
         case FieldType::Image:    return "image";
         case FieldType::Pdf:      return "pdf";
         case FieldType::Document: return "document";
->>>>>>> f6620dd (Complete Formix updates)
         default:                  return "unknown";
     }
 }

@@ -275,7 +275,7 @@ export function AiPanel({
               <Sparkles className="h-4 w-4 text-muted-foreground" />
             </div>
             <p className="font-inter text-sm text-foreground">Select a form to start</p>
-            <p className="max-w-[220px] font-mono text-xs text-muted-foreground">Formix AI works alongside the form you're editing.</p>
+            <p className="max-w-[220px] font-mono text-xs text-muted-foreground">Formix AI works alongside the form you&apos;re editing.</p>
           </div>
         ) : messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-5 px-2 text-center">
@@ -285,7 +285,7 @@ export function AiPanel({
             <div>
               <p className="font-inter text-base font-semibold text-foreground">Formix AI</p>
               <p className="mt-1.5 max-w-[260px] font-inter text-sm text-muted-foreground">
-                Describe the form you want and I'll write the Forml for you — or ask me to explain, fix, or improve what's already in the editor.
+                Describe the form you want and I&apos;ll write the Forml for you — or ask me to explain, fix, or improve what&apos;s already in the editor.
               </p>
             </div>
             <div className="flex w-full max-w-[320px] flex-col gap-2">

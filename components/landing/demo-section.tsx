@@ -204,7 +204,7 @@ function JsonTree({ value }: { value: MockAst }) {
         return (
           <span key={`${key}-${index}`}>
             <span>{indent}</span>
-            <span className="text-foreground">"{key}"</span>
+            <span className="text-foreground">&quot;{key}&quot;</span>
             <span className="text-foreground/40">:</span>
             <span>{rest}</span>
             {index < lines.length - 1 ? "\n" : ""}

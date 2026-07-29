@@ -90,8 +90,6 @@ enum class TokenType {
     KW_CHECKBOX,    // "checkbox" — checkbox group (multi-select)
     KW_OPTION,      // "option"   — one item inside a select/radio/checkbox block
 
-<<<<<<< HEAD
-=======
     KW_UPLOAD,      // "upload"   — generic file upload input, configured via its own
                     //              upload { accept multiple required maxSize minFiles
                     //              maxFiles } block. The canonical upload field type —
@@ -103,7 +101,6 @@ enum class TokenType {
     KW_PDF,         // "pdf"      — DEPRECATED: file upload restricted to application/pdf
     KW_DOCUMENT,    // "document" — DEPRECATED: file upload restricted to document types
 
->>>>>>> f6620dd (Complete Formix updates)
     // =========================================================================
     //  §4  Data Sourcing
     // =========================================================================
@@ -135,14 +132,11 @@ enum class TokenType {
     KW_MIN_LENGTH,  // "minLength"   — minimum string length
     KW_MAX_LENGTH,  // "maxLength"   — maximum string length
     KW_PATTERN,     // "pattern"     — regex pattern the value must match
-<<<<<<< HEAD
-=======
     KW_ACCEPT,      // "accept"      — upload_rule: comma-separated category list (image, pdf, document, video, audio, zip, any)
     KW_MAX_SIZE,    // "maxSize"     — upload_rule: maximum size per file, e.g. "10MB" (also legacy validate-block byte count)
     KW_MULTIPLE,    // "multiple"    — upload_rule: allow selecting more than one file (bare, or "multiple: true")
     KW_MIN_FILES,   // "minFiles"    — upload_rule: minimum number of files that must be selected
     KW_MAX_FILES,   // "maxFiles"    — upload_rule: maximum number of files that may be selected
->>>>>>> f6620dd (Complete Formix updates)
 
     // Layout keywords (§5)
     KW_ROW,         // "row"    — horizontal layout block

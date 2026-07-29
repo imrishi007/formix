@@ -5,24 +5,14 @@
  * Single source of truth for the backend URL — set NEXT_PUBLIC_API_URL
  * in .env.local to override for production; defaults to localhost:8000.
  *
-<<<<<<< HEAD
- * Both the editor publish flow (demo-ide-shell.tsx) and the public
- * respondent page (app/f/[formId]/form-renderer.tsx) import from here.
- * No component should ever hardcode the backend host directly.
-=======
  * Both the workspace (components/workspace/*) and the public respondent
  * page (app/f/[formId]/form-renderer.tsx) import from here. No component
  * should ever hardcode the backend host directly.
->>>>>>> f6620dd (Complete Formix updates)
  */
 
 export const API_BASE =
   (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
-<<<<<<< HEAD
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-=======
 // ── Auth token storage ───────────────────────────────────────────────────────
 // A plain localStorage key, not React state — lib/auth-context.tsx wraps this
 // in a context/hook for components, but request() below needs to read it
@@ -67,11 +57,14 @@ export interface ProjectResponse {
   updated_at: string;
 }
 
+export type DuplicateMode = "multiple" | "single_per_session" | "single_per_email";
+
 export interface FormSummary {
   id: string;
   title: string;
   is_published: boolean;
   next_form_id?: string | null;
+  duplicate_mode: DuplicateMode;
   created_at: string;
 }
 
@@ -80,32 +73,29 @@ export interface ProjectDetail extends ProjectResponse {
 }
 
 // Forms
->>>>>>> f6620dd (Complete Formix updates)
 export interface FormCreate {
   title: string;
   forml_source: string;
   compiled_schema?: unknown;
+  duplicate_mode?: DuplicateMode;
 }
 
 export interface FormUpdate {
   forml_source: string;
   compiled_schema?: unknown;
-<<<<<<< HEAD
-=======
   /** Only sent when the author explicitly accepts a rename suggestion. */
   title?: string;
->>>>>>> f6620dd (Complete Formix updates)
+  duplicate_mode?: DuplicateMode;
 }
 
 export interface FormCreateResponse {
   id: string;
   title: string;
   is_published: boolean;
+  duplicate_mode: DuplicateMode;
   created_at: string;
 }
 
-<<<<<<< HEAD
-=======
 export interface FormDetail {
   id: string;
   project_id: string;
@@ -114,11 +104,11 @@ export interface FormDetail {
   compiled_schema: Record<string, unknown> | null;
   is_published: boolean;
   next_form_id?: string | null;
+  duplicate_mode: DuplicateMode;
   created_at: string;
   updated_at: string;
 }
 
->>>>>>> f6620dd (Complete Formix updates)
 export interface PublishResponse {
   form_id: string;
   public_url: string;
@@ -129,31 +119,96 @@ export interface PublicFormResponse {
   id: string;
   title: string;
   compiled_schema: Record<string, unknown>;
-<<<<<<< HEAD
-=======
   session_id: string;
->>>>>>> f6620dd (Complete Formix updates)
 }
 
 export interface SubmitResponse {
   success: boolean;
   submission_id: string;
-<<<<<<< HEAD
-=======
   next_form_id?: string | null;
   session_id?: string | null;
->>>>>>> f6620dd (Complete Formix updates)
 }
 
 export interface SubmissionRecord {
   id: string;
   form_id: string;
-<<<<<<< HEAD
-=======
   respondent_session_id?: string | null;
->>>>>>> f6620dd (Complete Formix updates)
   data: Record<string, unknown>;
+  browser?: string | null;
+  device?: string | null;
+  started_at?: string | null;
   submitted_at: string;
+}
+
+export interface PaginatedSubmissions {
+  items: SubmissionRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+// Dashboard
+export interface DashboardFormRow {
+  id: string;
+  title: string;
+  project_id: string;
+  project_title: string;
+  is_published: boolean;
+  duplicate_mode: DuplicateMode;
+  created_at: string;
+  updated_at: string;
+  submission_count: number;
+  last_response_at?: string | null;
+}
+
+export interface DashboardSummary {
+  total_projects: number;
+  total_forms: number;
+  published_forms: number;
+  total_submissions: number;
+  today_responses: number;
+  submissions_last_7_days: number;
+}
+
+// Analytics
+export interface AnalyticsDayCount {
+  date: string;
+  count: number;
+}
+
+export interface FieldValueCount {
+  value: string;
+  count: number;
+}
+
+export interface FieldAnalytics {
+  name: string;
+  label: string;
+  field_type: string;
+  answered_count: number;
+  skipped_count: number;
+  option_counts?: FieldValueCount[] | null;
+  numeric_min?: number | null;
+  numeric_max?: number | null;
+  numeric_avg?: number | null;
+  numeric_distribution?: FieldValueCount[] | null;
+  date_min?: string | null;
+  date_max?: string | null;
+  text_samples?: string[] | null;
+}
+
+export interface FormAnalytics {
+  form_id: string;
+  total_submissions: number;
+  today_responses: number;
+  responses_last_7_days: number;
+  responses_last_30_days: number;
+  submissions_by_day: AnalyticsDayCount[];
+  device_breakdown: Record<string, number>;
+  browser_breakdown: Record<string, number>;
+  avg_completion_seconds?: number | null;
+  completion_sample_size: number;
+  fields: FieldAnalytics[];
 }
 
 // ── Error type ────────────────────────────────────────────────────────────────
@@ -168,8 +223,6 @@ export class ApiError extends Error {
   }
 }
 
-<<<<<<< HEAD
-=======
 /** Dispatched on `window` whenever a request that carried a Bearer token
  *  comes back 401 — i.e. the stored session is expired/invalid, as opposed
  *  to a bad-credentials 401 from /auth/login. lib/auth-context.tsx listens
@@ -178,17 +231,10 @@ export class ApiError extends Error {
  *  with the same stale token). */
 export const AUTH_EXPIRED_EVENT = "formix:auth-expired";
 
->>>>>>> f6620dd (Complete Formix updates)
 async function request<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-<<<<<<< HEAD
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
-=======
   const token = getStoredToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -203,22 +249,18 @@ async function request<T>(
     throw new ApiError(0, `Could not reach the Formix server at ${API_BASE} — is the backend running?`);
   }
 
->>>>>>> f6620dd (Complete Formix updates)
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {
       const body = await res.json();
       message = body?.detail ?? message;
     } catch { /* non-JSON error body */ }
-<<<<<<< HEAD
-=======
 
     if (res.status === 401 && token) {
       clearStoredToken();
       if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
     }
 
->>>>>>> f6620dd (Complete Formix updates)
     throw new ApiError(res.status, message);
   }
   // 204 No Content has no body
@@ -226,13 +268,6 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
-<<<<<<< HEAD
-// ── API functions ─────────────────────────────────────────────────────────────
-
-/** Create a new form record (not yet published). Returns the new form ID. */
-export function createForm(payload: FormCreate): Promise<FormCreateResponse> {
-  return request<FormCreateResponse>("/forms", {
-=======
 /** Like `request`, but for multipart/form-data bodies (file uploads) — never
  *  sets a Content-Type header, so the browser fills in the multipart boundary. */
 async function requestMultipart<T>(path: string, body: FormData): Promise<T> {
@@ -304,14 +339,11 @@ export function createFormInProject(
   payload: FormCreate,
 ): Promise<FormCreateResponse> {
   return request<FormCreateResponse>(`/projects/${projectId}/forms`, {
->>>>>>> f6620dd (Complete Formix updates)
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-<<<<<<< HEAD
-=======
 /** Fetch the full author view of a form, including forml_source. */
 export function getFormDetail(projectId: string, formId: string): Promise<FormDetail> {
   return request<FormDetail>(`/projects/${projectId}/forms/${formId}`);
@@ -319,6 +351,11 @@ export function getFormDetail(projectId: string, formId: string): Promise<FormDe
 
 export function deleteForm(projectId: string, formId: string): Promise<void> {
   return request<void>(`/projects/${projectId}/forms/${formId}`, { method: "DELETE" });
+}
+
+/** Create a copy of a form (unpublished) within the same project. */
+export function duplicateForm(formId: string): Promise<FormCreateResponse> {
+  return request<FormCreateResponse>(`/forms/${formId}/duplicate`, { method: "POST" });
 }
 
 /** Set or clear a form's sequential link (next_form_id). */
@@ -329,7 +366,6 @@ export function linkForm(formId: string, nextFormId: string | null): Promise<{ o
   });
 }
 
->>>>>>> f6620dd (Complete Formix updates)
 /** Update an existing form's source and compiled schema. */
 export function updateForm(id: string, payload: FormUpdate): Promise<void> {
   return request<void>(`/forms/${id}`, {
@@ -339,11 +375,7 @@ export function updateForm(id: string, payload: FormUpdate): Promise<void> {
 }
 
 /**
-<<<<<<< HEAD
- * Publish a form.  Sends the final compiled schema and the author's browser
-=======
  * Publish a form. Sends the final compiled schema and the author's browser
->>>>>>> f6620dd (Complete Formix updates)
  * origin so the backend can construct an absolute public URL.
  */
 export function publishForm(
@@ -357,17 +389,31 @@ export function publishForm(
   });
 }
 
-<<<<<<< HEAD
-/**
- * Fetch a published form's compiled schema.
- * Throws ApiError(404) if the form doesn't exist or isn't published.
- */
-export function getForm(id: string): Promise<PublicFormResponse> {
-  return request<PublicFormResponse>(`/forms/${id}`);
-=======
-/** List all submissions for a form (author view). */
+/** Take a form offline. Existing submissions and compiled_schema are kept —
+ *  re-publishing just flips is_published back on. */
+export function unpublishForm(id: string): Promise<{ ok: boolean; is_published: boolean }> {
+  return request(`/forms/${id}/unpublish`, { method: "POST" });
+}
+
+/** List submissions for a form (author view), paginated envelope. */
+export function getResponsesPage(
+  id: string,
+  opts?: { limit?: number; offset?: number; sort?: "asc" | "desc" },
+): Promise<PaginatedSubmissions> {
+  const params = new URLSearchParams();
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.offset != null) params.set("offset", String(opts.offset));
+  if (opts?.sort) params.set("sort", opts.sort);
+  const qs = params.toString();
+  return request<PaginatedSubmissions>(`/forms/${id}/responses${qs ? `?${qs}` : ""}`);
+}
+
+/** All submissions for a form as a plain array (capped at 500 — the backend's
+ *  page-size ceiling). Used by callers that want the old "just give me
+ *  everything" shape (the workspace's Submissions panel and rename-detection
+ *  check); anything that needs real pagination should call getResponsesPage. */
 export function getResponses(id: string): Promise<SubmissionRecord[]> {
-  return request<SubmissionRecord[]>(`/forms/${id}/responses`);
+  return getResponsesPage(id, { limit: 500 }).then((page) => page.items);
 }
 
 /** Fetch a single submission (author view) — used by the full-page "Open Submission" view. */
@@ -378,6 +424,64 @@ export function getResponse(formId: string, submissionId: string): Promise<Submi
 /** Bulk-delete every submission for a form (author view). Used by the "Rename & Delete" flow. */
 export function deleteAllResponses(formId: string): Promise<{ ok: boolean; deleted: number }> {
   return request(`/forms/${formId}/responses`, { method: "DELETE" });
+}
+
+/** Delete a single submission (author view) — the response-management table's per-row delete. */
+export function deleteResponse(formId: string, submissionId: string): Promise<{ ok: boolean }> {
+  return request(`/forms/${formId}/responses/${submissionId}`, { method: "DELETE" });
+}
+
+/** Aggregate analytics for a form (author view): volume by day, device/browser
+ *  breakdowns, average completion time. Raw numbers only — no charting here. */
+export function getFormAnalytics(formId: string): Promise<FormAnalytics> {
+  return request<FormAnalytics>(`/forms/${formId}/analytics`);
+}
+
+/** Absolute URL to download this form's responses as CSV or XLSX. Not fetched
+ *  via `request()` — callers navigate the browser to this URL directly (or
+ *  open it in a new tab) so the browser's native download handling applies,
+ *  since the endpoint requires the Bearer token as a query-string workaround
+ *  is undesirable; instead this is used with an authenticated fetch + blob
+ *  download in the UI layer. */
+export function getExportUrl(formId: string, format: "csv" | "xlsx"): string {
+  return `${API_BASE}/forms/${formId}/responses/export?format=${format}`;
+}
+
+/** Download a form's responses as CSV/XLSX and trigger a browser save,
+ *  carrying the auth token as a header (the export endpoint is author-only). */
+export async function downloadExport(formId: string, format: "csv" | "xlsx", filenameHint: string): Promise<void> {
+  const token = getStoredToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(getExportUrl(formId, format), { headers });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      message = body?.detail ?? message;
+    } catch { /* non-JSON error body */ }
+    throw new ApiError(res.status, message);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${filenameHint}.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+
+export function getDashboardSummary(): Promise<DashboardSummary> {
+  return request<DashboardSummary>("/dashboard/summary");
+}
+
+export function getDashboardForms(): Promise<DashboardFormRow[]> {
+  return request<DashboardFormRow[]>("/dashboard/forms");
 }
 
 // ── Public respondent routes (no auth) ─────────────────────────────────────────
@@ -391,32 +495,16 @@ export function deleteAllResponses(formId: string): Promise<{ ok: boolean; delet
 export function getForm(id: string, session?: string): Promise<PublicFormResponse> {
   const query = session ? `?session=${encodeURIComponent(session)}` : "";
   return request<PublicFormResponse>(`/forms/${id}${query}`);
->>>>>>> f6620dd (Complete Formix updates)
 }
 
 /**
  * Submit a respondent's answers for a published form.
  * `data` is the {fieldName: value} map collected from the form fields.
-<<<<<<< HEAD
-=======
  * `sessionId` correlates this submission with others in the same chained flow.
->>>>>>> f6620dd (Complete Formix updates)
  */
 export function submitForm(
   id: string,
   data: Record<string, string>,
-<<<<<<< HEAD
-): Promise<SubmitResponse> {
-  return request<SubmitResponse>(`/forms/${id}/submit`, {
-    method: "POST",
-    body: JSON.stringify({ data }),
-  });
-}
-
-/** List all submissions for a form (author view). */
-export function getResponses(id: string): Promise<SubmissionRecord[]> {
-  return request<SubmissionRecord[]>(`/forms/${id}/responses`);
-=======
   sessionId?: string,
 ): Promise<SubmitResponse> {
   return request<SubmitResponse>(`/forms/${id}/submit`, {
@@ -446,5 +534,4 @@ export function submitFormWithFiles(
     }
   }
   return requestMultipart<SubmitResponse>(`/forms/${id}/submit-multipart`, formData);
->>>>>>> f6620dd (Complete Formix updates)
 }

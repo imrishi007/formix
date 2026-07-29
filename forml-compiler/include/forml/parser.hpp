@@ -71,15 +71,12 @@ private:
     FieldType                        parseType();
     void                             parseSelectOptions(FieldNode& field);
     std::unique_ptr<SourceBlockNode> parseSourceBlock();
-<<<<<<< HEAD
-=======
     // upload_block = "{" { upload_rule } "}" ;
     // upload_rule  = "accept" ":" accept_list | "multiple" [":" bool] | "required" [":" bool]
     //              | "maxSize" ":" STRING | "minFiles" ":" NUMBER | "maxFiles" ":" NUMBER ;
     std::optional<UploadBlockNode>   parseUploadBlock();
     // accept_list = IDENTIFIER { "," IDENTIFIER } ;  (image, pdf, document, video, audio, zip, any)
     std::vector<std::string>         parseAcceptList();
->>>>>>> f6620dd (Complete Formix updates)
 
     // §5
     std::optional<UIBlockNode>         parseUIBlock();

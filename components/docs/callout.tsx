@@ -37,11 +37,7 @@ interface CalloutProps {
 export function Callout({ type = "note", children }: CalloutProps) {
   const config = calloutConfig[type];
   return (
-<<<<<<< HEAD
-    <div className={`my-5 flex gap-3 border-l-2 px-4 py-3.5 rounded-sm ${config.classes}`}>
-=======
     <div className={`my-5 flex gap-3 border-l-2 px-4 py-3.5 rounded-lg ${config.classes}`}>
->>>>>>> f6620dd (Complete Formix updates)
       <span className="opacity-70">{config.icon}</span>
       <div className="flex-1 min-w-0">
         <span className="text-xs font-mono uppercase tracking-widest opacity-60 block mb-1">
