@@ -276,10 +276,14 @@ async function request<T>(
 
   let res: Response;
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000); // 30s — handles Render cold-start
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
   } catch {
     throw new ApiError(0, `Could not reach the Formix server at ${API_BASE} — is the backend running?`);
   }
