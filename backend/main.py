@@ -81,11 +81,23 @@ app = FastAPI(
 )
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-# Allow all origins for local development.  Tighten to specific domains before
-# any production deployment.
+# ALLOWED_ORIGINS env var: comma-separated list of allowed frontend origins.
+# Set this in Render to your Vercel URL(s), e.g.:
+#   ALLOWED_ORIGINS=https://formix.vercel.app,https://formix-xxx.vercel.app
+# Falls back to localhost for local development.
+#
+# NOTE: "allow_origins=['*']" is incompatible with "allow_credentials=True"
+# per the CORS spec — browsers reject that combo. We must list explicit origins.
+_raw_origins = os.environ.get("ALLOWED_ORIGINS", "")
+_allowed_origins: list[str] = (
+    [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    if _raw_origins
+    else ["http://localhost:3000", "http://127.0.0.1:3000"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
