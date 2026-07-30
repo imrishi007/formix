@@ -108,6 +108,10 @@ app = FastAPI(
 #   ALLOWED_ORIGINS=https://formix.vercel.app,https://formix-xxx.vercel.app
 # Falls back to localhost for local development.
 #
+# Render automatically sets RENDER_EXTERNAL_URL to the service's public URL
+# (e.g. https://formix-j6ww.onrender.com). We add it automatically below so the
+# API docs / direct browser access work from the Render URL itself.
+#
 # NOTE: "allow_origins=['*']" is incompatible with "allow_credentials=True"
 # per the CORS spec — browsers reject that combo. We must list explicit origins.
 _raw_origins = os.environ.get("ALLOWED_ORIGINS", "")
@@ -116,6 +120,15 @@ _allowed_origins: list[str] = (
     if _raw_origins
     else ["http://localhost:3000", "http://127.0.0.1:3000"]
 )
+
+# Auto-add the Render service's own external URL so direct browser access
+# (e.g. visiting /docs or hitting the API from a tool like Postman via the
+# Render URL) doesn't get blocked by CORS.
+_render_url = os.environ.get("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+if _render_url and _render_url not in _allowed_origins:
+    _allowed_origins.append(_render_url)
+
+log.info("CORS allowed origins: %s", _allowed_origins)
 
 app.add_middleware(
     CORSMiddleware,
