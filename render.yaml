@@ -2,10 +2,12 @@ services:
   - type: web
     name: formix-backend
     runtime: python
-    buildCommand: pip install -r backend/requirements.txt
+    buildCommand: pip install -r backend/requirements.txt && alembic -c backend/alembic.ini upgrade head
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
+      - key: DATABASE_URL
+        sync: false
       - key: FORMIX_JWT_SECRET
         sync: false
       - key: GROQ_API_KEY
