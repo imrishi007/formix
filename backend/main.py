@@ -54,16 +54,38 @@ async def lifespan(app: FastAPI):
     try:
         from alembic import command as alembic_command
         from alembic.config import Config as AlembicConfig
+        from sqlalchemy import inspect as sa_inspect
+
+        from .database import engine  # reuse the already-configured engine
 
         _alembic_ini = Path(__file__).parent / "alembic.ini"
         _cfg = AlembicConfig(str(_alembic_ini))
+
+        # ── Handle the "pre-Alembic" state ────────────────────────────────────
+        # The base tables (users, projects, forms, submissions) were created
+        # manually via init_db.py BEFORE Alembic was introduced.  If Alembic
+        # has never tracked this DB (no alembic_version table) but the base
+        # tables already exist, running upgrade from scratch would fail with
+        # "relation already exists".  Instead, stamp the DB at the initial
+        # revision so Alembic only applies the incremental migrations on top.
+        insp = sa_inspect(engine)
+        existing_tables = set(insp.get_table_names())
+        alembic_already_tracking = "alembic_version" in existing_tables
+        base_tables_exist = "users" in existing_tables
+
+        if base_tables_exist and not alembic_already_tracking:
+            log.info(
+                "Pre-Alembic DB detected (base tables exist, no alembic_version). "
+                "Stamping at '0001_initial_schema' before upgrading."
+            )
+            alembic_command.stamp(_cfg, "0001_initial_schema")
+
         alembic_command.upgrade(_cfg, "head")
         log.info("Alembic migrations applied successfully.")
     except Exception as exc:  # noqa: BLE001
-        # Log but don't crash — schema is likely already up to date on
-        # subsequent restarts; a hard failure here would make the service
-        # permanently unavailable.
-        log.error("Alembic migration error (continuing): %s", exc)
+        # Log but don't crash — a hard failure here would make the service
+        # permanently unavailable on subsequent restarts.
+        log.error("Alembic migration error (continuing): %s", exc, exc_info=True)
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     yield
