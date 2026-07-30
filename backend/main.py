@@ -17,6 +17,7 @@ Database schema:
         cd backend && alembic upgrade head
 """
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -24,6 +25,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
+log = logging.getLogger("formix")
 
 # Load .env from the backend/ directory (if present) before any other imports
 # that might read env vars.  python-dotenv is a no-op if the file is absent.
@@ -45,8 +48,23 @@ UPLOAD_DIR = Path(__file__).parent / "uploads"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Schema is managed by Alembic migrations (see backend/alembic/versions/),
-    # not created here — run `alembic upgrade head` before starting the server.
+    # Run any pending Alembic migrations at startup so the schema is always
+    # current.  Doing this here (rather than in the build command) guarantees
+    # DATABASE_URL is already in the environment when the engine is created.
+    try:
+        from alembic import command as alembic_command
+        from alembic.config import Config as AlembicConfig
+
+        _alembic_ini = Path(__file__).parent / "alembic.ini"
+        _cfg = AlembicConfig(str(_alembic_ini))
+        alembic_command.upgrade(_cfg, "head")
+        log.info("Alembic migrations applied successfully.")
+    except Exception as exc:  # noqa: BLE001
+        # Log but don't crash — schema is likely already up to date on
+        # subsequent restarts; a hard failure here would make the service
+        # permanently unavailable.
+        log.error("Alembic migration error (continuing): %s", exc)
+
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     yield
 
