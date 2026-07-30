@@ -116,7 +116,7 @@ app = FastAPI(
 # per the CORS spec — browsers reject that combo. We must list explicit origins.
 _raw_origins = os.environ.get("ALLOWED_ORIGINS", "")
 _allowed_origins: list[str] = (
-    [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    [o.strip().rstrip("/") for o in _raw_origins.split(",") if o.strip()]
     if _raw_origins
     else ["http://localhost:3000", "http://127.0.0.1:3000"]
 )
