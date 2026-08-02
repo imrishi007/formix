@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { FormixLogo } from "@/components/brand/formix-logo";
 
 interface NavItem {
   title: string;
@@ -118,6 +119,8 @@ export function DocsSidebar() {
       {/* Brand */}
       <div className="px-4 py-5 border-b border-foreground/10">
         <Link href="/" className="flex items-center gap-2 group">
+          {/* Shared brand mark — single component, replaces the text-only lockup */}
+          <FormixLogo size={20} variant="color" aria-hidden="true" />
           <span className="font-display text-lg tracking-tight">Formix</span>
           <span className="text-muted-foreground font-mono text-xs mt-0.5">.forml</span>
         </Link>

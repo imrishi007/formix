@@ -1,26 +1,23 @@
 // lib/ai-engine.ts
 //
-// Formix AI — the assistant behind the workspace's AI panel.
+// The original rule-based Formix AI engine has been retired: the workspace AI
+// panel now talks to the LLM-backed chat endpoint (backend/routers/ai.py)
+// through hooks/use-ai-chat.ts + lib/ai-loop.ts (streaming explanation,
+// compile-and-repair loop, server-side history, local diffs).
 //
-// There is no AI backend yet, so everything below is a deterministic,
-// rule-based engine: template matching + keyword heuristics for
-// generation, and pattern matching over the real Forml grammar for
-// explain/fix/improve. It produces genuinely valid Forml (verified against
-// the same grammar as lib/forml-file-system.ts's sample files) rather than
-// placeholder text, so "Insert into Editor" always compiles.
-//
-// The seam for a real backend is `runAssistant()` at the bottom of this
-// file — components/workspace/ai-panel.tsx and hooks/use-ai-chat.ts only
-// ever call `runAssistant` and `streamReply`. Swapping this file's
-// internals for a real HTTP/SSE call to an LLM backend later requires no
-// change anywhere else.
+// What survives here is ONLY what the homepage's Live Demo widget and the
+// panel's empty-state chips still need:
+//   - `generateForm`  — deterministic template+keyword generation for the
+//                       landing page (runs entirely client-side, no context)
+//   - `SUGGESTED_PROMPTS` — the "describe your form..." chips
+//   - the `AiContext` type — still used by hooks/use-ai-chat.ts
 
 import { SAMPLE_FILES } from "@/lib/forml-file-system";
 import type { FormlDiagnostic } from "@/lib/use-forml-compiler";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
-export type AiIntent = "generate" | "explain" | "fix" | "improve" | "chat";
+export type AiIntent = "generate" | "edit" | "explain" | "fix" | "improve" | "chat";
 
 export interface AiContext {
   source: string;
@@ -34,24 +31,11 @@ export interface AiResult {
   applyLabel?: string;
 }
 
-// ── Intent detection ──────────────────────────────────────────────────────────
-// Quick actions in the panel pass their own intent explicitly; this is only
-// used to route free-typed messages from the "Describe your form..." composer.
-
-export function detectIntent(raw: string): AiIntent {
-  const t = raw.toLowerCase().trim();
-  if (/\bfix\b|\berror/.test(t)) return "fix";
-  if (/\bexplain\b|what does|what is\b/.test(t)) return "explain";
-  if (/\bimprove\b|\bbetter\b|\benhance\b|\boptimi[sz]e\b|\bsuggest/.test(t)) return "improve";
-  if (t.length < 4) return "chat";
-  return "generate";
-}
-
 // ── Template library ──────────────────────────────────────────────────────────
 // Reuses the app's own verified sample forms (lib/forml-file-system.ts) as
 // "generated" output whenever a prompt clearly matches one of them — this
-// guarantees the AI panel's most common outputs are syntactically perfect
-// and demonstrate the full grammar, not a thin placeholder.
+// guarantees the demo's most common outputs are syntactically perfect and
+// demonstrate the full grammar, not a thin placeholder.
 
 interface TemplateMatcher {
   test: RegExp;
@@ -186,15 +170,6 @@ function fieldNamesIn(source: string): Set<string> {
   return new Set([...source.matchAll(/field\s+(\w+)\s*:/g)].map((m) => m[1]));
 }
 
-/**
- * @param allowUploads  `upload` fields are real DSL syntax (forml-compiler
- *   supports them), but the currently-deployed forml.wasm binary predates
- *   that grammar addition and won't parse them until it's rebuilt. The
- *   homepage's Live Demo widget calls generateForm() with no context and
- *   runs entirely on that (not-yet-rebuilt) binary, so upload requirements
- *   are suppressed there to avoid handing it unparseable DSL; the
- *   workspace's AI panel always passes a real AiContext and keeps them.
- */
 function detectRequirements(prompt: string, existingNames: Set<string>, allowUploads: boolean): RequirementRule[] {
   const matched: RequirementRule[] = [];
   const matchedKeys = new Set<string>();
@@ -373,8 +348,10 @@ function renderField(spec: FieldSpec): string {
 
 export function generateForm(prompt: string, context?: AiContext): AiResult {
   const trimmed = prompt.trim();
-  // See detectRequirements' doc comment — only the workspace AI panel (which
-  // always passes a real context) gets upload-type requirement fields.
+  // `upload` fields are real DSL syntax (forml-compiler supports them), but
+  // the homepage Live Demo widget runs on a WASM binary that may predate that
+  // grammar addition, so upload requirements are suppressed there (no context
+  // is passed); callers with a real context keep them.
   const allowUploads = context !== undefined;
 
   // ── 1. Ambiguous? Ask before generating anything. ─────────────────────────
@@ -396,12 +373,9 @@ export function generateForm(prompt: string, context?: AiContext): AiResult {
     const reqs = withImpliedRequirement(detectedReqs, matched, baseNames, allowUploads);
     const merged = reqs.length ? injectFields(base, reqs.map((r) => renderField(r.spec)).join("\n\n")) : base;
 
-    const detected = `**Detected form type:** ${matched.label}` +
-      (reqs.length ? `\n**Additional requirements:** ${describeRequirements(reqs)}` : "");
-
     const reqClause = reqs.length ? `, plus ${describeRequirements(reqs).toLowerCase()}` : "";
     return {
-      reply: `${detected}\n\nHere's ${matched.blurb}${reqClause}, built with Forml's full field set — labels, validation, and a submit action all included. Review it below, then insert it into the editor whenever you're ready.`,
+      reply: `Here's ${matched.blurb}${reqClause}, built with Forml's full field set — labels, validation, and a submit action are included. Review it below, then insert it into the editor whenever you're ready.`,
       formlCode: merged,
       applyLabel: "Insert into Editor",
     };
@@ -436,219 +410,10 @@ export function generateForm(prompt: string, context?: AiContext): AiResult {
   const fieldsSrc = specs.map(renderField).join("\n\n");
   const formlCode = `form "${title}" {\n\n${fieldsSrc}\n\n  action submit {\n    endpoint: "https://api.formix.dev/submit"\n    method: POST\n  }\n}`;
 
-  const detected = `**Detected form type:** Custom form (no close template match — built from your description)` +
-    (reqs.length ? `\n**Additional requirements:** ${describeRequirements(reqs)}` : "");
-
   return {
-    reply: `${detected}\n\nHere's a draft for **${title}** with ${specs.length} field${specs.length === 1 ? "" : "s"} based on your description. Insert it into the editor, then keep chatting with me to refine it further.`,
+    reply: `Here's a draft for **${title}** with ${specs.length} field${specs.length === 1 ? "" : "s"} based on your description. Insert it into the editor, then keep chatting with me to refine it further.`,
     formlCode,
     applyLabel: "Insert into Editor",
-  };
-}
-
-// ── Explain ────────────────────────────────────────────────────────────────────
-
-const FIELD_TYPE_EXPLANATIONS: Record<string, string> = {
-  text: "single-line free text — names, descriptions, short answers.",
-  email: "an email address input, validated for email format automatically.",
-  integer: "whole numbers only, checked against any min/max constraints.",
-  float: "decimal numbers — monetary values, measurements.",
-  boolean: "a single checkbox; the value is true or false.",
-  date: "a date picker; the value is an ISO 8601 date string.",
-  url: "a URL input, validated as a well-formed URL.",
-  select: "a dropdown of options — one choice.",
-  radio: "a radio-button group — all options visible, one choice.",
-  checkbox: "a checkbox group — multiple choices allowed.",
-};
-
-const KEYWORD_EXPLANATIONS: Record<string, string> = {
-  form: "Declares a new form and its title — everything inside the braces belongs to it.",
-  ui: "Controls how the field is presented: its label, placeholder, help text, or default value.",
-  validate: "Declares constraints — required, min/max, minLength/maxLength, or a pattern — enforced before submit.",
-  action: "Declares what happens on submit — where the data is sent, and with which HTTP method.",
-  option: "Adds one selectable choice to a select, radio, or checkbox field.",
-  page: "Splits the form into a named step of a multi-page wizard.",
-  section: "Groups related fields under a heading, purely for layout.",
-  row: "Lays out its fields side-by-side instead of stacked.",
-  group: "Defines a reusable block of fields that can be dropped in elsewhere with `use`.",
-  use: "Inserts a previously-declared `group`'s fields at this point.",
-  repeat: "Repeats its block of fields N times, where N comes from another integer field via `count`.",
-  if: "Shows its block of fields only when the condition is true — hidden fields are excluded from submission too.",
-  else: "The alternate block shown when the `if` condition is false.",
-  compute: "Derives this field's value automatically from an expression instead of user input.",
-  on: "Declares a lifecycle trigger — load, change, blur, or submit — that runs an action.",
-  var: "Declares a named constant reusable elsewhere in the form.",
-  from: "Loads a field's options dynamically from a URL or `var` instead of hardcoding them.",
-  map: "Tells a dynamic `from` source which JSON keys to use as the option label and value.",
-};
-
-export function explainForml(selection: string, fullSource: string): AiResult {
-  const hasSelection = selection.trim().length > 0;
-  const snippet = hasSelection ? selection.trim() : fullSource.trim();
-  const scope = hasSelection ? "the selected code" : "your whole form (nothing was selected, so here's the full picture)";
-
-  if (!snippet) {
-    return { reply: "There's nothing to explain yet — write or generate some Forml first." };
-  }
-
-  const lines: string[] = [];
-  const titleMatch = snippet.match(/form\s+"([^"]+)"/);
-  if (titleMatch) lines.push(`**form** — a form titled "${titleMatch[1]}".`);
-
-  const fieldMatches = [...snippet.matchAll(/field\s+(\w+)\s*:\s*(\w+)/g)];
-  for (const m of fieldMatches) {
-    const [, name, type] = m;
-    lines.push(`**${name}** (\`${type}\`) — ${FIELD_TYPE_EXPLANATIONS[type] ?? "a custom field type."}`);
-  }
-
-  for (const [kw, desc] of Object.entries(KEYWORD_EXPLANATIONS)) {
-    if (new RegExp(`\\b${kw}\\b`).test(snippet)) lines.push(`**${kw}** — ${desc}`);
-  }
-
-  if (lines.length === 0) {
-    return { reply: `I couldn't recognise any Forml syntax in ${scope} — try selecting a \`field\`, \`ui\`, \`validate\`, or \`action\` block.` };
-  }
-
-  return { reply: `Here's what ${scope} does:\n\n${lines.map((l) => `- ${l}`).join("\n")}` };
-}
-
-// ── Fix compiler errors ─────────────────────────────────────────────────────────
-// Deterministic repairs for the two most common hand-written-DSL slip-ups:
-// unbalanced braces and a missing `:` before the field type. Anything else is
-// described honestly rather than silently guessed at.
-
-function balanceBraces(source: string): { fixed: string; delta: number } {
-  let depth = 0;
-  let inString = false;
-  for (let i = 0; i < source.length; i++) {
-    const ch = source[i];
-    if (ch === '"' && source[i - 1] !== "\\") inString = !inString;
-    if (inString) continue;
-    if (ch === "{") depth++;
-    else if (ch === "}") depth--;
-  }
-  if (depth === 0) return { fixed: source, delta: 0 };
-  if (depth > 0) return { fixed: source.replace(/\s*$/, "") + "\n" + "}\n".repeat(depth).trim(), delta: depth };
-
-  let toRemove = -depth;
-  let out = source;
-  let idx = out.length;
-  while (toRemove > 0 && idx > 0) {
-    idx--;
-    if (out[idx] === "}") {
-      out = out.slice(0, idx) + out.slice(idx + 1);
-      toRemove--;
-    }
-  }
-  return { fixed: out, delta: depth };
-}
-
-const FIELD_TYPE_ALTERNATION = "(text|email|integer|float|boolean|date|url|select|radio|checkbox)";
-
-function fixMissingColon(source: string): { fixed: string; count: number } {
-  const re = new RegExp(`(field\\s+\\w+)\\s+${FIELD_TYPE_ALTERNATION}\\b`, "g");
-  let count = 0;
-  const fixed = source.replace(re, (_whole, pre: string, type: string) => {
-    count++;
-    return `${pre} : ${type}`;
-  });
-  return { fixed, count };
-}
-
-export function fixErrors(context: AiContext): AiResult {
-  const { source, diagnostics } = context;
-  const errors = diagnostics.filter((d) => d.severity === "error");
-
-  if (errors.length === 0) {
-    return { reply: "Your form compiles cleanly — there's nothing to fix. ✨" };
-  }
-
-  const errorList = errors.map((d) => `- Line ${d.line}, Col ${d.col}: ${d.message}`).join("\n");
-
-  let working = source;
-  const notes: string[] = [];
-
-  const { fixed: colonFixed, count: colonCount } = fixMissingColon(working);
-  if (colonCount > 0) {
-    working = colonFixed;
-    notes.push(`added the missing \`:\` before the type on ${colonCount} field${colonCount === 1 ? "" : "s"}`);
-  }
-
-  const { fixed: braceFixed, delta } = balanceBraces(working);
-  if (delta > 0) {
-    working = braceFixed;
-    notes.push(`added ${delta} missing closing brace${delta === 1 ? "" : "s"} (\`}\`)`);
-  } else if (delta < 0) {
-    working = braceFixed;
-    notes.push(`removed ${-delta} extra closing brace${-delta === 1 ? "" : "s"} (\`}\`)`);
-  }
-
-  if (notes.length === 0) {
-    return {
-      reply: `I found ${errors.length} error${errors.length === 1 ? "" : "s"} I can point out but can't safely auto-fix yet:\n\n${errorList}\n\nThe diagnostics panel points at the exact line and column — try adjusting those.`,
-    };
-  }
-
-  return {
-    reply: `I found these compiler errors:\n\n${errorList}\n\nI ${notes.join(" and ")}. Review the corrected version below, then apply it if it looks right.`,
-    formlCode: working,
-    applyLabel: "Apply Fix",
-  };
-}
-
-// ── Improve ────────────────────────────────────────────────────────────────────
-
-export function improveForm(source: string): AiResult {
-  if (!source.trim()) {
-    return { reply: "There's no form yet to improve — generate or write one first." };
-  }
-
-  const suggestions: string[] = [];
-  let working = source;
-  const hasAction = /action\s+submit\s*\{/.test(source);
-  if (!hasAction) {
-    working = working.replace(/\}\s*$/, `\n  action submit {\n    endpoint: "https://api.formix.dev/submit"\n    method: POST\n  }\n}`);
-    suggestions.push("added a missing `action submit` block — without it, submitted data has nowhere to go");
-  }
-
-  const fieldMatches = [...source.matchAll(/field\s+(\w+)\s*:\s*(\w+)/g)];
-  const missingValidation: string[] = [];
-  const missingLabel: string[] = [];
-  for (const m of fieldMatches) {
-    const name = m[1];
-    const start = m.index ?? 0;
-    const nextFieldIdx = source.indexOf("field ", start + 6);
-    const nextActionIdx = source.indexOf("action ", start);
-    const candidates = [nextFieldIdx, nextActionIdx, source.length].filter((i) => i > start);
-    const end = candidates.length ? Math.min(...candidates) : source.length;
-    const region = source.slice(start, end);
-    if (!/validate\s*\{/.test(region)) missingValidation.push(name);
-    if (!/ui\s*\{[\s\S]*?label\s*:/.test(region)) missingLabel.push(name);
-  }
-  if (missingValidation.length) suggestions.push(`consider adding \`validate { required }\` to: ${missingValidation.join(", ")}`);
-  if (missingLabel.length) suggestions.push(`consider adding a \`ui { label: ... }\` to: ${missingLabel.join(", ")} — right now they'll fall back to showing the raw field name`);
-
-  if (suggestions.length === 0) {
-    return { reply: "This form already looks solid — every field has a label and validation, and there's a submit action. Nothing obvious to improve!" };
-  }
-
-  const reply = `Here's what I'd tighten up:\n\n${suggestions.map((s) => `- ${s}`).join("\n")}`;
-
-  if (!hasAction) {
-    return {
-      reply: `${reply}\n\nI've added the missing submit action below — apply it whenever you're ready.`,
-      formlCode: working,
-      applyLabel: "Apply Improvement",
-    };
-  }
-  return { reply };
-}
-
-// ── Generic chat ─────────────────────────────────────────────────────────────
-
-export function genericChat(): AiResult {
-  return {
-    reply: "I'm Formix AI — I can generate a Forml form from a description, explain selected code, fix compiler errors, or suggest improvements to your current form. Try describing a form, or use one of the quick actions above.",
   };
 }
 
@@ -663,47 +428,14 @@ export const SUGGESTED_PROMPTS: string[] = [
   "User registration with age and terms checkbox",
 ];
 
-// ── Entry point — the seam for a real backend later ─────────────────────────
-// Everything above this line is a swappable mock implementation. A real
-// integration (e.g. POST /ai/chat streamed over SSE) only needs to replace
-// this function's body — callers never know the difference.
-
-export function runAssistant(intent: AiIntent, text: string, context: AiContext): AiResult {
-  switch (intent) {
-    case "generate": return generateForm(text, context);
-    case "explain": return explainForml(context.selection ?? "", context.source);
-    case "fix": return fixErrors(context);
-    case "improve": return improveForm(context.source);
-    case "chat":
-    default: return genericChat();
-  }
-}
-
-// ── Streaming simulation ──────────────────────────────────────────────────────
-// Reveals `fullText` progressively so the panel can render a real streaming
-// UI. Returns a cancel function (stop button / unmount / new message sent).
-
-export function streamReply(fullText: string, onToken: (soFar: string) => void, onDone: () => void): () => void {
-  let cancelled = false;
-  let i = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
-  const step = () => {
-    if (cancelled) return;
-    const chunkSize = 2 + Math.floor(Math.random() * 3);
-    i = Math.min(fullText.length, i + chunkSize);
-    onToken(fullText.slice(0, i));
-    if (i >= fullText.length) {
-      onDone();
-      return;
-    }
-    timer = setTimeout(step, 12 + Math.random() * 18);
-  };
-
-  timer = setTimeout(step, 150 + Math.random() * 150);
-
-  return () => {
-    cancelled = true;
-    if (timer) clearTimeout(timer);
-  };
-}
+// Prompts for the workspace AI panel's empty-state chips. These mix form
+// generation with conversational asks — the assistant is a two-mode chatbot
+// (edit the form OR just chat about Forml), so the chips invite both.
+export const PANEL_PROMPTS: string[] = [
+  "A contact form with name, email, and message",
+  "Add a phone field with validation to my form",
+  "Fix the compiler errors in my form",
+  "Explain the selected code",
+  "What is Forml and how does it work?",
+  "How do I add validation to a field?",
+];

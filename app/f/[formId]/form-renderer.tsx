@@ -143,7 +143,7 @@ export function FormRenderer({ formId }: { formId: string }) {
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-accent" />
-          <p className="font-inter text-sm text-muted-foreground">Loading form…</p>
+          <p className="text-sm text-muted-foreground">Loading form…</p>
         </div>
       </div>
     );
@@ -157,8 +157,8 @@ export function FormRenderer({ formId }: { formId: string }) {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-accent/10">
             <AlertCircle className="h-7 w-7 text-accent" />
           </div>
-          <p className="font-inter text-base font-bold text-foreground">Form not found</p>
-          <p className="mt-2 font-inter text-sm text-muted-foreground">
+          <p className="text-base font-bold text-foreground">Form not found</p>
+          <p className="mt-2 text-sm text-muted-foreground">
             This form doesn&apos;t exist or hasn&apos;t been published yet.
           </p>
         </div>
@@ -178,7 +178,7 @@ export function FormRenderer({ formId }: { formId: string }) {
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
             <ArrowRight className="h-7 w-7 animate-pulse text-accent" />
           </div>
-          <p className="font-inter text-base font-semibold text-foreground">Thanks! Continuing to the next form…</p>
+          <p className="text-base font-semibold text-foreground">Thanks! Continuing to the next form…</p>
         </motion.div>
       </div>
     );
@@ -203,8 +203,8 @@ export function FormRenderer({ formId }: { formId: string }) {
             <CheckCircle2 className="h-10 w-10 text-accent" />
           </motion.div>
           <div>
-            <p className="font-inter text-2xl font-bold tracking-tight text-foreground">Response submitted!</p>
-            <p className="mt-2 font-inter text-sm leading-relaxed text-muted-foreground">
+            <p className="text-2xl font-bold tracking-tight text-foreground">Response submitted!</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               Thank you for filling out{" "}
               <span className="font-semibold text-foreground">{formTitle}</span>.
             </p>
@@ -224,7 +224,7 @@ export function FormRenderer({ formId }: { formId: string }) {
               setSubmitError(null);
               setSubmissionId(null);
             }}
-            className="mt-2 flex items-center gap-2 rounded-lg border border-border bg-muted px-5 py-2.5 font-inter text-sm font-medium text-foreground transition-all hover:border-accent/40 hover:text-accent"
+            className="mt-2 flex items-center gap-2 rounded-lg border border-border bg-muted px-5 py-2.5 text-sm font-medium text-foreground transition-all hover:border-accent/40 hover:text-accent"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Submit another response
@@ -241,7 +241,7 @@ export function FormRenderer({ formId }: { formId: string }) {
       <div className="fixed left-4 top-4 z-10">
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-card/90 px-2.5 py-1 font-inter text-xs font-semibold text-accent shadow-sm backdrop-blur transition-colors hover:border-accent/40"
+          className="inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-card/90 px-2.5 py-1 text-xs font-semibold text-accent shadow-sm backdrop-blur transition-colors hover:border-accent/40"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-accent" />
           Formix
@@ -259,16 +259,16 @@ export function FormRenderer({ formId }: { formId: string }) {
           {/* Header */}
           <div className="border-b border-border bg-muted/50 px-7 py-7">
             <div className="mb-3 flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2.5 py-0.5 font-inter text-xs font-semibold uppercase tracking-[0.15em] text-accent">
+              <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-[0.15em] text-accent">
                 Form
               </span>
               {fieldCount > 0 && (
-                <span className="font-inter text-xs text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {fieldCount} {fieldCount === 1 ? "field" : "fields"}
                 </span>
               )}
             </div>
-            <h1 className="font-inter text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
               {formTitle}
             </h1>
           </div>
@@ -288,7 +288,7 @@ export function FormRenderer({ formId }: { formId: string }) {
                   onFileChange={handleFileChange}
                 />
               ) : (
-                <p className="font-inter text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   No fields found in this form.
                 </p>
               )}
@@ -307,7 +307,7 @@ export function FormRenderer({ formId }: { formId: string }) {
                   className="mb-3 flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-3"
                 >
                   <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-destructive" />
-                  <p className="font-inter text-sm leading-relaxed text-destructive">
+                  <p className="text-sm leading-relaxed text-destructive">
                     Please fix {errorCount} {errorCount === 1 ? "error" : "errors"} before submitting.
                   </p>
                 </motion.div>
@@ -321,7 +321,7 @@ export function FormRenderer({ formId }: { formId: string }) {
                   className="mb-3 flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-3"
                 >
                   <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-destructive" />
-                  <p className="font-inter text-sm leading-relaxed text-destructive">
+                  <p className="text-sm leading-relaxed text-destructive">
                     {submitError}
                   </p>
                 </motion.div>
@@ -333,7 +333,7 @@ export function FormRenderer({ formId }: { formId: string }) {
               type="button"
               onClick={handleSubmit}
               disabled={submitState === "submitting"}
-              className="w-full rounded-lg bg-accent py-3 font-inter text-sm font-semibold text-accent-foreground shadow-sm transition-all duration-150 hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-lg bg-accent py-3 text-sm font-semibold text-accent-foreground shadow-sm transition-all duration-150 hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitState === "submitting" ? (
                 <span className="flex items-center justify-center gap-2">
@@ -348,7 +348,7 @@ export function FormRenderer({ formId }: { formId: string }) {
         </motion.div>
 
         {/* Footer */}
-        <p className="mt-5 text-center font-inter text-xs text-muted-foreground">
+        <p className="mt-5 text-center text-xs text-muted-foreground">
           Powered by{" "}
           <Link href="/" className="text-accent transition-colors hover:opacity-75">
             Formix

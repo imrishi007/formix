@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 /**
  * components/workspace/diagnostics-panel.tsx
@@ -35,7 +35,7 @@ function DiagnosticsContent({ tab, compileResult, activeFormTitle, log }: {
   if (tab === "console") {
     if (log.length === 0) {
       return (
-        <div className="p-4 font-mono text-xs text-muted-foreground">
+        <div className="p-4 text-xs text-(--ink-tertiary)">
           {"// Console output appears here as you compile and publish."}
         </div>
       );
@@ -43,14 +43,14 @@ function DiagnosticsContent({ tab, compileResult, activeFormTitle, log }: {
     return (
       <div className="space-y-0.5 p-2">
         {log.map((entry) => (
-          <div key={entry.id} className="flex items-start gap-2.5 rounded-sm px-2 py-1 hover:bg-muted/50">
-            <span className="flex-none font-mono text-xs text-muted-foreground">{entry.ts}</span>
-            <span className={`flex-none font-mono text-xs ${
-              entry.level === "error" ? "text-destructive" : entry.level === "success" ? "text-success" : "text-accent"
+          <div key={entry.id} className="flex items-start gap-2.5 rounded-sm px-2 py-1 hover:bg-(--bg-subtle)/50">
+            <span className="flex-none text-xs text-(--ink-tertiary)">{entry.ts}</span>
+            <span className={`flex-none text-xs ${
+              entry.level === "error" ? "text-(--accent-danger)" : entry.level === "success" ? "text-(--accent-success)" : "text-(--accent-primary)"
             }`}>
               {entry.level === "error" ? "✗" : entry.level === "success" ? "✓" : "›"}
             </span>
-            <span className="font-mono text-xs leading-relaxed text-foreground">{entry.message}</span>
+            <span className="text-xs leading-relaxed text-(--ink-primary)">{entry.message}</span>
           </div>
         ))}
       </div>
@@ -62,23 +62,23 @@ function DiagnosticsContent({ tab, compileResult, activeFormTitle, log }: {
     const warnings = diags.filter((d) => d.severity === "warning");
     if (diags.length === 0)
       return (
-        <div className="flex items-center gap-2 p-4 text-muted-foreground">
-          <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-          <span className="font-inter text-sm">No problems detected</span>
+        <div className="flex items-center gap-2 p-4 text-(--ink-secondary)">
+          <CheckCircle2 className="h-3.5 w-3.5 text-(--accent-success)" />
+          <span className="text-sm">No problems detected</span>
         </div>
       );
     return (
       <div className="space-y-1 p-4">
         {[...errors, ...warnings].map((d, i) => (
-          <div key={i} className="flex items-start gap-2.5 rounded-sm px-2 py-1.5 hover:bg-muted/50">
+          <div key={i} className="flex items-start gap-2.5 rounded-sm px-2 py-1.5 hover:bg-(--bg-subtle)/50">
             {d.severity === "error"
-              ? <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none text-destructive" />
-              : <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none text-warning" />}
+              ? <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-none text-(--accent-danger)" />
+              : <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none text-(--accent-secondary)" />}
             <div>
-              <p className={`font-inter text-sm ${d.severity === "error" ? "text-destructive" : "text-warning"}`}>
+              <p className={`text-sm ${d.severity === "error" ? "text-(--accent-danger)" : "text-(--accent-secondary)"}`}>
                 {d.message}
               </p>
-              <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+              <p className="mt-0.5 text-xs text-(--ink-tertiary)">
                 {activeFormTitle} · Line {d.line}, Col {d.col}
               </p>
             </div>
@@ -89,14 +89,14 @@ function DiagnosticsContent({ tab, compileResult, activeFormTitle, log }: {
   }
   if (tab === "ast") {
     return (
-      <pre className="overflow-auto p-4 font-mono text-xs leading-relaxed text-muted-foreground">
+      <pre className="overflow-auto p-4 text-xs leading-relaxed text-(--ink-tertiary)">
         {compileResult?.ast ? JSON.stringify(compileResult.ast, null, 2) : "// No AST — fix compile errors first."}
       </pre>
     );
   }
   if (tab === "json") {
     const ast = compileResult?.ast as ASTNode | null;
-    if (!ast) return <pre className="p-4 font-mono text-xs text-muted-foreground">{"// No schema — fix compile errors first."}</pre>;
+    if (!ast) return <pre className="p-4 text-xs text-(--ink-tertiary)">{"// No schema — fix compile errors first."}</pre>;
     const stmts = ((ast.statements as ASTNode[]) ?? []).filter((s) => s.type === "Field");
     const schema = {
       $schema: "https://formix.dev/schema/v1",
@@ -107,14 +107,14 @@ function DiagnosticsContent({ tab, compileResult, activeFormTitle, log }: {
       }),
     };
     return (
-      <pre className="overflow-auto p-4 font-mono text-xs leading-relaxed text-muted-foreground">
+      <pre className="overflow-auto p-4 text-xs leading-relaxed text-(--ink-tertiary)">
         {JSON.stringify(schema, null, 2)}
       </pre>
     );
   }
   if (tab === "tokens") {
     const ast = compileResult?.ast as ASTNode | null;
-    if (!ast) return <pre className="p-4 font-mono text-xs text-muted-foreground">{"// Compile to see tokens."}</pre>;
+    if (!ast) return <pre className="p-4 text-xs text-(--ink-tertiary)">{"// Compile to see tokens."}</pre>;
     const stmts = ((ast.statements as ASTNode[]) ?? []).filter((s) => s.type === "Field");
     const tokens = [
       { token: "form", type: "KEYWORD" },
@@ -130,20 +130,20 @@ function DiagnosticsContent({ tab, compileResult, activeFormTitle, log }: {
     ];
     return (
       <div className="overflow-auto">
-        <table className="w-full font-mono text-xs">
+        <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-border">
+            <tr className="border-b border-(--border-hairline)">
               {["#", "Token", "Type"].map((h) => (
-                <th key={h} className="px-4 py-2 text-left font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{h}</th>
+                <th key={h} className="px-4 py-2 text-left text-xs uppercase tracking-[0.08em] text-(--ink-tertiary)">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {tokens.map((tok, i) => (
-              <tr key={i} className="border-b border-border transition-colors hover:bg-muted/50">
-                <td className="px-4 py-1.5 text-muted-foreground">{i}</td>
-                <td className="px-4 py-1.5 text-foreground">{tok.token}</td>
-                <td className="px-4 py-1.5 text-accent">{tok.type}</td>
+              <tr key={i} className="border-b border-(--border-hairline) transition-colors hover:bg-(--bg-subtle)/50">
+                <td className="px-4 py-1.5 text-(--ink-tertiary)">{i}</td>
+                <td className="px-4 py-1.5 text-(--ink-primary)">{tok.token}</td>
+                <td className="px-4 py-1.5 text-(--accent-primary)">{tok.type}</td>
               </tr>
             ))}
           </tbody>
@@ -163,8 +163,8 @@ export function DiagnosticsPanel({ onToggle, compileResult, activeFormTitle, log
   const panelId = useId();
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-t border-border bg-card">
-      <div role="tablist" aria-label="Diagnostics" className="flex h-9 flex-none items-center border-b border-border px-1">
+    <div className="flex h-full min-h-0 flex-col border-t border-(--border-hairline) bg-(--bg-surface)">
+      <div role="tablist" aria-label="Diagnostics" className="flex h-9 flex-none items-center border-b border-(--border-hairline) px-1">
         {DIAG_TABS.map((t) => (
           <button
             key={t.id}
@@ -173,21 +173,21 @@ export function DiagnosticsPanel({ onToggle, compileResult, activeFormTitle, log
             aria-selected={activeTab === t.id}
             aria-controls={`${panelId}-${t.id}`}
             onClick={() => setActiveTab(t.id)}
-            className={`relative flex h-full items-center gap-1.5 px-4 font-inter text-xs font-medium transition-colors duration-150 ${
-              activeTab === t.id ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+            className={`relative flex h-full items-center gap-1.5 px-4 text-xs font-medium transition-colors duration-150 ${
+              activeTab === t.id ? "text-(--ink-primary)" : "text-(--ink-tertiary) hover:text-(--ink-primary)"
             }`}
           >
             {activeTab === t.id && (
-              <span className="ease-signature absolute inset-x-0 bottom-0 h-[2px] bg-accent" />
+              <span className="ease-signature absolute inset-x-0 bottom-0 h-[2px] bg-(--accent-primary)" />
             )}
             {t.label}
             {t.id === "problems" && errorCount > 0 && (
-              <span className="flex h-3.5 min-w-[14px] items-center justify-center rounded bg-destructive/15 px-1 font-mono text-[10px] font-bold text-destructive">
+              <span className="flex h-3.5 min-w-[14px] items-center justify-center rounded bg-(--accent-danger)/15 px-1 text-[10px] font-bold text-(--accent-danger)">
                 {errorCount}
               </span>
             )}
             {t.id === "problems" && warnCount > 0 && errorCount === 0 && (
-              <span className="flex h-3.5 min-w-[14px] items-center justify-center rounded bg-warning/15 px-1 font-mono text-[10px] font-bold text-warning">
+              <span className="flex h-3.5 min-w-[14px] items-center justify-center rounded bg-(--accent-secondary)/15 px-1 text-[10px] font-bold text-(--accent-secondary)">
                 {warnCount}
               </span>
             )}
@@ -198,7 +198,7 @@ export function DiagnosticsPanel({ onToggle, compileResult, activeFormTitle, log
           onClick={onToggle}
           aria-label="Close diagnostics panel"
           title="Close Panel"
-          className="ml-auto flex h-full w-9 flex-none items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+          className="ml-auto flex h-full w-9 flex-none items-center justify-center text-(--ink-tertiary) transition-colors hover:text-(--ink-primary)"
         >
           <X className="h-3 w-3" />
         </button>

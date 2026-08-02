@@ -192,7 +192,7 @@ function ProjectRow({
             <ChevronRight className="h-3.5 w-3.5" />
           </motion.span>
           {isOpen ? <FolderOpen className="h-4 w-4 flex-none text-accent" /> : <Folder className="h-4 w-4 flex-none text-muted-foreground" />}
-          <span className="flex-1 truncate font-inter text-sm font-medium text-foreground">{project.title}</span>
+          <span className="flex-1 truncate text-sm font-medium text-foreground">{project.title}</span>
         </button>
         <button
           type="button"
@@ -230,7 +230,7 @@ function ProjectRow({
               </div>
             )}
             {forms?.length === 0 && (
-              <p className="px-2 py-2 font-inter text-xs text-muted-foreground">No forms yet — use the + above to add one.</p>
+              <p className="px-2 py-2 text-xs text-muted-foreground">No forms yet — use the + above to add one.</p>
             )}
             {forms?.map((form) => (
               <FormRow
@@ -262,7 +262,7 @@ function FormRow({ form, isActive, onSelect, onDelete }: {
     >
       <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-2 text-left">
         <FileCode2 className="h-3.5 w-3.5 flex-none text-muted-foreground" />
-        <span className={`flex-1 truncate font-inter text-sm ${isActive ? "font-medium" : ""}`}>{form.title}</span>
+        <span className={`flex-1 truncate text-sm ${isActive ? "font-medium" : ""}`}>{form.title}</span>
         {form.is_published && <Globe className="h-3 w-3 flex-none text-success" aria-label="Published" />}
       </button>
       <button

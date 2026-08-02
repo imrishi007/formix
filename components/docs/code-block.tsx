@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
@@ -12,11 +12,21 @@ interface CodeBlockProps {
   showLineNumbers?: boolean;
   highlightLines?: number[];
   hideHeader?: boolean;
+  /** Exact pixel line-height for every row (defaults to 1.6rem = 25.6px). */
+  lineHeight?: number;
+  /** Exact pixel font size for code text (defaults to 12.5px). */
+  fontSize?: number;
+  /** Render without the card chrome (border/bg/radius/margins) so an outer
+      panel supplies the frame — used by the homepage MacBook mockup, which
+      needs to control every pixel to exact-fit the code into its window. */
+  bare?: boolean;
 }
 
 // ── Token type ────────────────────────────────────────────────────────────────
 type Token = { text: string; color: string };
-const RESET = "rgba(212,212,212,0.9)";
+// Default ink follows the active theme's code canvas (design.md §Code Editor)
+// so the same component renders correctly in both light and dark mode.
+const RESET = "var(--code-text)";
 
 // ── Forml tokenizer ──────────────────────────────────────────────────────────
 function tokenizeFormlLine(line: string): Token[] {
@@ -28,12 +38,12 @@ function tokenizeFormlLine(line: string): Token[] {
   let i = 0;
   while (i < line.length) {
     if (line[i] === "/" && line[i + 1] === "/") {
-      tokens.push({ text: line.slice(i), color: "#6a9955" }); break;
+      tokens.push({ text: line.slice(i), color: "var(--code-comment)" }); break;
     }
     if (line[i] === '"') {
       let j = i + 1;
       while (j < line.length && line[j] !== '"') j++;
-      tokens.push({ text: line.slice(i, j + 1), color: "#ce9178" });
+      tokens.push({ text: line.slice(i, j + 1), color: "var(--code-string)" });
       i = j + 1; continue;
     }
     if (/[a-zA-Z_]/.test(line[i])) {
@@ -41,15 +51,15 @@ function tokenizeFormlLine(line: string): Token[] {
       while (j < line.length && /[a-zA-Z0-9_]/.test(line[j])) j++;
       const word = line.slice(i, j);
       let color = RESET;
-      if (keywords.has(word)) color = "#569cd6";
-      else if (types.has(word)) color = "#4ec9b0";
-      else if (attrs.has(word)) color = "#9cdcfe";
+      if (keywords.has(word)) color = "var(--code-keyword)";
+      else if (types.has(word)) color = "var(--code-operator)";
+      else if (attrs.has(word)) color = "var(--code-attr)";
       tokens.push({ text: word, color }); i = j; continue;
     }
     if (/[0-9]/.test(line[i])) {
       let j = i + 1;
       while (j < line.length && /[0-9.]/.test(line[j])) j++;
-      tokens.push({ text: line.slice(i, j), color: "#b5cea8" }); i = j; continue;
+      tokens.push({ text: line.slice(i, j), color: "var(--code-number)" }); i = j; continue;
     }
     tokens.push({ text: line[i], color: RESET }); i++;
   }
@@ -66,26 +76,26 @@ function tokenizeEbnfLine(line: string): Token[] {
     if (line[i] === "/" && line[i + 1] === "*") {
       const end = line.indexOf("*/", i + 2);
       const j = end === -1 ? line.length : end + 2;
-      tokens.push({ text: line.slice(i, j), color: "#6a9955" }); i = j; continue;
+      tokens.push({ text: line.slice(i, j), color: "var(--code-comment)" }); i = j; continue;
     }
     if (line[i] === '"' || line[i] === "'") {
       const q = line[i]; let j = i + 1;
       while (j < line.length && line[j] !== q) j++;
-      tokens.push({ text: line.slice(i, j + 1), color: "#ce9178" }); i = j + 1; continue;
+      tokens.push({ text: line.slice(i, j + 1), color: "var(--code-string)" }); i = j + 1; continue;
     }
     if (/[A-Z]/.test(line[i])) {
       let j = i + 1;
       while (j < line.length && /[A-Z0-9_]/.test(line[j])) j++;
-      tokens.push({ text: line.slice(i, j), color: "#4fc1ff" }); i = j; continue;
+      tokens.push({ text: line.slice(i, j), color: "var(--code-operator)" }); i = j; continue;
     }
     if (/[a-z]/.test(line[i])) {
       let j = i + 1;
       while (j < line.length && /[a-z_0-9]/.test(line[j])) j++;
       const word = line.slice(i, j);
-      tokens.push({ text: word, color: word === ruleStart ? "#dcdcaa" : "#9cdcfe" }); i = j; continue;
+      tokens.push({ text: word, color: word === ruleStart ? "var(--code-attr)" : "var(--code-keyword)" }); i = j; continue;
     }
     if (["|", ";", "=", "[", "]", "{", "}"].includes(line[i])) {
-      tokens.push({ text: line[i], color: "#c586c0" }); i++; continue;
+      tokens.push({ text: line[i], color: "var(--code-keyword)" }); i++; continue;
     }
     tokens.push({ text: line[i], color: RESET }); i++;
   }
@@ -102,20 +112,20 @@ function tokenizeJsonLine(line: string): Token[] {
       while (j < line.length && line[j] !== '"') j++;
       const raw   = line.slice(i, j + 1);
       const after = line.slice(j + 1).trimStart();
-      tokens.push({ text: raw, color: after.startsWith(":") ? "#9cdcfe" : "#ce9178" });
+      tokens.push({ text: raw, color: after.startsWith(":") ? "var(--code-operator)" : "var(--code-string)" });
       i = j + 1; continue;
     }
     if (/[a-z]/.test(line[i])) {
       let j = i + 1;
       while (j < line.length && /[a-z]/.test(line[j])) j++;
       const word = line.slice(i, j);
-      tokens.push({ text: word, color: ["true","false","null"].includes(word) ? "#569cd6" : RESET });
+      tokens.push({ text: word, color: ["true","false","null"].includes(word) ? "var(--code-keyword)" : RESET });
       i = j; continue;
     }
     if (/[0-9\-]/.test(line[i])) {
       let j = i + 1;
       while (j < line.length && /[0-9.eE\-]/.test(line[j])) j++;
-      tokens.push({ text: line.slice(i, j), color: "#b5cea8" }); i = j; continue;
+      tokens.push({ text: line.slice(i, j), color: "var(--code-number)" }); i = j; continue;
     }
     tokens.push({ text: line[i], color: RESET }); i++;
   }
@@ -141,9 +151,19 @@ export function CodeBlock({
   showLineNumbers = true,
   highlightLines = [],
   hideHeader = false,
+  lineHeight,
+  fontSize,
+  bare = false,
 }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const lines = code.split("\n");
+
+  // Exact-fit mode: when the caller supplies lineHeight/fontSize (px), every
+  // row is forced to exactly that height so the block can be sized precisely
+  // into a fixed frame (the homepage MacBook mockup). Defaults mirror the
+  // previous fixed 1.6rem/12.5px so every existing call site is untouched.
+  const rowHeight = lineHeight ?? 25.6;
+  const codeFont = fontSize ?? 12.5;
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(code);
@@ -152,23 +172,29 @@ export function CodeBlock({
   };
 
   return (
-    <div className="relative overflow-hidden border border-white/10 bg-[#0d1420] rounded-xl my-6">
+    <div
+      className={`relative overflow-hidden ${
+        bare
+          ? ""
+          : "rounded-xl border border-(--border-hairline) bg-(--bg-base) my-6"
+      }`}
+    >
       {/* Header */}
       {!hideHeader && (
-        <div className="flex items-center justify-between px-4 py-2.5 bg-[#111827] border-b border-white/10">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-(--bg-subtle) border-b border-(--border-hairline)">
           <div className="flex items-center gap-3">
             {filename && (
-              <span className="text-xs font-mono text-foreground/40">{filename}</span>
+              <span className="text-xs font-mono text-(--ink-tertiary)">{filename}</span>
             )}
             {!filename && langLabel[language] && (
-              <span className="text-xs font-mono uppercase tracking-widest text-foreground/30 px-1.5 py-0.5 border border-foreground/10">
+              <span className="text-xs font-mono uppercase tracking-widest text-(--ink-tertiary) px-1.5 py-0.5 border border-(--border-hairline)">
                 {langLabel[language]}
               </span>
             )}
           </div>
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1.5 text-xs font-mono text-foreground/30 hover:text-foreground/70 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-mono text-(--ink-tertiary) hover:text-(--ink-primary) transition-colors"
             aria-label="Copy code"
           >
             {copied ? (
@@ -181,7 +207,7 @@ export function CodeBlock({
       )}
 
       {/* Code lines */}
-      <div className="overflow-x-auto py-3">
+      <div className={bare ? "overflow-x-auto" : "overflow-x-auto py-3"}>
         {lines.map((line, i) => {
           const lineNum = i + 1;
           const isHighlighted = highlightLines.includes(lineNum);
@@ -189,19 +215,20 @@ export function CodeBlock({
           return (
             <div
               key={i}
-              className={`flex min-h-[1.6rem] ${isHighlighted ? "bg-white/[0.04]" : ""}`}
+              className={`flex ${isHighlighted ? "bg-(--bg-subtle)/50" : ""}`}
+              style={{ minHeight: `${rowHeight}px` }}
             >
               {showLineNumbers && (
                 <span
-                  className="select-none shrink-0 w-12 text-right pr-4 pl-5 font-mono text-[11px]"
-                  style={{ color: "rgba(255,255,255,0.18)", lineHeight: "1.6rem" }}
+                  className="select-none shrink-0 w-12 text-right pr-4 pl-5 font-mono text-[11px] text-(--ink-tertiary)"
+                  style={{ lineHeight: `${rowHeight}px` }}
                 >
                   {lineNum}
                 </span>
               )}
               <span
-                className={`pr-6 font-mono text-[12.5px] whitespace-pre ${!showLineNumbers ? "pl-4" : ""}`}
-                style={{ lineHeight: "1.6rem" }}
+                className={`pr-6 font-mono whitespace-pre ${!showLineNumbers ? "pl-4" : ""}`}
+                style={{ lineHeight: `${rowHeight}px`, fontSize: `${codeFont}px` }}
               >
                 {tokens.map((tok, ti) => (
                   <span key={ti} style={{ color: tok.color }}>

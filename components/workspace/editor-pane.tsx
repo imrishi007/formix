@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 /**
  * components/workspace/editor-pane.tsx
@@ -12,10 +12,17 @@
 import dynamic from "next/dynamic";
 import type { editor as MonacoEditorNS } from "monaco-editor";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useTheme } from "next-themes";
 import { AlertCircle, CheckCircle2, FileCode2, Loader2, Map as MapIcon, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-import { defineFormixMono, MONACO_OPTIONS, type MonacoLike } from "@/lib/monaco-forml";
+import {
+  defineFormixMono,
+  MONACO_OPTIONS,
+  FORML_THEME_DARK,
+  FORML_THEME_LIGHT,
+  type MonacoLike,
+} from "@/lib/monaco-forml";
 import { registerFormlLanguageService } from "@/lib/monaco-forml-language";
 import type { FormlDiagnostic } from "@/lib/use-forml-compiler";
 import type { CompilePhase } from "@/components/workspace/top-bar";
@@ -23,9 +30,9 @@ import type { CompilePhase } from "@/components/workspace/top-bar";
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0f172a]">
-      <Loader2 className="h-5 w-5 animate-spin text-accent" />
-      <span className="font-mono text-[10px] uppercase tracking-widest text-white/25">Loading editor…</span>
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-(--bg-base)">
+      <Loader2 className="h-5 w-5 animate-spin text-(--accent-primary)" />
+      <span className="font-mono text-[10px] uppercase tracking-widest text-(--ink-tertiary)">Loading editor…</span>
     </div>
   ),
 });
@@ -33,10 +40,10 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
 function CompilerBadge({ phase }: { phase: CompilePhase }) {
   const configs: Record<CompilePhase, { text: string; color: string; icon: React.ReactNode } | null> = {
     idle: null,
-    parsing:  { text: "Parsing...",           color: "bg-[#111827] text-[#94a3b8] border-[#1e293b]", icon: <Loader2 className="h-3 w-3 animate-spin" /> },
-    semantic: { text: "Semantic Analysis...", color: "bg-[#111827] text-[#94a3b8] border-[#1e293b]", icon: <Zap className="h-3 w-3" /> },
-    valid:    { text: "Compiled ✓",           color: "bg-[#141420] text-[#C4B5FD] border-[#2A2540]", icon: <CheckCircle2 className="h-3 w-3" /> },
-    error:    { text: "Compile Error",        color: "bg-[#1E0E0E] text-[#E05252] border-[#3D1A1A]", icon: <AlertCircle className="h-3 w-3" /> },
+    parsing:  { text: "Parsing...",           color: "bg-(--bg-subtle) text-(--ink-secondary) border-(--border-hairline)", icon: <Loader2 className="h-3 w-3 animate-spin" /> },
+    semantic: { text: "Semantic Analysis...", color: "bg-(--bg-subtle) text-(--ink-secondary) border-(--border-hairline)", icon: <Zap className="h-3 w-3" /> },
+    valid:    { text: "Compiled ✓",           color: "bg-(--accent-primary-tint) text-(--accent-primary) border-(--accent-primary)/20", icon: <CheckCircle2 className="h-3 w-3" /> },
+    error:    { text: "Compile Error",        color: "bg-(--accent-danger)/10 text-(--accent-danger) border-(--accent-danger)/20", icon: <AlertCircle className="h-3 w-3" /> },
   };
   const config = phase !== "idle" ? configs[phase] : null;
   return (
@@ -48,7 +55,7 @@ function CompilerBadge({ phase }: { phase: CompilePhase }) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.15 }}
-          className={`pointer-events-none absolute right-4 top-3 z-10 flex items-center gap-1.5 rounded border px-2.5 py-1 font-inter text-[10px] font-medium ${config.color}`}
+          className={`pointer-events-none absolute right-4 top-3 z-10 flex items-center gap-1.5 rounded border px-2.5 py-1 text-[10px] font-medium ${config.color}`}
         >
           {config.icon}
           {config.text}
@@ -67,7 +74,7 @@ function MinimapToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () =
       aria-pressed={enabled}
       title={enabled ? "Hide minimap" : "Show minimap"}
       className={`pointer-events-auto absolute bottom-3 right-4 z-10 flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-[11px] font-medium transition-colors ${
-        enabled ? "border-[#2A2540] bg-[#141420] text-[#C4B5FD]" : "border-[#1e293b] bg-[#111827] text-[#64748b] hover:text-[#94a3b8]"
+        enabled ? "border-(--accent-primary)/20 bg-(--accent-primary-tint) text-(--accent-primary)" : "border-(--border-hairline) bg-(--bg-subtle) text-(--ink-tertiary) hover:text-(--ink-secondary)"
       }`}
     >
       <MapIcon className="h-3 w-3" />
@@ -115,6 +122,13 @@ export function EditorPane({
   const monacoRef = useRef<MonacoLike | null>(null);
   const modelsRef = useRef<Map<string, MonacoEditorNS.ITextModel>>(new Map());
   const [minimapEnabled, setMinimapEnabled] = useState(true);
+
+  // The Monaco canvas follows the app theme (design.md §Code Editor):
+  // Latte palette in light mode, design.md's navy syntax colors (blue
+  // keywords, green types, amber strings) in dark. Handing the theme name to
+  // the `theme` prop makes @monaco-editor/react swap it reactively on toggle.
+  const { resolvedTheme } = useTheme();
+  const editorTheme = resolvedTheme === "dark" ? FORML_THEME_DARK : FORML_THEME_LIGHT;
 
   const toggleMinimap = useCallback(() => {
     setMinimapEnabled((prev) => {
@@ -174,20 +188,20 @@ export function EditorPane({
   if (!formId) {
     return (
       <div
-        className="flex h-full min-h-0 flex-col items-center justify-center bg-[#0f172a]"
-        style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px)", backgroundSize: "24px 24px" }}
+        className="flex h-full min-h-0 flex-col items-center justify-center bg-(--bg-base)"
+        style={{ backgroundImage: "radial-gradient(circle, rgba(23,23,23,0.05) 1px, transparent 1px)", backgroundSize: "24px 24px" }}
       >
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03]">
-          <FileCode2 className="h-5 w-5 text-white/25" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-(--border-hairline) bg-(--bg-surface)">
+          <FileCode2 className="h-5 w-5 text-(--ink-disabled)" />
         </div>
-        <p className="mt-4 font-inter text-sm text-white/50">Select a form to start editing</p>
-        <p className="mt-1 font-mono text-xs text-white/25">Choose or create a form in the Project Explorer</p>
+        <p className="mt-4 text-sm text-(--ink-tertiary)">Select a form to start editing</p>
+        <p className="mt-1 text-xs text-(--ink-disabled)">Choose or create a form in the Project Explorer</p>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0f172a]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-(--bg-base)">
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {/* Absolute-positioned host, not a flex/percentage-height child — this
          *  is the bulletproof fix for Monaco's classic "grows its container"
@@ -203,14 +217,13 @@ export function EditorPane({
             defineFormixMono(monaco as unknown as MonacoLike);
             registerFormlLanguageService(monaco as unknown as MonacoLike);
           }}
-          theme="formix-mono"
+          theme={editorTheme}
           language="forml"
           value={source}
           onChange={(value) => onContentChange(value ?? "")}
           onMount={(editor, monaco) => {
             editorRef.current = editor as MonacoEditorNS.IStandaloneCodeEditor;
             monacoRef.current = monaco as unknown as MonacoLike;
-            monaco.editor.setTheme("formix-mono");
             editor.updateOptions(MONACO_OPTIONS);
 
             if (formId) {

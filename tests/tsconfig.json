@@ -1,0 +1,39 @@
+// tests/tsconfig.json
+//
+// Standalone compile config used ONLY to turn the unit tests + the two
+// dependency-injected lib modules into runnable CommonJS for `node --test`.
+//
+// Why this exists at all: the project's root tsconfig.json is a Next.js
+// config (module: esnext, paths: @/*, no emit). Node's native TypeScript
+// type-stripping needs explicit `.ts` extensions in relative imports, which
+// tsc forbids here. So instead we emit with a purpose-built config:
+//
+//   - rootDir ".." (the repo root) so emitted files keep their relative
+//     layout — the tests' `../lib/ai-loop` import resolves inside `.build/`
+//     exactly as it does in source.
+//   - module: commonjs so Node's extensionless `require()` resolution finds
+//     the emitted `.js` files (Node ESM would demand explicit extensions).
+//   - `@/*` path mapping so the type-only imports in lib/ai-loop.ts resolve
+//     for typechecking; they are erased at emit time (the loop imports
+//     `./api` and `./use-forml-compiler` purely as types, never at runtime).
+//
+// Run:  npx tsc -p tests/tsconfig.json
+//       node --test tests/.build/tests/*.test.js
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "rootDir": "..",
+    "outDir": "./.build",
+    "baseUrl": "..",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "types": ["node"]
+  },
+  "include": ["*.test.ts", "../lib/ai-loop.ts", "../lib/forml-diff.ts"]
+}

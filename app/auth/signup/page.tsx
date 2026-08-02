@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, Check, Loader2 } from "lucide-react";
 import { AuthLayout } from "@/components/auth/auth-layout";
+import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { useAuth, ApiError } from "@/lib/auth-context";
 
 export default function SignUpPage() {
@@ -149,7 +150,7 @@ function SignUpForm() {
           id="signup-submit-btn"
           type="submit"
           disabled={loading || !agreed}
-          className="gradient-accent group mt-3 flex w-full items-center justify-center gap-2.5 rounded-full px-7 py-3.5 text-sm font-medium text-white shadow-[0_1px_0_0_rgba(255,255,255,0.15)_inset,0_8px_24px_-6px_rgba(124,58,237,0.55)] transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          className="gradient-accent group mt-3 flex w-full items-center justify-center gap-2.5 rounded-full px-7 py-3.5 text-sm font-medium text-white shadow-[0_1px_0_0_rgba(255,255,255,0.15)_inset,0_8px_24px_-6px_rgba(61,90,254,0.55)] transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? (
             <>
@@ -164,6 +165,8 @@ function SignUpForm() {
           )}
         </button>
       </form>
+
+      <OAuthButtons />
 
       <p className="mt-9 text-center text-sm text-muted-foreground">
         Already have an account?{" "}

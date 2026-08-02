@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 /**
  * components/dashboard/dashboard-shell.tsx
@@ -24,10 +24,10 @@ import {
   Copy,
   Trash2,
   Share2,
-  LogOut,
-  User as UserIcon,
   LayoutDashboard,
   Link as LinkIcon,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,13 +35,19 @@ import { useAuth } from "@/lib/auth-context";
 import {
   getDashboardSummary,
   getDashboardForms,
+  getDashboardActivity,
   deleteForm,
   duplicateForm,
+  downloadExport,
   ApiError,
   type DashboardSummary,
   type DashboardFormRow,
+  type DashboardActivity,
 } from "@/lib/api";
 
+import { FormixLogo } from "@/components/brand/formix-logo";
+import { ProfileMenu } from "@/components/brand/profile-menu";
+import { ThemeToggle } from "@/components/brand/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,6 +86,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PublishDialog } from "@/components/workspace/publish-dialog";
 import { FullPageLoader } from "@/components/ui/full-page-loader";
+import { ActivityCharts } from "@/components/dashboard/activity-charts";
 
 function describeError(err: unknown): string {
   if (err instanceof ApiError) return err.message;
@@ -105,7 +112,7 @@ interface StatDef {
 
 export function DashboardShell() {
   const router = useRouter();
-  const { user, isLoading: authLoading, logout } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/auth/signin");
@@ -113,6 +120,7 @@ export function DashboardShell() {
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [forms, setForms] = useState<DashboardFormRow[] | null>(null);
+  const [activity, setActivity] = useState<DashboardActivity | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
 
@@ -120,6 +128,7 @@ export function DashboardShell() {
   const [deleteTarget, setDeleteTarget] = useState<DashboardFormRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<{ formId: string; format: "csv" | "xlsx" } | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") setOrigin(window.location.origin);
@@ -128,9 +137,14 @@ export function DashboardShell() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [summaryData, formsData] = await Promise.all([getDashboardSummary(), getDashboardForms()]);
+      const [summaryData, formsData, activityData] = await Promise.all([
+        getDashboardSummary(),
+        getDashboardForms(),
+        getDashboardActivity(),
+      ]);
       setSummary(summaryData);
       setForms(formsData);
+      setActivity(activityData);
     } catch (err) {
       setError(describeError(err));
     }
@@ -169,6 +183,18 @@ export function DashboardShell() {
     }
   }, [deleteTarget, load]);
 
+  const handleExport = useCallback(async (form: DashboardFormRow, format: "csv" | "xlsx") => {
+    setExporting({ formId: form.id, format });
+    try {
+      await downloadExport(form.id, format, `${form.title}-responses`);
+      toast.success(`${form.title} exported as ${format.toUpperCase()}.`);
+    } catch (err) {
+      toast.error(`Couldn't export responses — ${describeError(err)}`);
+    } finally {
+      setExporting(null);
+    }
+  }, []);
+
   if (authLoading || !user) {
     return <FullPageLoader label="Loading dashboard…" />;
   }
@@ -182,86 +208,72 @@ export function DashboardShell() {
   ];
 
   return (
-    <div className="min-h-screen bg-background font-inter text-foreground">
-      <header className="flex h-14 flex-none items-center justify-between border-b border-border bg-card px-4">
+    <div className="min-h-screen bg-(--bg-base) text-(--ink-primary)">
+      <header className="flex h-14 flex-none items-center justify-between border-b border-(--border-hairline) bg-(--bg-surface) px-4">
         <div className="flex items-center gap-3">
           <Link href="/" className="flex flex-none items-center gap-2 rounded-md px-1 py-1 transition-opacity hover:opacity-80">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 ring-1 ring-accent/25">
-              <span className="font-inter text-[10px] font-black tracking-tighter text-accent">FX</span>
-            </div>
-            <span className="hidden font-inter text-sm font-semibold tracking-tight text-foreground sm:inline">Formix</span>
+            {/* Shared brand mark — single component, replaces the old FX box */}
+            <FormixLogo size={20} variant="color" aria-hidden="true" />
+            <span className="hidden text-sm font-semibold tracking-tight text-(--ink-primary) sm:inline">Formix</span>
           </Link>
-          <span className="h-4 w-px flex-none bg-border" />
-          <div className="flex items-center gap-1.5 rounded-md bg-accent/10 px-2 py-1.5 font-inter text-sm text-accent">
+          <ProfileMenu />
+          <span className="h-4 w-px flex-none bg-(--border-hairline)" />
+          <div className="flex items-center gap-1.5 rounded-md bg-(--accent-primary-tint) px-2 py-1.5 text-sm text-(--accent-primary)">
             <LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
           </div>
         </div>
         <div className="flex flex-none items-center gap-2">
+          <ThemeToggle />
           <Button asChild variant="outline" size="sm">
             <Link href="/editor/demo">Open Editor</Link>
           </Button>
-          <span className="mx-1 h-5 w-px bg-border" />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label={`Account menu — signed in as ${user.email}`}
-                className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-accent/15 text-accent transition-colors hover:bg-accent/25"
-              >
-                <UserIcon className="h-4 w-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-48">
-              <DropdownMenuLabel className="truncate font-normal text-muted-foreground">{user.email}</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href="/editor/demo">
-                  <Pencil className="h-3.5 w-3.5" /> Editor
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={logout}>
-                <LogOut className="h-3.5 w-3.5" /> Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {error && (
-          <div role="alert" className="mb-6 flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-3">
-            <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-destructive" />
-            <p className="text-sm text-destructive">{error}</p>
+          <div role="alert" className="mb-6 flex items-start gap-2.5 rounded-(--radius-md) border border-(--accent-danger)/30 bg-(--accent-danger)/5 px-3.5 py-3">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-(--accent-danger)" />
+            <p className="text-sm text-(--accent-danger)">{error}</p>
           </div>
         )}
 
-        <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {stats.map((s) => (
-            <Card key={s.label} className="py-4">
-              <CardHeader className="flex-row items-center justify-between gap-2 px-4">
-                <CardTitle className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  {s.label}
-                </CardTitle>
-                <span className="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-accent/10 text-accent">{s.icon}</span>
-              </CardHeader>
-              <CardContent className="px-4">
+            <Card key={s.label} className="p-6">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs tracking-[0.08em] text-(--ink-tertiary) uppercase">{s.label}</span>
+                <span className="flex h-7 w-7 flex-none items-center justify-center text-(--ink-tertiary)">{s.icon}</span>
+              </div>
+              <div className="mt-2">
                 {summary ? (
-                  <p className="font-inter text-2xl font-semibold text-foreground">{s.value.toLocaleString()}</p>
+                  <p className="text-[32px] font-semibold leading-none text-(--ink-primary)">{s.value.toLocaleString()}</p>
                 ) : (
-                  <div className="h-8 w-16 animate-pulse rounded bg-muted" />
+                  <div className="h-8 w-16 animate-pulse rounded bg-(--bg-subtle)" />
                 )}
-              </CardContent>
+              </div>
             </Card>
           ))}
         </div>
 
-        <Card className="py-0">
-          <CardHeader className="border-b border-border px-5 py-4">
-            <CardTitle className="font-inter text-base font-semibold">Your Forms</CardTitle>
-          </CardHeader>
-          <CardContent className="px-0 py-0">
+        <div className="mb-8">
+          {activity ? (
+            <ActivityCharts activity={activity} />
+          ) : (
+            <div className="flex h-40 items-center justify-center gap-2 rounded-(--radius-lg) border border-dashed border-(--border-hairline) text-(--ink-tertiary)">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Loading activity…</span>
+            </div>
+          )}
+        </div>
+
+        <div className="card-base overflow-hidden">
+          <div className="border-b border-(--border-hairline) px-6 py-4">
+            <span className="text-base font-semibold">Your Forms</span>
+          </div>
+          <div className="p-0">
             {forms === null && !error && (
-              <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+              <div className="flex items-center justify-center gap-2 py-16 text-(--ink-secondary)">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span className="text-sm">Loading forms…</span>
               </div>
@@ -300,14 +312,14 @@ export function DashboardShell() {
                     return (
                       <TableRow key={row.id}>
                         <TableCell className="max-w-56">
-                          <div className="truncate font-medium text-foreground">{row.title}</div>
-                          <div className="truncate font-mono text-[11px] text-muted-foreground">{row.project_title}</div>
+                          <div className="truncate font-medium text-(--ink-primary)">{row.title}</div>
+                          <div className="truncate text-xs text-(--ink-tertiary)">{row.project_title}</div>
                         </TableCell>
                         <TableCell>
                           {row.is_published ? (
-                            <Badge variant="outline" className="border-accent/30 bg-accent/10 text-accent">Published</Badge>
+                            <Badge variant="success">Published</Badge>
                           ) : (
-                            <Badge variant="outline" className="text-muted-foreground">Draft</Badge>
+                            <Badge variant="secondary">Draft</Badge>
                           )}
                         </TableCell>
                         <TableCell className="max-w-40">
@@ -316,60 +328,81 @@ export function DashboardShell() {
                               href={publicUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex items-center gap-1 truncate font-mono text-xs text-accent underline-offset-2 hover:underline"
+                              className="flex items-center gap-1 truncate text-xs text-(--accent-primary) underline-offset-2 hover:underline"
                             >
                               <LinkIcon className="h-3 w-3 flex-none" />
                               <span className="truncate">{`/f/${row.id}`}</span>
                             </a>
                           ) : (
-                            <span className="font-mono text-xs text-muted-foreground">Not published</span>
+                            <span className="text-xs text-(--ink-tertiary)">Not published</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{formatDate(row.created_at)}</TableCell>
-                        <TableCell className="text-muted-foreground">{formatDate(row.updated_at)}</TableCell>
-                        <TableCell className="text-muted-foreground">{row.last_response_at ? formatDateTime(row.last_response_at) : "No responses yet"}</TableCell>
-                        <TableCell className="text-right font-medium text-foreground">{row.submission_count}</TableCell>
+                        <TableCell className="text-(--ink-tertiary)">{formatDate(row.created_at)}</TableCell>
+                        <TableCell className="text-(--ink-tertiary)">{formatDate(row.updated_at)}</TableCell>
+                        <TableCell className="text-(--ink-tertiary)">{row.last_response_at ? formatDateTime(row.last_response_at) : "No responses yet"}</TableCell>
+                        <TableCell className="text-right font-medium text-(--ink-primary)">{row.submission_count}</TableCell>
                         <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${row.title}`}>
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="min-w-44">
-                              <DropdownMenuItem asChild>
-                                <Link href={`/analytics/${row.project_id}/${row.id}`}>
-                                  <BarChart3 className="h-3.5 w-3.5" /> Analytics
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem asChild>
-                                <Link href={`/responses/${row.project_id}/${row.id}`}>
-                                  <Inbox className="h-3.5 w-3.5" /> Responses
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem asChild>
-                                <Link href={`/editor/demo?project=${row.project_id}&form=${row.id}`}>
-                                  <Pencil className="h-3.5 w-3.5" /> Edit
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                disabled={duplicatingId === row.id}
-                                onClick={() => handleDuplicate(row)}
-                              >
-                                <Copy className="h-3.5 w-3.5" /> {duplicatingId === row.id ? "Duplicating…" : "Duplicate"}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                disabled={!row.is_published}
-                                onClick={() => row.is_published && setShareFor(row)}
-                              >
-                                <Share2 className="h-3.5 w-3.5" /> Share
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(row)}>
-                                <Trash2 className="h-3.5 w-3.5" /> Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <div className="flex items-center justify-end gap-1">
+                            <Link
+                              href={`/editor/demo?project=${row.project_id}&form=${row.id}`}
+                              className="flex h-8 w-8 items-center justify-center rounded-(--radius-sm) text-(--ink-tertiary) transition-colors hover:bg-(--bg-subtle) hover:text-(--accent-primary)"
+                              title="Edit"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Link>
+                            <Link
+                              href={`/analytics/${row.project_id}/${row.id}`}
+                              className="flex h-8 w-8 items-center justify-center rounded-(--radius-sm) text-(--ink-tertiary) transition-colors hover:bg-(--bg-subtle) hover:text-(--accent-primary)"
+                              title="Analytics"
+                            >
+                              <BarChart3 className="h-3.5 w-3.5" />
+                            </Link>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              disabled={row.submission_count === 0 || exporting !== null}
+                              onClick={() => handleExport(row, "csv")}
+                              title="Export responses as CSV"
+                              aria-label={`Export ${row.title} responses as CSV`}
+                            >
+                              {exporting?.formId === row.id && exporting.format === "csv" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              disabled={row.submission_count === 0 || exporting !== null}
+                              onClick={() => handleExport(row, "xlsx")}
+                              title="Export responses as Excel"
+                              aria-label={`Export ${row.title} responses as Excel`}
+                            >
+                              {exporting?.formId === row.id && exporting.format === "xlsx" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${row.title}`}>
+                                  <MoreHorizontal className="h-4 w-4 text-(--ink-tertiary)" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="min-w-44">
+                                <DropdownMenuItem
+                                  disabled={duplicatingId === row.id}
+                                  onClick={() => handleDuplicate(row)}
+                                >
+                                  <Copy className="h-3.5 w-3.5" /> {duplicatingId === row.id ? "Duplicating…" : "Duplicate"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={!row.is_published}
+                                  onClick={() => row.is_published && setShareFor(row)}
+                                >
+                                  <Share2 className="h-3.5 w-3.5" /> Share
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(row)}>
+                                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -377,8 +410,8 @@ export function DashboardShell() {
                 </TableBody>
               </Table>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </main>
 
       {shareFor && (

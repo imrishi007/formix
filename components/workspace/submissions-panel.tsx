@@ -8,7 +8,8 @@
  */
 
 import { useEffect, useState } from "react";
-import { Loader2, Inbox, AlertCircle, ExternalLink } from "lucide-react";
+import { Loader2, Inbox, AlertCircle, ExternalLink, Download, FileSpreadsheet } from "lucide-react";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
@@ -31,7 +32,8 @@ import {
   EmptyTitle,
   EmptyDescription,
 } from "@/components/ui/empty";
-import { getResponses, ApiError, API_BASE, type SubmissionRecord } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { getResponses, downloadExport, ApiError, API_BASE, type SubmissionRecord } from "@/lib/api";
 
 /** Uploaded-file metadata as stored in Submission.data by the backend's
  *  multipart submit endpoint (see backend/routers/forms.py). */
@@ -57,7 +59,7 @@ function SubmissionCell({ value }: { value: unknown }) {
             href={`${API_BASE}${f.url}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="truncate text-accent underline-offset-2 hover:underline"
+            className="truncate text-(--accent-primary) underline-offset-2 hover:underline"
           >
             {f.name}
           </a>
@@ -79,6 +81,7 @@ export function SubmissionsPanel({ projectId, formId, formTitle, open, onOpenCha
 }) {
   const [submissions, setSubmissions] = useState<SubmissionRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<"csv" | "xlsx" | null>(null);
 
   useEffect(() => {
     if (!open || !formId) return;
@@ -95,17 +98,45 @@ export function SubmissionsPanel({ projectId, formId, formTitle, open, onOpenCha
     ? Array.from(new Set(submissions.flatMap((s) => Object.keys(s.data))))
     : [];
 
+  const handleExport = async (format: "csv" | "xlsx") => {
+    if (!formId || exporting) return;
+    setExporting(format);
+    try {
+      // The API returns a browser-downloadable blob, so this saves directly
+      // to the user's machine without exposing response data in a new tab.
+      await downloadExport(formId, format, `${formTitle ?? "form"}-responses`);
+      toast.success(`Responses exported as ${format.toUpperCase()}.`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not export responses. Please try again.");
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl">
+        <SheetContent side="right" className="w-full sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <Inbox className="h-4 w-4 text-accent" /> Submissions
+            <Inbox className="h-4 w-4 text-(--accent-primary)" /> Submissions
           </SheetTitle>
           <SheetDescription>{formTitle ? `Responses for "${formTitle}"` : "Select a form to view its responses."}</SheetDescription>
         </SheetHeader>
 
         <div className="formix-scroll flex-1 overflow-auto px-4 pb-4">
+          {formId && submissions && submissions.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-(--border-hairline) pb-4">
+              <span className="mr-auto text-xs text-(--ink-tertiary)">Download every response to your device</span>
+              <Button variant="outline" size="sm" disabled={exporting !== null} onClick={() => handleExport("csv")}>
+                {exporting === "csv" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                Export CSV
+              </Button>
+              <Button variant="outline" size="sm" disabled={exporting !== null} onClick={() => handleExport("xlsx")}>
+                {exporting === "xlsx" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+                Export Excel
+              </Button>
+            </div>
+          )}
           {!formId && (
             <Empty className="mt-4">
               <EmptyHeader>
@@ -116,15 +147,15 @@ export function SubmissionsPanel({ projectId, formId, formTitle, open, onOpenCha
             </Empty>
           )}
           {formId && submissions === null && !error && (
-            <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+            <div className="flex items-center justify-center gap-2 py-16 text-(--ink-tertiary)">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span className="text-sm">Loading responses…</span>
             </div>
           )}
           {error && (
-            <div role="alert" className="mt-6 flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-3">
-              <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-destructive" />
-              <p className="text-sm text-destructive">{error}</p>
+            <div role="alert" className="mt-6 flex items-start gap-2.5 rounded-lg border border-(--accent-danger)/30 bg-(--accent-danger)/5 px-3.5 py-3">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-(--accent-danger)" />
+              <p className="text-sm text-(--accent-danger)">{error}</p>
             </div>
           )}
           {submissions?.length === 0 && (
@@ -148,7 +179,7 @@ export function SubmissionsPanel({ projectId, formId, formTitle, open, onOpenCha
               <TableBody>
                 {submissions.map((s) => (
                   <TableRow key={s.id}>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-(--ink-tertiary)">
                       {new Date(s.submitted_at).toLocaleString()}
                     </TableCell>
                     {columns.map((col) => (
@@ -159,7 +190,7 @@ export function SubmissionsPanel({ projectId, formId, formTitle, open, onOpenCha
                         <button
                           type="button"
                           onClick={() => window.open(`/workspace/submissions/${projectId}/${formId}/${s.id}`, "_blank", "noopener,noreferrer")}
-                          className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 font-inter text-xs text-muted-foreground transition-colors hover:border-accent/50 hover:text-accent"
+                          className="inline-flex items-center gap-1 rounded border border-(--border-hairline) bg-(--bg-surface) px-2 py-1 text-xs text-(--ink-tertiary) transition-colors hover:border-(--accent-primary)/50 hover:text-(--accent-primary)"
                         >
                           <ExternalLink className="h-3 w-3" /> Open
                         </button>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 // components/editor/compiler-playground.tsx
 //
@@ -24,6 +24,7 @@ import {
   Zap,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useTheme } from "next-themes";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 
 import {
@@ -34,6 +35,8 @@ import {
 import {
   defineFormixMono,
   MONACO_OPTIONS,
+  FORML_THEME_DARK,
+  FORML_THEME_LIGHT,
   type MonacoLike,
 } from "@/lib/monaco-forml";
 import { registerFormlLanguageService } from "@/lib/monaco-forml-language";
@@ -41,6 +44,7 @@ import {
   RenderStatements,
   type ASTNode,
 } from "@/components/form-renderer";
+import { FormixLogo } from "@/components/brand/formix-logo";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -109,13 +113,13 @@ form "Job Application" {
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
-  loading: () => (
-    <div className="absolute inset-0 flex items-center justify-center bg-[#0f172a]">
-      <span className="font-mono text-xs uppercase tracking-widest text-white/20">
-        Loading editor...
-      </span>
-    </div>
-  ),
+      loading: () => (
+        <div className="absolute inset-0 flex items-center justify-center bg-(--bg-base)">
+          <span className="font-mono text-xs uppercase tracking-widest text-(--ink-disabled)">
+            Loading editor...
+          </span>
+        </div>
+      ),
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -186,7 +190,7 @@ function PhaseBadge({ phase, wasmReady, compileMs }: {
   return (
     <div className={`flex items-center gap-1.5 ${cfg.color}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
-      <span className="font-inter text-xs font-medium">{cfg.text}</span>
+      <span className="text-xs font-medium">{cfg.text}</span>
       {wasmReady && phase === "valid" && compileMs !== null && (
         <span className="ml-1 font-mono text-[11px] text-muted-foreground">{compileMs}ms</span>
       )}
@@ -222,7 +226,7 @@ function DiagnosticsContent({
       return (
         <div className="flex items-center gap-2 p-4 text-success">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          <span className="font-inter text-sm">No problems detected</span>
+          <span className="text-sm">No problems detected</span>
         </div>
       );
     }
@@ -235,7 +239,7 @@ function DiagnosticsContent({
           >
             <DiagIcon severity={d.severity} />
             <div className="min-w-0">
-              <p className={`font-inter text-sm ${
+              <p className={`text-sm ${
                 d.severity === "error" ? "text-destructive" : "text-warning"
               }`}>
                 {d.message}
@@ -315,7 +319,7 @@ function DiagnosticsPanel({
             role="tab"
             aria-selected={activeTab === t.id}
             onClick={() => setActiveTab(t.id)}
-            className={`relative flex h-full items-center gap-1.5 px-4 font-inter text-xs font-medium transition-colors duration-150 ${
+            className={`relative flex h-full items-center gap-1.5 px-4 text-xs font-medium transition-colors duration-150 ${
               activeTab === t.id
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground"
@@ -373,7 +377,7 @@ function PreviewPanel({
   if (!wasmReady) {
     return (
       <div className="flex h-full items-center justify-center bg-muted/30 text-muted-foreground">
-        <span className="flex items-center gap-2 font-inter text-sm">
+        <span className="flex items-center gap-2 text-sm">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Initializing compiler…
         </span>
       </div>
@@ -387,11 +391,11 @@ function PreviewPanel({
           Rendered Form
         </span>
         {compilePhase === "error" ? (
-          <span className="flex items-center gap-1.5 font-inter text-xs text-destructive">
+          <span className="flex items-center gap-1.5 text-xs text-destructive">
             <AlertCircle className="h-3 w-3" /> Fix errors to preview
           </span>
         ) : (
-          <span className="flex items-center gap-1.5 font-inter text-xs text-accent">
+          <span className="flex items-center gap-1.5 text-xs text-accent">
             <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Live
           </span>
         )}
@@ -404,10 +408,10 @@ function PreviewPanel({
               <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-destructive/30 bg-destructive/5">
                 <AlertCircle className="h-5 w-5 text-destructive" />
               </div>
-              <p className="font-inter text-sm font-semibold text-foreground">
+              <p className="text-sm font-semibold text-foreground">
                 Compile Error
               </p>
-              <p className="font-inter text-xs leading-relaxed text-muted-foreground">
+              <p className="text-xs leading-relaxed text-muted-foreground">
                 See the Problems tab for details. The preview returns once the
                 source compiles cleanly.
               </p>
@@ -425,7 +429,7 @@ function PreviewPanel({
                 <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">
                   Preview
                 </span>
-                <h2 className="mt-2.5 font-inter text-xl font-bold tracking-tight text-foreground">
+                <h2 className="mt-2.5 text-xl font-bold tracking-tight text-foreground">
                   {formTitle}
                 </h2>
               </div>
@@ -437,7 +441,7 @@ function PreviewPanel({
                     onChange={handleChange}
                   />
                 ) : (
-                  <p className="font-inter text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     No renderable statements yet.
                   </p>
                 )}
@@ -445,7 +449,7 @@ function PreviewPanel({
               <div className="border-t border-border px-6 py-5">
                 <button
                   type="button"
-                  className="w-full rounded-lg bg-accent py-2.5 font-inter text-sm font-semibold text-accent-foreground transition-all duration-150 hover:opacity-90 active:scale-[0.98]"
+                  className="w-full rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-foreground transition-all duration-150 hover:opacity-90 active:scale-[0.98]"
                 >
                   Submit Form
                 </button>
@@ -472,13 +476,12 @@ function TopBar({
     <header className="flex h-14 flex-none items-center justify-between border-b border-border bg-card px-4">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 ring-1 ring-accent/25">
-            <span className="font-inter text-[10px] font-black tracking-tighter text-accent">FX</span>
-          </div>
-          <span className="font-inter text-sm font-semibold tracking-tight text-foreground">Formix</span>
+          {/* Shared brand mark — single component, replaces the old FX box */}
+          <FormixLogo size={20} variant="color" aria-hidden="true" />
+          <span className="text-sm font-semibold tracking-tight text-foreground">Formix</span>
         </div>
         <span className="h-4 w-px bg-border" />
-        <div className="flex items-center gap-1 font-inter text-sm">
+        <div className="flex items-center gap-1 text-sm">
           <span className="text-muted-foreground">playground</span>
           <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
           <span className="rounded-md bg-muted px-2 py-1 text-foreground">compiler.forml</span>
@@ -492,7 +495,7 @@ function TopBar({
           type="button"
           onClick={onManualCompile}
           disabled={!wasmReady}
-          className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 font-inter text-xs font-semibold text-accent-foreground transition-all duration-150 hover:opacity-90 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-xs font-semibold text-accent-foreground transition-all duration-150 hover:opacity-90 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Play className="h-3 w-3" />
           Compile
@@ -551,6 +554,11 @@ function PartitionHandle() {
 export function CompilerPlayground() {
   const { ready: wasmReady, loadError, compile } = useFormlCompiler();
 
+  // The Monaco canvas follows the app theme — Latte palette light / design.md
+  // navy syntax colors dark (design.md §Code Editor). Reacts to theme toggle.
+  const { resolvedTheme } = useTheme();
+  const editorTheme = resolvedTheme === "dark" ? FORML_THEME_DARK : FORML_THEME_LIGHT;
+
   const [source, setSource] = useState<string>(PLAYGROUND_DEFAULT);
   const [compileResult, setCompileResult] = useState<FormlCompileResult | null>(null);
   const [compilePhase, setCompilePhase] = useState<CompilePhase>("idle");
@@ -594,7 +602,7 @@ export function CompilerPlayground() {
   const warnCount  = compileResult?.diagnostics.filter((d) => d.severity === "warning").length ?? 0;
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-background font-inter text-foreground">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <TopBar
         phase={compilePhase}
         wasmReady={wasmReady}
@@ -605,7 +613,7 @@ export function CompilerPlayground() {
       {loadError && (
         <div role="alert" className="flex flex-none items-center gap-2 border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-destructive">
           <AlertCircle className="h-3.5 w-3.5" />
-          <span className="font-inter text-xs">
+          <span className="text-xs">
             Failed to load the WASM compiler from /wasm/forml.js. Check your network connection and reload.
           </span>
         </div>
@@ -615,11 +623,11 @@ export function CompilerPlayground() {
         <PanelGroup direction="horizontal" className="min-h-0 flex-1">
           {/* Editor */}
           <Panel defaultSize={48} minSize={28}>
-            <div className="relative flex h-full min-h-0 flex-col bg-[#0f172a]">
-              <div className="flex h-9 flex-none items-center gap-2 border-b border-white/[0.08] px-4">
-                <FileCode2 className="h-3.5 w-3.5 text-white/40" />
-                <span className="font-inter text-xs text-white/60">compiler.forml</span>
-                <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-white/25">FormL</span>
+            <div className="relative flex h-full min-h-0 flex-col bg-(--bg-base)">
+              <div className="flex h-9 flex-none items-center gap-2 border-b border-(--border-hairline) px-4">
+                <FileCode2 className="h-3.5 w-3.5 text-(--ink-tertiary)" />
+                <span className="text-xs text-(--ink-secondary)">compiler.forml</span>
+                <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-(--ink-disabled)">FormL</span>
               </div>
               <div className="relative min-h-0 flex-1">
                 <MonacoEditor
@@ -627,14 +635,13 @@ export function CompilerPlayground() {
                     defineFormixMono(monaco as unknown as MonacoLike);
                     registerFormlLanguageService(monaco as unknown as MonacoLike);
                   }}
-                  theme="formix-mono"
+                  theme={editorTheme}
                   language="forml"
                   value={source}
                   onChange={handleContentChange}
                   onMount={(editor, monaco) => {
                     editorRef.current = editor as MonacoEditorNS.IStandaloneCodeEditor;
                     monacoRef.current = monaco as unknown as MonacoLike;
-                    monaco.editor.setTheme("formix-mono");
                     editor.updateOptions(MONACO_OPTIONS);
                     editor.onDidChangeCursorPosition((event) => {
                       setCursor({ line: event.position.lineNumber, column: event.position.column });

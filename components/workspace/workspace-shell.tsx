@@ -73,7 +73,7 @@ function describeError(err: unknown): string {
 
 export function WorkspaceShell() {
   const router = useRouter();
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, logout } = useAuth();
   const { ready: wasmReady, compile } = useFormlCompiler();
 
   // ── Redirect to sign-in if not authenticated ────────────────────────────────
@@ -514,18 +514,33 @@ export function WorkspaceShell() {
           <p className="text-lg font-semibold text-destructive">Failed to load workspace</p>
           <p className="text-sm text-muted-foreground">{projectLoadError}</p>
         </div>
-        <button
-          onClick={() => setLoadRetry((n) => n + 1)}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-        >
-          Retry
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setLoadRetry((n) => n + 1)}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            Retry
+          </button>
+          {/* Escape hatch: an invalid session (e.g. the backend's JWT secret
+              was rotated) 401s forever and Retry can't help. Let the user
+              drop the stale token and sign in again instead of stranding
+              them on this screen. */}
+          <button
+            onClick={() => {
+              logout();
+              router.replace("/auth/signin");
+            }}
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-background font-inter text-foreground">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <TopBar
         projects={projects}
         activeProjectId={activeProjectId}
@@ -554,8 +569,8 @@ export function WorkspaceShell() {
           <FileCode2 className="h-5 w-5 text-muted-foreground" />
         </div>
         <div>
-          <p className="font-inter text-sm font-medium text-foreground">The workspace needs a wider screen</p>
-          <p className="mt-1 font-inter text-xs text-muted-foreground">Resize your window or switch to a tablet/desktop device.</p>
+          <p className="text-sm font-medium text-foreground">The workspace needs a wider screen</p>
+          <p className="mt-1 text-xs text-muted-foreground">Resize your window or switch to a tablet/desktop device.</p>
         </div>
       </div>
 
@@ -632,6 +647,7 @@ export function WorkspaceShell() {
                     source={source}
                     diagnostics={compileResult?.diagnostics ?? []}
                     selection={selection}
+                    compile={compile}
                     onApplyToEditor={handleApplyToEditor}
                     onClose={() => setAiOpen(false)}
                   />
@@ -724,7 +740,7 @@ export function WorkspaceShell() {
               type="button"
               onClick={handleRenameOnly}
               disabled={renamingBusy}
-              className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-4 py-2 font-inter text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
             >
               Rename Only
             </button>

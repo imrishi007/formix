@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
 import { AuthLayout } from "@/components/auth/auth-layout";
+import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { useAuth, ApiError } from "@/lib/auth-context";
 
 export default function SignInPage() {
@@ -76,6 +77,12 @@ function SignInForm() {
             <label htmlFor="signin-password" className="block font-mono text-xs uppercase tracking-widest text-muted-foreground">
               Password
             </label>
+            <Link
+              href="/auth/forgot-password"
+              className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            >
+              Forgot password?
+            </Link>
           </div>
           <div className="relative">
             <input
@@ -110,7 +117,7 @@ function SignInForm() {
           id="signin-submit-btn"
           type="submit"
           disabled={loading}
-          className="gradient-accent group mt-3 flex w-full items-center justify-center gap-2.5 rounded-full px-7 py-3.5 text-sm font-medium text-white shadow-[0_1px_0_0_rgba(255,255,255,0.15)_inset,0_8px_24px_-6px_rgba(124,58,237,0.55)] transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          className="gradient-accent group mt-3 flex w-full items-center justify-center gap-2.5 rounded-full px-7 py-3.5 text-sm font-medium text-white shadow-[0_1px_0_0_rgba(255,255,255,0.15)_inset,0_8px_24px_-6px_rgba(61,90,254,0.55)] transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? (
             <>
@@ -125,6 +132,8 @@ function SignInForm() {
           )}
         </button>
       </form>
+
+      <OAuthButtons />
 
       <p className="mt-10 text-center text-sm text-muted-foreground">
         New to Formix?{" "}

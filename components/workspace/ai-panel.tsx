@@ -1,56 +1,124 @@
-"use client";
+﻿"use client";
 
 /**
  * components/workspace/ai-panel.tsx
  *
  * The Formix AI panel: a docked, resizable chat panel living alongside the
- * editor and preview — not a modal, not a bolted-on widget. Generates
- * Forml from a description, explains selected DSL, fixes compiler errors,
- * and suggests improvements to the form currently open in the editor.
+ * editor and preview — not a modal, not a bolted-on widget. Every turn goes
+ * to the LLM-backed chat endpoint (backend/routers/ai.py) through
+ * hooks/use-ai-chat.ts, which streams the explanation, compiles the model's
+ * revised source with the WASM compiler, and runs the compile-and-repair loop.
  *
- * All "intelligence" comes from lib/ai-engine.ts + hooks/use-ai-chat.ts;
- * this component only renders state and wires user actions to them.
+ * This component only renders state and wires user actions to the hook:
+ *   - streamed explanation bubbles
+ *   - per-turn "View diff" toggle (old source → revised source, line diff)
+ *   - "Apply changes" only after a clean compile; failed turns show the
+ *     compiler errors and the broken source, never an Apply button
  */
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Bug, Check, Lightbulb, Sparkles, Square, Trash2, Wand2, X } from "lucide-react";
+import { ArrowUp, Bug, Check, Diff, Lightbulb, Sparkles, Square, Trash2, Wand2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/docs/code-block";
 import { useAiChat, type AiChatMessage } from "@/hooks/use-ai-chat";
-import { SUGGESTED_PROMPTS } from "@/lib/ai-engine";
-import type { FormlDiagnostic } from "@/lib/use-forml-compiler";
+import { PANEL_PROMPTS } from "@/lib/ai-engine";
+import { diffLines, diffStats, hasChanges, type DiffLine } from "@/lib/forml-diff";
+import type { FormlCompileResult, FormlDiagnostic } from "@/lib/use-forml-compiler";
 
 function autoGrow(el: HTMLTextAreaElement) {
   el.style.height = "auto";
   el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
 }
 
+/** Normalize a model-supplied fence language to the CodeBlock's supported set
+ *  (unknown tags default to "forml" — the model's most common example language). */
+type CodeBlockLanguage = "forml" | "ebnf" | "json" | "tsx" | "bash" | "text";
+
+function toCodeBlockLanguage(lang: string | undefined): CodeBlockLanguage {
+  const normalized = (lang ?? "").trim().toLowerCase();
+  if (normalized === "ebnf") return "ebnf";
+  if (normalized === "json") return "json";
+  if (normalized === "tsx" || normalized === "typescript") return "tsx";
+  if (normalized === "bash" || normalized === "sh" || normalized === "shell") return "bash";
+  if (normalized === "text") return "text";
+  return "forml";
+}
+
+/** Minimal inline markdown renderer for assistant replies. Handles the bits the
+ *  model actually uses: fenced code blocks, lists, inline code, **bold**, and
+ *  `*italic*`. Everything else falls through as plain text. */
 function InlineMarkdown({ text }: { text: string }) {
-  const lines = text.split("\n");
+  const parts = text.split("```");
+  return (
+    <div className="space-y-1.5">
+      {parts.map((part, i) => {
+        if (i % 2 === 1) {
+          // Odd slices are inside a fenced code block; strip the language tag.
+          const [lang, ...rest] = part.split("\n");
+          const code = rest.join("\n").replace(/\n$/, "");
+          return (
+            <CodeBlock key={i} code={code} language={toCodeBlockLanguage(lang)} filename="example" showLineNumbers={false} />
+          );
+        }
+        return <MarkdownParagraph key={i} text={part} />;
+      })}
+    </div>
+  );
+}
+
+/** One non-code paragraph: resolves **bold**, *italic*, `inline code`, and
+ *  bullet/numbered list lines. */
+function MarkdownParagraph({ text }: { text: string }) {
+  const lines = text.split("\n").filter((l) => l.trim() !== "");
   return (
     <>
       {lines.map((line, i) => {
-        if (line === "") return <div key={i} className="h-2" />;
-        const isBullet = /^\s*-\s+/.test(line);
-        const content = isBullet ? line.replace(/^\s*-\s+/, "") : line;
-        const parts = content.split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
-        const rendered = parts.map((part, j) =>
-          part.startsWith("**") && part.endsWith("**") ? (
-            <strong key={j} className="font-semibold text-foreground">{part.slice(2, -2)}</strong>
-          ) : (
-            <span key={j}>{part}</span>
-          ),
+        const bullet = /^\s*[-*]\s+/.exec(line);
+        const numbered = /^\s*(\d+)[.)]\s+/.exec(line);
+        if (bullet) return <ListLine key={i} text={line.slice(bullet[0].length)} marker="•" />;
+        if (numbered) return <ListLine key={i} text={line.slice(numbered[0].length)} marker={`${numbered[1]}.`} />;
+        return (
+          <p key={i} className="text-sm leading-relaxed">
+            <RichText text={line} />
+          </p>
         );
-        if (isBullet) {
+      })}
+    </>
+  );
+}
+
+function ListLine({ text, marker }: { text: string; marker: string }) {
+  return (
+    <div className="flex items-start gap-2 pl-0.5">
+      <span className="mt-1.5 flex-none font-medium text-accent-foreground/60">{marker}</span>
+      <p className="flex-1 text-sm leading-relaxed">
+        <RichText text={text} />
+      </p>
+    </div>
+  );
+}
+
+/** Splits on **bold**, *italic*, and `code` tokens and renders them. */
+function RichText({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g).filter(Boolean);
+  return (
+    <>
+      {parts.map((part, j) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={j} className="font-semibold text-foreground">{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith("*") && part.endsWith("*")) {
+          return <em key={j} className="text-foreground/80">{part.slice(1, -1)}</em>;
+        }
+        if (part.startsWith("`") && part.endsWith("`")) {
           return (
-            <div key={i} className="flex items-start gap-2 pl-0.5">
-              <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-accent/70" />
-              <p className="flex-1">{rendered}</p>
-            </div>
+            <code key={j} className="rounded bg-muted/60 px-1 py-0.5 font-mono text-[0.85em] text-foreground/90">
+              {part.slice(1, -1)}
+            </code>
           );
         }
-        return <p key={i}>{rendered}</p>;
+        return <span key={j}>{part}</span>;
       })}
     </>
   );
@@ -70,6 +138,42 @@ function ThinkingDots() {
   );
 }
 
+/**
+ * Unified-style line diff between an assistant turn's baseline and its revised
+ * source. Added lines tinted with the app's success token, removed lines with
+ * the danger token, unchanged plain — the accent tokens follow the app theme,
+ * so the diff reads in whichever syntax theme the user is in.
+ */
+function DiffView({ lines }: { lines: DiffLine[] }) {
+  return (
+    <pre className="formix-scroll max-h-80 overflow-auto rounded-lg border border-(--border-hairline) bg-(--bg-subtle) px-1 py-2 font-mono text-xs leading-5">
+      {lines.map((line, i) => (
+        <div
+          key={i}
+          className={`flex whitespace-pre ${
+            line.type === "add"
+              ? "bg-(--accent-success)/10 text-(--accent-success)"
+              : line.type === "remove"
+                ? "bg-(--accent-danger)/10 text-(--accent-danger)/80"
+                : "text-(--ink-secondary)"
+          }`}
+        >
+          <span className="w-7 flex-none select-none pr-2 text-right text-(--ink-tertiary)/50">
+            {line.oldLine ?? " "}
+          </span>
+          <span className="w-7 flex-none select-none pr-2 text-right text-(--ink-tertiary)/50">
+            {line.newLine ?? " "}
+          </span>
+          <span className="w-4 flex-none select-none text-center">
+            {line.type === "add" ? "+" : line.type === "remove" ? "-" : " "}
+          </span>
+          <span className="min-w-0 flex-1 break-all">{line.content || " "}</span>
+        </div>
+      ))}
+    </pre>
+  );
+}
+
 function ChatBubble({
   msg,
   applied,
@@ -79,23 +183,24 @@ function ChatBubble({
   applied: boolean;
   onApply: (id: string, code: string) => void;
 }) {
+  const [showDiff, setShowDiff] = useState(false);
+
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-accent/15 px-3.5 py-2.5 font-inter text-sm text-foreground">
+        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-(--accent-primary)/15 px-3.5 py-2.5 text-sm text-(--ink-primary)">
           {msg.text}
         </div>
       </div>
     );
   }
 
-  // The code panel appears as soon as its own stream phase starts (formlCode
-  // becomes a string, even "") and grows with it — same progressive reveal
-  // as the reply text above it, instead of popping in fully formed. The line
-  // count + apply button only show once the code has finished streaming.
   const hasCode = msg.formlCode !== undefined;
   const codeComplete = hasCode && !msg.streaming;
-  const textDone = msg.text.length > 0 || !msg.streaming;
+  const changed =
+    hasCode && msg.baseline !== undefined && hasChanges(msg.baseline, msg.formlCode!);
+  const diff = changed && showDiff ? diffLines(msg.baseline!, msg.formlCode!) : null;
+  const stats = changed ? diffStats(msg.baseline!, msg.formlCode!) : null;
 
   return (
     <div className="flex items-start gap-2.5">
@@ -103,43 +208,90 @@ function ChatBubble({
         <Sparkles className="h-3 w-3 text-white" />
       </div>
       <div className="min-w-0 flex-1 space-y-2">
-        <div className="glass-panel rounded-2xl rounded-tl-sm px-3.5 py-2.5 font-inter text-sm leading-relaxed text-foreground/90">
-          {msg.text.length === 0 && msg.streaming && !hasCode ? (
+        <div className="glass-panel rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-sm leading-relaxed text-(--ink-primary)/90">
+          {msg.text.length === 0 && msg.streaming ? (
             <ThinkingDots />
           ) : (
             <>
               <InlineMarkdown text={msg.text} />
-              {msg.streaming && !hasCode && (
-                <span className="ml-0.5 inline-block h-3.5 w-[3px] animate-pulse bg-accent/70 align-middle" />
+              {msg.streaming && (
+                <span className="ml-0.5 inline-block h-3.5 w-[3px] animate-pulse bg-(--accent-primary)/70 align-middle" />
               )}
             </>
           )}
         </div>
 
-        {hasCode && textDone && (
-          <div className="overflow-hidden rounded-xl border border-accent/20">
-            <CodeBlock code={msg.formlCode!} language="forml" filename="generated.forml" showLineNumbers={false} />
-            {codeComplete ? (
-              <div className="flex items-center justify-between border-t border-accent/20 bg-accent/[0.06] px-3.5 py-2">
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  {msg.formlCode!.split("\n").length} lines
-                </span>
-                <Button size="sm" variant={applied ? "outline" : "default"} onClick={() => onApply(msg.id, msg.formlCode!)}>
-                  {applied ? (
-                    <>
-                      <Check className="h-3.5 w-3.5" /> Applied
-                    </>
-                  ) : (
-                    msg.applyLabel ?? "Insert into Editor"
-                  )}
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 border-t border-accent/20 bg-accent/[0.06] px-3.5 py-2 font-mono text-[11px] text-muted-foreground">
-                <span className="h-1 w-1 animate-pulse rounded-full bg-accent/70" />
-                writing…
-              </div>
+        {/* Failed turn — show why, never an Apply button. */}
+        {msg.failed && (
+          <div className="space-y-2 rounded-xl border border-(--accent-danger)/25 bg-(--accent-danger)/[0.06] px-3.5 py-2.5">
+            <p className="text-xs font-medium text-(--accent-danger)">{msg.errorMessage}</p>
+            {msg.errorDiagnostics && msg.errorDiagnostics.length > 0 && (
+              <ul className="space-y-0.5 font-mono text-[11px] text-(--accent-danger)/80">
+                {msg.errorDiagnostics.map((d, i) => (
+                  <li key={i}>
+                    L{d.line}:C{d.col} {d.message}
+                  </li>
+                ))}
+              </ul>
             )}
+          </div>
+        )}
+
+        {hasCode && codeComplete && !msg.failed && (
+          <div className="overflow-hidden rounded-xl border border-(--accent-primary)/20">
+            {changed ? (
+              <>
+                <div className="flex items-center justify-between border-b border-(--accent-primary)/20 bg-(--accent-primary)/[0.06] px-3.5 py-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDiff((v) => !v)}
+                    className="flex items-center gap-1.5 text-xs font-medium text-(--ink-tertiary) transition-colors hover:text-(--ink-primary)"
+                  >
+                    <Diff className="h-3.5 w-3.5" />
+                    {showDiff ? "Hide diff" : "View diff"}
+                    {stats && (
+                      <span className="flex items-center gap-1">
+                        <span className="text-(--accent-success)">+{stats.added}</span>
+                        <span className="text-(--accent-danger)">−{stats.removed}</span>
+                      </span>
+                    )}
+                  </button>
+                  <span className="text-xs text-(--ink-tertiary)">
+                    {msg.formlCode!.split("\n").length} lines
+                  </span>
+                </div>
+                {showDiff ? (
+                  <div className="p-2">
+                    <DiffView lines={diff!} />
+                  </div>
+                ) : (
+                  <CodeBlock code={msg.formlCode!} language="forml" filename="generated.forml" showLineNumbers={false} />
+                )}
+              </>
+            ) : (
+              <CodeBlock code={msg.formlCode!} language="forml" filename="generated.forml" showLineNumbers={false} />
+            )}
+
+            <div className="flex items-center justify-between border-t border-(--accent-primary)/20 bg-(--accent-primary)/[0.06] px-3.5 py-2">
+              <span className="text-xs text-(--ink-tertiary)">
+                {changed
+                  ? msg.formlCode!.split("\n").length
+                  : "No source changes in this reply."}
+              </span>
+              {changed ? (
+                <Button size="sm" variant={applied ? "outline" : "default"} onClick={() => onApply(msg.id, msg.formlCode!)}>
+              {applied ? (
+                <>
+                  <Check className="h-3.5 w-3.5" /> Applied
+                </>
+              ) : (
+                "Insert into Editor"
+              )}
+                </Button>
+              ) : (
+                <span className="text-xs text-(--ink-tertiary)">Nothing to apply</span>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -165,10 +317,10 @@ function QuickAction({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 font-inter text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         highlight
-          ? "border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10"
-          : "border-border bg-transparent text-muted-foreground hover:border-accent/30 hover:text-foreground"
+          ? "border-(--accent-danger)/30 bg-(--accent-danger)/5 text-(--accent-danger) hover:bg-(--accent-danger)/10"
+          : "border-(--border-hairline) bg-transparent text-(--ink-tertiary) hover:border-(--accent-primary)/30 hover:text-(--ink-primary)"
       }`}
     >
       <Icon className="h-3 w-3" />
@@ -182,6 +334,7 @@ export function AiPanel({
   source,
   diagnostics,
   selection,
+  compile,
   onApplyToEditor,
   onClose,
 }: {
@@ -189,12 +342,15 @@ export function AiPanel({
   source: string;
   diagnostics: FormlDiagnostic[];
   selection: string;
+  /** The WASM compiler — the compile-and-repair loop runs it client-side. */
+  compile: (src: string) => FormlCompileResult;
   onApplyToEditor: (code: string) => void;
   onClose: () => void;
 }) {
-  const { messages, isStreaming, send, runQuickAction, stop, clear } = useAiChat(
+  const { messages, isStreaming, send, stop, clear } = useAiChat(
     formId,
     () => ({ source, diagnostics, selection }),
+    compile,
   );
 
   const [input, setInput] = useState("");
@@ -224,14 +380,14 @@ export function AiPanel({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-l border-border bg-card">
+    <div className="glass-panel !bg-(--bg-surface-glass) flex h-full min-h-0 flex-col border-l border-(--border-hairline)">
       {/* Header */}
-      <div className="flex h-9 flex-none items-center gap-2 border-b border-border px-3">
+      <div className="flex h-9 flex-none items-center gap-2 border-b border-(--border-hairline) px-3">
         <div className="gradient-accent flex h-5 w-5 items-center justify-center rounded-md">
           <Sparkles className="h-3 w-3 text-white" />
         </div>
-        <span className="font-inter text-xs font-semibold text-foreground">Formix AI</span>
-        {isStreaming && <span className="font-mono text-[10px] text-muted-foreground">generating…</span>}
+        <span className="text-xs font-semibold text-(--ink-primary)">Formix AI</span>
+        {isStreaming && <span className="text-xs text-(--ink-tertiary)">generating…</span>}
         <div className="ml-auto flex items-center gap-0.5">
           <button
             type="button"
@@ -239,7 +395,7 @@ export function AiPanel({
             disabled={messages.length === 0}
             title="Clear chat"
             aria-label="Clear chat"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-(--ink-tertiary) transition-colors hover:text-(--ink-primary) disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -248,7 +404,7 @@ export function AiPanel({
             onClick={onClose}
             title="Close panel"
             aria-label="Close AI panel"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-(--ink-tertiary) transition-colors hover:text-(--ink-primary)"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -256,14 +412,14 @@ export function AiPanel({
       </div>
 
       {/* Quick actions */}
-      <div className="flex flex-none items-center gap-1.5 overflow-x-auto border-b border-border px-3 py-2">
-        <QuickAction icon={Wand2} label="Improve Form" disabled={!formId || isStreaming} onClick={() => runQuickAction("improve", "Improve this form")} />
-        <QuickAction icon={Bug} label="Fix Errors" highlight={hasErrors} disabled={!formId || isStreaming} onClick={() => runQuickAction("fix", "Fix the compiler errors in my form")} />
+      <div className="flex flex-none items-center gap-1.5 overflow-x-auto border-b border-(--border-hairline) px-3 py-2">
+        <QuickAction icon={Wand2} label="Improve Form" disabled={disabled} onClick={() => submit("Improve this form")} />
+        <QuickAction icon={Bug} label="Fix Errors" highlight={hasErrors} disabled={disabled} onClick={() => submit("Fix the compiler errors in my form")} />
         <QuickAction
           icon={Lightbulb}
           label={selection.trim() ? "Explain Selection" : "Explain Form"}
-          disabled={!formId || isStreaming}
-          onClick={() => runQuickAction("explain", selection.trim() ? "Explain the selected code" : "Explain this form")}
+          disabled={disabled}
+          onClick={() => submit(selection.trim() ? "Explain the selected code" : "Explain this form")}
         />
       </div>
 
@@ -271,11 +427,11 @@ export function AiPanel({
       <div ref={scrollRef} className="formix-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {!formId ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-muted">
-              <Sparkles className="h-4 w-4 text-muted-foreground" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-(--border-hairline) bg-(--bg-subtle)">
+              <Sparkles className="h-4 w-4 text-(--ink-tertiary)" />
             </div>
-            <p className="font-inter text-sm text-foreground">Select a form to start</p>
-            <p className="max-w-[220px] font-mono text-xs text-muted-foreground">Formix AI works alongside the form you&apos;re editing.</p>
+            <p className="text-sm text-(--ink-primary)">Select a form to start</p>
+            <p className="max-w-[220px] text-xs text-(--ink-tertiary)">Formix AI works alongside the form you&apos;re editing.</p>
           </div>
         ) : messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-5 px-2 text-center">
@@ -283,18 +439,18 @@ export function AiPanel({
               <Sparkles className="h-5 w-5 text-white" />
             </div>
             <div>
-              <p className="font-inter text-base font-semibold text-foreground">Formix AI</p>
-              <p className="mt-1.5 max-w-[260px] font-inter text-sm text-muted-foreground">
-                Describe the form you want and I&apos;ll write the Forml for you — or ask me to explain, fix, or improve what&apos;s already in the editor.
+              <p className="text-base font-semibold text-(--ink-primary)">Formix AI</p>
+              <p className="mt-1.5 max-w-[260px] text-sm text-(--ink-secondary)">
+                Ask me anything about Forml — questions, doubts, or ideas — or tell me to build, fix, or improve the form in your editor.
               </p>
             </div>
             <div className="flex w-full max-w-[320px] flex-col gap-2">
-              {SUGGESTED_PROMPTS.map((p) => (
+              {PANEL_PROMPTS.map((p) => (
                 <button
                   key={p}
                   type="button"
                   onClick={() => submit(p)}
-                  className="glass-panel ease-signature rounded-xl px-3.5 py-2.5 text-left font-inter text-xs text-foreground/80 transition-colors hover:border-accent/30 hover:text-foreground"
+                  className="glass-panel rounded-xl px-3.5 py-2.5 text-left text-xs text-(--ink-primary)/80 transition-colors hover:border-(--accent-primary)/30 hover:text-(--ink-primary)"
                 >
                   {p}
                 </button>
@@ -316,7 +472,7 @@ export function AiPanel({
           e.preventDefault();
           submit(input);
         }}
-        className="flex flex-none flex-col gap-1.5 border-t border-border p-3"
+        className="flex flex-none flex-col gap-1.5 border-t border-(--border-hairline) p-3"
       >
         <div className="flex items-end gap-2">
           <textarea
@@ -333,17 +489,13 @@ export function AiPanel({
                 submit(input);
               }
             }}
-            placeholder="Describe your form..."
+            placeholder="Ask me anything about Forml..."
             disabled={!formId}
-            className="formix-scroll max-h-[140px] flex-1 resize-none rounded-xl border border-border bg-background/60 px-3 py-2.5 font-inter text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-ring focus:ring-2 focus:ring-ring/15 disabled:cursor-not-allowed disabled:opacity-50"
+            className="formix-scroll max-h-[140px] flex-1 resize-none rounded-xl border border-(--border-hairline) bg-(--bg-surface)/60 px-3 py-2.5 text-sm text-(--ink-primary) outline-none transition-colors placeholder:text-(--ink-tertiary)/50 focus:border-(--accent-primary) focus:ring-2 focus:ring-(--accent-primary)/15 disabled:cursor-not-allowed disabled:opacity-50"
           />
           {isStreaming ? (
             <Button type="button" variant="outline" size="icon" onClick={stop} aria-label="Stop generating" title="Stop generating">
               <Square className="h-3.5 w-3.5 fill-current" />
-            </Button>
-          ) : messages.length === 0 ? (
-            <Button type="submit" size="sm" disabled={!formId || !input.trim()} className="gap-1.5 whitespace-nowrap">
-              <Sparkles className="h-3.5 w-3.5" /> Generate Form
             </Button>
           ) : (
             <Button type="submit" size="icon" disabled={!formId || !input.trim()} aria-label="Send message" title="Send">
@@ -351,7 +503,7 @@ export function AiPanel({
             </Button>
           )}
         </div>
-        <p className="font-mono text-[10px] text-muted-foreground/60">Enter to send · Shift+Enter for a new line</p>
+        <p className="text-xs text-(--ink-tertiary)/60">Enter to send · Shift+Enter for a new line</p>
       </form>
     </div>
   );

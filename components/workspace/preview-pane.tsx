@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 /**
  * components/workspace/preview-pane.tsx
@@ -73,20 +73,20 @@ export function PreviewPane({
   const action = ast?.action as ASTNode | undefined;
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-l border-border bg-background">
-      <div className="flex h-12 flex-none items-center justify-between border-b border-border bg-card px-5">
+    <div className="flex h-full min-h-0 flex-col border-l border-(--border-hairline) bg-(--bg-base)">
+      <div className="flex h-12 flex-none items-center justify-between border-b border-(--border-hairline) bg-(--bg-surface) px-5">
         <div>
-          <p className="font-inter text-sm font-semibold text-foreground">Live Preview</p>
-          <p className="font-inter text-xs text-muted-foreground">Rendered output</p>
+          <p className="text-sm font-semibold text-(--ink-primary)">Live Preview</p>
+          <p className="text-xs text-(--ink-tertiary)">Rendered output</p>
         </div>
         {allStatements.length > 0 && (
-          <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
+          <span className="rounded-full bg-(--bg-subtle) px-2 py-0.5 text-xs text-(--ink-tertiary)">
             {allStatements.filter((s) => s.type === "Field").length} fields
           </span>
         )}
       </div>
 
-      <div className="bg-dot-grid min-h-0 flex-1 overflow-auto bg-muted/30 p-6">
+      <div className="bg-dot-grid min-h-0 flex-1 overflow-auto bg-(--bg-subtle)/30 p-6">
         <AnimatePresence mode="wait">
           {isError ? (
             <motion.div
@@ -102,8 +102,8 @@ export function PreviewPane({
                   <AlertCircle className="h-5 w-5 text-destructive" />
                 </div>
                 <div>
-                  <p className="font-inter text-sm font-semibold text-foreground">Compile Error</p>
-                  <p className="mt-1 font-inter text-xs leading-relaxed text-muted-foreground">
+                  <p className="text-sm font-semibold text-foreground">Compile Error</p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                     Fix errors in the editor — the preview updates automatically.
                   </p>
                 </div>
@@ -122,7 +122,7 @@ export function PreviewPane({
                   <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">
                     Live
                   </span>
-                  <h2 className="mt-3 font-inter text-xl font-bold tracking-tight text-foreground">
+                  <h2 className="mt-3 text-xl font-bold tracking-tight text-foreground">
                     {formTitle}
                   </h2>
                 </div>
@@ -140,7 +140,7 @@ export function PreviewPane({
                       onFileChange={handleFileChange}
                     />
                   ) : (
-                    <p className="font-inter text-sm text-muted-foreground">Parsing form…</p>
+                    <p className="text-sm text-muted-foreground">Parsing form…</p>
                   )}
                 </div>
 
@@ -148,7 +148,7 @@ export function PreviewPane({
                   <button
                     type="button"
                     onClick={() => validateAll()}
-                    className="w-full rounded-lg bg-accent py-3 font-inter text-sm font-semibold text-accent-foreground shadow-sm transition-all duration-150 hover:opacity-90 active:scale-[0.98]"
+                    className="w-full rounded-lg bg-accent py-3 text-sm font-semibold text-accent-foreground shadow-sm transition-all duration-150 hover:opacity-90 active:scale-[0.98]"
                   >
                     Submit Form
                   </button>
@@ -163,7 +163,7 @@ export function PreviewPane({
               {allStatements.some((s) => s.type === "RepeatGroup") && (
                 <div className="mt-3 flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2.5">
                   <Zap className="mt-0.5 h-3 w-3 flex-none text-accent" />
-                  <p className="font-inter text-xs leading-relaxed text-muted-foreground">
+                  <p className="text-xs leading-relaxed text-muted-foreground">
                     This form uses <strong className="text-foreground">repeat groups</strong> — enter a number in the count field and new sections appear dynamically.
                   </p>
                 </div>

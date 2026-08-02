@@ -13,6 +13,7 @@ const eslintConfig = [
       "forml-compiler/**",
       "graphify-out/**",
       "backend/**",
+      "tests/.build/**",
     ],
   },
   {

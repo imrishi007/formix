@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 /**
  * components/analytics/analytics-shell.tsx
@@ -23,6 +23,8 @@ import {
   CalendarRange,
   CalendarDays,
   Timer,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -32,6 +34,7 @@ import {
   getFormAnalytics,
   publishForm,
   unpublishForm,
+  downloadExport,
   ApiError,
   type FormDetail,
   type FormAnalytics,
@@ -44,6 +47,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrafficChart } from "@/components/analytics/traffic-chart";
 import { FieldAnalyticsCard } from "@/components/analytics/field-analytics-card";
 import { FullPageLoader } from "@/components/ui/full-page-loader";
+import { ProfileMenu } from "@/components/brand/profile-menu";
 
 function describeError(err: unknown): string {
   if (err instanceof ApiError) return err.message;
@@ -70,6 +74,7 @@ export function AnalyticsShell({ projectId, formId }: { projectId: string; formI
   const [origin, setOrigin] = useState("");
   const [togglingPublish, setTogglingPublish] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState<"csv" | "xlsx" | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/auth/signin");
@@ -130,66 +135,89 @@ export function AnalyticsShell({ projectId, formId }: { projectId: string; formI
     );
   }, [publicUrl]);
 
+  const handleExport = useCallback(async (format: "csv" | "xlsx") => {
+    if (!form || exporting) return;
+    setExporting(format);
+    try {
+      await downloadExport(form.id, format, `${form.title}-responses`);
+      toast.success(`Responses exported as ${format.toUpperCase()}.`);
+    } catch (err) {
+      toast.error(`Couldn't export responses — ${describeError(err)}`);
+    } finally {
+      setExporting(null);
+    }
+  }, [form, exporting]);
+
   if (authLoading || !user) {
     return <FullPageLoader label="Loading analytics…" />;
   }
 
   return (
-    <div className="min-h-screen bg-background font-inter text-foreground">
+    <div className="min-h-screen bg-(--bg-base) text-(--ink-primary)">
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <Link href="/dashboard" className="mb-4 inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground">
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
-        </Link>
+        <div className="mb-4 flex items-center gap-3">
+          <ProfileMenu />
+          <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-xs tracking-[0.08em] text-(--ink-tertiary) uppercase transition-colors hover:text-(--ink-primary)">
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
+          </Link>
+        </div>
 
         {error && (
-          <div role="alert" className="mb-6 flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-3">
-            <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-destructive" />
-            <p className="text-sm text-destructive">{error}</p>
+          <div role="alert" className="mb-6 flex items-start gap-2.5 rounded-(--radius-md) border border-(--accent-danger)/30 bg-(--accent-danger)/5 px-3.5 py-3">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-(--accent-danger)" />
+            <p className="text-sm text-(--accent-danger)">{error}</p>
           </div>
         )}
 
         {!form || !analytics ? (
           !error && (
-            <div className="flex items-center justify-center gap-2 py-24 text-muted-foreground">
+            <div className="flex items-center justify-center gap-2 py-24 text-(--ink-secondary)">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span className="text-sm">Loading…</span>
             </div>
           )
         ) : (
           <>
-            {/* ── Header ──────────────────────────────────────────────────── */}
-            <Card className="mb-6 py-5">
-              <CardContent className="flex flex-col gap-4 px-5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="card-base mb-6 p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="truncate font-inter text-xl font-semibold text-foreground">{form.title}</h1>
+                    <h1 className="truncate text-xl font-semibold text-(--ink-primary)">{form.title}</h1>
                     {form.is_published ? (
-                      <Badge variant="outline" className="border-accent/30 bg-accent/10 text-accent">Published</Badge>
+                      <Badge variant="success">Published</Badge>
                     ) : (
-                      <Badge variant="outline" className="text-muted-foreground">Draft</Badge>
+                      <Badge variant="secondary">Draft</Badge>
                     )}
                   </div>
                   {form.is_published ? (
                     <div className="flex items-center gap-2">
-                      <LinkIcon className="h-3.5 w-3.5 flex-none text-muted-foreground" />
-                      <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="truncate font-mono text-xs text-accent underline-offset-2 hover:underline">
+                      <LinkIcon className="h-3.5 w-3.5 flex-none text-(--ink-tertiary)" />
+                      <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-(--accent-primary) underline-offset-2 hover:underline">
                         {publicUrl}
                       </a>
                       <button
                         type="button"
                         onClick={copyUrl}
                         aria-label="Copy public link"
-                        className="flex flex-none items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 font-inter text-[11px] text-muted-foreground transition-colors hover:border-accent/50 hover:text-accent"
+                        className="flex flex-none items-center gap-1 rounded border border-(--border-hairline) bg-(--bg-surface) px-1.5 py-0.5 text-xs text-(--ink-tertiary) transition-colors hover:border-(--accent-primary)/50 hover:text-(--accent-primary)"
                       >
                         {copied ? "Copied!" : <><Copy className="h-3 w-3" /> Copy</>}
                       </button>
                     </div>
                   ) : (
-                    <p className="font-mono text-xs text-muted-foreground">Not published</p>
+                    <p className="text-xs text-(--ink-tertiary)">Not published</p>
                   )}
                 </div>
 
-                <div className="flex flex-none items-center gap-4">
+                <div className="flex flex-none flex-wrap items-center justify-end gap-2">
+                  <Button variant="outline" size="sm" disabled={analytics.total_submissions === 0 || exporting !== null} onClick={() => handleExport("csv")}>
+                    {exporting === "csv" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                    CSV
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={analytics.total_submissions === 0 || exporting !== null} onClick={() => handleExport("xlsx")}>
+                    {exporting === "xlsx" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+                    Excel
+                  </Button>
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={form.is_published}
@@ -197,7 +225,7 @@ export function AnalyticsShell({ projectId, formId }: { projectId: string; formI
                       onCheckedChange={handleTogglePublish}
                       aria-label={form.is_published ? "Unpublish form" : "Publish form"}
                     />
-                    <span className="font-inter text-xs text-muted-foreground">
+                    <span className="text-xs text-(--ink-secondary)">
                       {form.is_published ? "Live" : "Offline"}
                     </span>
                   </div>
@@ -207,64 +235,59 @@ export function AnalyticsShell({ projectId, formId }: { projectId: string; formI
                     </Link>
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            {/* ── Stats ───────────────────────────────────────────────────── */}
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
               {[
                 { label: "Total Responses", value: analytics.total_submissions, icon: <Inbox className="h-4 w-4" /> },
                 { label: "Today", value: analytics.today_responses, icon: <CalendarClock className="h-4 w-4" /> },
                 { label: "This Week", value: analytics.responses_last_7_days, icon: <CalendarRange className="h-4 w-4" /> },
                 { label: "This Month", value: analytics.responses_last_30_days, icon: <CalendarDays className="h-4 w-4" /> },
               ].map((s) => (
-                <Card key={s.label} className="py-4">
-                  <CardHeader className="flex-row items-center justify-between gap-2 px-4">
-                    <CardTitle className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{s.label}</CardTitle>
-                    <span className="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-accent/10 text-accent">{s.icon}</span>
-                  </CardHeader>
-                  <CardContent className="px-4">
-                    <p className="font-inter text-2xl font-semibold text-foreground">{s.value.toLocaleString()}</p>
-                  </CardContent>
+                <Card key={s.label} className="p-6">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs tracking-[0.08em] text-(--ink-tertiary) uppercase">{s.label}</span>
+                    <span className="flex h-7 w-7 flex-none items-center justify-center text-(--ink-tertiary)">{s.icon}</span>
+                  </div>
+                  <div className="mt-2">
+                    <p className="text-[32px] font-semibold leading-none text-(--ink-primary)">{s.value.toLocaleString()}</p>
+                  </div>
                 </Card>
               ))}
-              <Card className="py-4">
-                <CardHeader className="flex-row items-center justify-between gap-2 px-4">
-                  <CardTitle className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Avg. Completion</CardTitle>
-                  <span className="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-accent/10 text-accent"><Timer className="h-4 w-4" /></span>
-                </CardHeader>
-                <CardContent className="px-4">
-                  <p className="font-inter text-2xl font-semibold text-foreground">{formatDuration(analytics.avg_completion_seconds)}</p>
-                  <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+              <Card className="p-6">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs tracking-[0.08em] text-(--ink-tertiary) uppercase">Avg. Completion</span>
+                  <span className="flex h-7 w-7 flex-none items-center justify-center text-(--ink-tertiary)"><Timer className="h-4 w-4" /></span>
+                </div>
+                <div className="mt-2">
+                  <p className="text-[32px] font-semibold leading-none text-(--ink-primary)">{formatDuration(analytics.avg_completion_seconds)}</p>
+                  <p className="mt-1 text-xs text-(--ink-tertiary)">
                     {analytics.completion_sample_size > 0
                       ? `based on ${analytics.completion_sample_size} timed response${analytics.completion_sample_size === 1 ? "" : "s"}`
                       : "no timed responses yet"}
                   </p>
-                </CardContent>
+                </div>
               </Card>
             </div>
 
-            {/* ── Traffic chart ───────────────────────────────────────────── */}
-            <Card className="mb-6 py-5">
-              <CardHeader className="px-5">
-                <CardTitle className="font-inter text-base font-semibold">Daily Responses</CardTitle>
-              </CardHeader>
-              <CardContent className="px-5">
-                <TrafficChart data={analytics.submissions_by_day} />
-              </CardContent>
-            </Card>
+            <div className="card-base mb-6 p-6">
+              <div className="mb-4">
+                <span className="text-base font-semibold">Daily Responses</span>
+              </div>
+              <TrafficChart data={analytics.submissions_by_day} />
+            </div>
 
-            {/* ── Per-field analytics ─────────────────────────────────────── */}
             <div>
-              <h2 className="mb-3 font-inter text-base font-semibold text-foreground">Field Responses</h2>
+              <h2 className="mb-4 text-base font-semibold text-(--ink-primary)">Field Responses</h2>
               {analytics.fields.length === 0 ? (
-                <Card className="py-8">
-                  <CardContent className="px-5 text-center text-sm text-muted-foreground">
+                <div className="card-base py-12 text-center">
+                  <p className="text-sm text-(--ink-secondary)">
                     {form.compiled_schema
                       ? "This form has no fields yet."
                       : "This form hasn't been compiled yet — field analytics will appear once it's published."}
-                  </CardContent>
-                </Card>
+                  </p>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {analytics.fields.map((field) => (

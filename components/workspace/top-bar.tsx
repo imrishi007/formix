@@ -7,10 +7,12 @@
  */
 
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Loader2, Play, CheckCircle2, AlertCircle, Globe, Inbox, LayoutDashboard, LogOut, Sparkles, User as UserIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Play, CheckCircle2, AlertCircle, Globe, Inbox, LayoutDashboard, Sparkles } from "lucide-react";
 import type { ProjectResponse } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
+import { FormixLogo } from "@/components/brand/formix-logo";
+import { ThemeToggle } from "@/components/brand/theme-toggle";
+import { ProfileMenu } from "@/components/brand/profile-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,7 +57,6 @@ export function TopBar({
   aiOpen: boolean;
   onToggleAi: () => void;
 }) {
-  const { user, logout } = useAuth();
   const activeProject = projects.find((p) => p.id === activeProjectId);
 
   const phase: Record<CompilePhase, { label: string; dot: string; icon: React.ReactNode; tone: string }> = {
@@ -71,11 +72,12 @@ export function TopBar({
     <header className="flex h-14 flex-none items-center justify-between border-b border-border bg-card px-4">
       <div className="flex min-w-0 items-center gap-3">
         <Link href="/" className="flex flex-none items-center gap-2 rounded-md px-1 py-1 transition-opacity hover:opacity-80">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 ring-1 ring-accent/25">
-            <span className="font-inter text-[10px] font-black tracking-tighter text-accent">FX</span>
-          </div>
-          <span className="hidden font-inter text-sm font-semibold tracking-tight text-foreground sm:inline">Formix</span>
+          {/* Shared brand mark — single component, replaces the old FX box */}
+          <FormixLogo size={20} variant="color" aria-hidden="true" />
+          <span className="hidden text-sm font-semibold tracking-tight text-foreground sm:inline">Formix</span>
         </Link>
+
+        <ProfileMenu />
 
         <span className="h-4 w-px flex-none bg-border" />
 
@@ -83,7 +85,7 @@ export function TopBar({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 font-inter text-sm text-foreground transition-colors hover:bg-accent/10"
+              className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-accent/10"
             >
               <span className="truncate">{activeProject?.title ?? "Select project"}</span>
               <ChevronDown className="h-3.5 w-3.5 flex-none text-muted-foreground" />
@@ -93,7 +95,7 @@ export function TopBar({
             <DropdownMenuLabel>Your projects</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {projects.length === 0 && (
-              <div className="px-2 py-1.5 font-inter text-sm text-muted-foreground">No projects yet</div>
+              <div className="px-2 py-1.5 text-sm text-muted-foreground">No projects yet</div>
             )}
             {projects.map((p) => (
               <DropdownMenuItem key={p.id} onClick={() => onSelectProject(p.id)}>
@@ -106,12 +108,13 @@ export function TopBar({
         {activeFormTitle && (
           <div className="flex min-w-0 items-center gap-1.5">
             <ChevronRight className="h-3.5 w-3.5 flex-none text-muted-foreground/50" />
-            <span className="truncate rounded-md bg-muted px-2 py-1 font-inter text-sm text-foreground">{activeFormTitle}</span>
+            <span className="truncate rounded-md bg-muted px-2 py-1 text-sm text-foreground">{activeFormTitle}</span>
           </div>
         )}
       </div>
 
       <div className="flex flex-none items-center gap-2">
+        <ThemeToggle />
         {saveState === "saving" && (
           <span className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" /> Saving…
@@ -128,7 +131,7 @@ export function TopBar({
 
         <div className={`flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 ${status.tone}`}>
           {status.icon ?? <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />}
-          <span className="font-inter text-xs font-medium">{status.label}</span>
+          <span className="text-xs font-medium">{status.label}</span>
         </div>
 
         <Button
@@ -164,31 +167,6 @@ export function TopBar({
           {publishState === "publishing" ? "Publishing…" : "Publish"}
         </Button>
 
-        <span className="mx-1 h-5 w-px bg-border" />
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label={`Account menu — signed in as ${user?.email ?? "unknown"}`}
-              className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-accent/15 text-accent transition-colors hover:bg-accent/25"
-            >
-              <UserIcon className="h-4 w-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-48">
-            <DropdownMenuLabel className="truncate font-normal text-muted-foreground">{user?.email}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/dashboard">
-                <LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={logout}>
-              <LogOut className="h-3.5 w-3.5" /> Log out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </header>
   );

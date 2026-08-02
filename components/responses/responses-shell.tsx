@@ -78,6 +78,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ResponseDetailDialog } from "@/components/responses/response-detail-dialog";
 import { FullPageLoader } from "@/components/ui/full-page-loader";
+import { ProfileMenu } from "@/components/brand/profile-menu";
 
 const FETCH_LIMIT = 500; // the backend endpoint's own page-size ceiling
 const PAGE_SIZES = [10, 25, 50, 100];
@@ -300,11 +301,14 @@ export function ResponsesShell({ projectId, formId }: { projectId: string; formI
   }
 
   return (
-    <div className="min-h-screen bg-background font-inter text-foreground">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <Link href="/dashboard" className="mb-4 inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground">
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
-        </Link>
+        <div className="mb-4 flex items-center gap-3">
+          <ProfileMenu />
+          <Link href="/dashboard" className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground">
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
+          </Link>
+        </div>
 
         {error && (
           <div role="alert" className="mb-6 flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-3">
@@ -324,7 +328,7 @@ export function ResponsesShell({ projectId, formId }: { projectId: string; formI
           <>
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h1 className="font-inter text-xl font-semibold text-foreground">Responses</h1>
+                <h1 className="text-xl font-semibold text-foreground">Responses</h1>
                 <p className="font-mono text-xs text-muted-foreground">
                   {form.title}
                   {totalOnServer > FETCH_LIMIT ? ` — showing the most recent ${FETCH_LIMIT} of ${totalOnServer}` : ""}

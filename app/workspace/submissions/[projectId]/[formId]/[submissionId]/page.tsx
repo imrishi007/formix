@@ -147,7 +147,7 @@ export default function SubmissionFullPage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-accent" />
-        <span className="font-inter text-sm text-muted-foreground">Loading submission…</span>
+        <span className="text-sm text-muted-foreground">Loading submission…</span>
       </div>
     );
   }
@@ -156,8 +156,8 @@ export default function SubmissionFullPage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background px-4 text-center">
         <AlertCircle className="h-6 w-6 text-destructive" />
-        <p className="font-inter text-sm text-destructive">{error ?? "Submission not found."}</p>
-        <Link href="/editor/demo" className="font-inter text-xs text-accent hover:underline">
+        <p className="text-sm text-destructive">{error ?? "Submission not found."}</p>
+        <Link href="/editor/demo" className="text-xs text-accent hover:underline">
           Back to workspace
         </Link>
       </div>
@@ -170,7 +170,7 @@ export default function SubmissionFullPage() {
         <button
           type="button"
           onClick={() => window.close()}
-          className="mb-6 inline-flex items-center gap-1.5 font-inter text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Close tab
         </button>
@@ -178,7 +178,7 @@ export default function SubmissionFullPage() {
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="border-b border-border bg-muted/50 px-7 py-6">
             <p className="font-mono text-xs uppercase tracking-[0.14em] text-muted-foreground">Submission</p>
-            <h1 className="mt-1 font-inter text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">
               {form?.title ?? "Form"}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-muted-foreground">
@@ -190,12 +190,12 @@ export default function SubmissionFullPage() {
 
           <div className="divide-y divide-border">
             {entries.length === 0 && (
-              <p className="px-7 py-6 font-inter text-sm text-muted-foreground">No data recorded for this submission.</p>
+              <p className="px-7 py-6 text-sm text-muted-foreground">No data recorded for this submission.</p>
             )}
             {entries.map(([key, value]) => (
               <div key={key} className="grid grid-cols-1 gap-1 px-7 py-4 sm:grid-cols-[220px_1fr] sm:gap-4">
-                <p className="font-inter text-sm font-semibold text-foreground">{labels[key] ?? key}</p>
-                <div className="font-inter text-sm">
+                <p className="text-sm font-semibold text-foreground">{labels[key] ?? key}</p>
+                <div className="text-sm">
                   <ValueDisplay value={value} />
                 </div>
               </div>

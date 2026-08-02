@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { DocsSidebar } from "./docs-sidebar";
+import { ThemeToggle } from "@/components/brand/theme-toggle";
 
 interface Breadcrumb {
   label: string;
@@ -61,6 +62,7 @@ export function DocsNav({ breadcrumbs = [] }: DocsNavProps) {
 
           {/* Right actions */}
           <div className="ml-auto flex items-center gap-4">
+            <ThemeToggle />
             <Link
               href="/editor/demo"
               className="hidden sm:flex items-center gap-2 text-xs font-mono text-foreground/50 hover:text-foreground transition-colors border border-foreground/15 px-3 py-1.5 rounded-full hover:border-foreground/30"

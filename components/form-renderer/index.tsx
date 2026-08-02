@@ -27,10 +27,10 @@ export type ASTNode = Record<string, unknown>;
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
 export const INPUT_CLS =
-  "w-full rounded-lg border border-border bg-background px-3 py-2 font-inter text-sm text-foreground outline-none placeholder:text-muted-foreground/60 transition-all duration-150 focus:border-ring focus:ring-2 focus:ring-ring/15";
+  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 transition-all duration-150 focus:border-ring focus:ring-2 focus:ring-ring/15";
 
 export const INPUT_CLS_ERROR =
-  "w-full rounded-lg border border-destructive bg-destructive/5 px-3 py-2 font-inter text-sm text-foreground outline-none placeholder:text-muted-foreground/60 transition-all duration-150 focus:border-destructive focus:ring-2 focus:ring-destructive/15";
+  "w-full rounded-lg border border-destructive bg-destructive/5 px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 transition-all duration-150 focus:border-destructive focus:ring-2 focus:ring-destructive/15";
 
 // ── Condition evaluator ───────────────────────────────────────────────────────
 
@@ -120,7 +120,7 @@ function FileUploadInput({
     <div className="space-y-2">
       <label
         htmlFor={`file-${nameKey}`}
-        className={`flex cursor-pointer items-center gap-2 rounded-lg border border-dashed px-3 py-2.5 font-inter text-sm transition-colors ${
+        className={`flex cursor-pointer items-center gap-2 rounded-lg border border-dashed px-3 py-2.5 text-sm transition-colors ${
           error ? "border-destructive bg-destructive/5 text-destructive" : "border-border bg-background text-muted-foreground hover:border-accent/50 hover:text-accent"
         }`}
       >
@@ -144,7 +144,7 @@ function FileUploadInput({
           {files.map((f, i) => (
             <li
               key={`${f.name}-${f.size}-${i}`}
-              className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/50 px-2.5 py-1.5 font-inter text-xs text-foreground"
+              className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/50 px-2.5 py-1.5 text-xs text-foreground"
             >
               <span className="min-w-0 flex-1 truncate">{f.name}</span>
               <span className="flex-none text-muted-foreground">{formatBytes(f.size)}</span>
@@ -209,10 +209,10 @@ export function DynamicField({
 
   return (
     <div className="space-y-1.5">
-      <label className="flex items-baseline gap-1.5 font-inter text-sm font-semibold text-foreground">
+      <label className="flex items-baseline gap-1.5 text-sm font-semibold text-foreground">
         {label}
         {repeatIndex !== undefined && (
-          <span className="font-inter text-xs font-normal text-muted-foreground">
+          <span className="text-xs font-normal text-muted-foreground">
             item {repeatIndex + 1}
           </span>
         )}
@@ -239,7 +239,7 @@ export function DynamicField({
       {fieldType === "radio" && (
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           {options.map((o) => (
-            <label key={o} className="flex cursor-pointer items-center gap-1.5 font-inter text-sm text-foreground">
+            <label key={o} className="flex cursor-pointer items-center gap-1.5 text-sm text-foreground">
               <input
                 type="radio"
                 name={nameKey}
@@ -260,7 +260,7 @@ export function DynamicField({
           {options.map((o) => {
             const ck = values[`${nameKey}__${o}`] === "true";
             return (
-              <label key={o} className="flex cursor-pointer items-center gap-2 font-inter text-sm text-foreground">
+              <label key={o} className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
                 <input
                   type="checkbox"
                   checked={ck}
@@ -276,7 +276,7 @@ export function DynamicField({
       )}
 
       {fieldType === "boolean" && (
-        <label className="flex cursor-pointer items-center gap-2 font-inter text-sm text-foreground">
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
           <input
             type="checkbox"
             checked={value === "true"}
@@ -330,11 +330,11 @@ export function DynamicField({
       )}
 
       {helpText && (
-        <p className="font-inter text-xs text-muted-foreground">{helpText}</p>
+        <p className="text-xs text-muted-foreground">{helpText}</p>
       )}
 
       {showError && (
-        <p role="alert" className="mt-0.5 flex items-center gap-1 font-inter text-xs text-destructive">
+        <p role="alert" className="mt-0.5 flex items-center gap-1 text-xs text-destructive">
           <span className="inline-block h-3 w-3 flex-none" aria-hidden="true">⚠</span>
           {error}
         </p>
@@ -406,7 +406,7 @@ export function RenderStatements({
               {count === 0 && (
                 <div className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-muted/50 px-4 py-3">
                   <span className="text-[18px] text-muted-foreground/60">↑</span>
-                  <p className="font-inter text-sm text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     Set{" "}
                     <code className="rounded bg-muted px-1 font-mono text-xs text-foreground">
                       {countRef}
@@ -426,10 +426,10 @@ export function RenderStatements({
                     className="overflow-hidden rounded-lg border border-border bg-muted/30"
                   >
                     <div className="flex items-center gap-2 border-b border-border bg-muted px-4 py-2">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent font-inter text-xs font-bold text-accent-foreground">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-foreground">
                         {idx + 1}
                       </span>
-                      <span className="font-inter text-sm font-medium text-foreground">
+                      <span className="text-sm font-medium text-foreground">
                         {countRef.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())} {idx + 1}
                       </span>
                     </div>
@@ -509,7 +509,7 @@ export function RenderStatements({
           return (
             <div key={key} className="space-y-4">
               <div className="flex items-center gap-2">
-                <span className="flex-none font-inter text-xs font-semibold uppercase tracking-[0.14em] text-accent">
+                <span className="flex-none text-xs font-semibold uppercase tracking-[0.14em] text-accent">
                   {sectionName}
                 </span>
                 <span className="h-px flex-1 bg-border" />
