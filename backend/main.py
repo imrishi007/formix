@@ -102,7 +102,7 @@ app = FastAPI(
         "user auth, project management, form storage, publish, "
         "sequential submission flows, and submission handling."
     ),
-    version="0.2.0",
+    version="0.2.1",
     lifespan=lifespan,
 )
 
@@ -169,4 +169,4 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 @app.get("/health")
 def health():
     """Quick liveness check."""
-    return {"status": "ok", "version": "0.2.0"}
+    return {"status": "ok", "version": "0.2.1"}

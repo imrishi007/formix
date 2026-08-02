@@ -341,6 +341,14 @@ async def oauth_callback(provider: str, request: Request):
     db = next(get_db())
     try:
         user = _find_or_create_oauth_user(db, provider, profile)
+    except Exception as exc:  # noqa: BLE001
+        # A find-or-create failure must never surface as a raw 500 — that
+        # leaves the author staring at "Internal Server Error" with no way to
+        # recover. Log the full traceback (so the real cause is in the Render
+        # logs) and bounce back to the frontend with a readable message.
+        db.rollback()
+        log.error("find_or_create failed for %s %s", provider, profile.get("email"), exc_info=True)
+        return _redirect(error="Could not finish sign-in. Please try again or sign in with your email.")
     finally:
         db.close()
 

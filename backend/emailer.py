@@ -17,10 +17,13 @@ Production correctness is the caller's job: when SMTP is configured the link
 is emailed and the function returns None.
 """
 
+import logging
 import os
 import smtplib
 from email.message import EmailMessage
 from email.utils import formataddr
+
+log = logging.getLogger("formix.emailer")
 
 
 def _smtp_config():
@@ -42,6 +45,9 @@ def send_reset_link(to_email: str, reset_link: str) -> str | None:
     """Email a password-reset link.
 
     Returns the link (dev mode, nothing sent) or None (a real email was sent).
+    NEVER raises: an SMTP failure is logged and treated as a no-send so the
+    caller's API response stays stable (and doesn't leak whether the account
+    exists via a 500 vs 200).
     """
     cfg = _smtp_config()
     if cfg is None:
@@ -114,9 +120,16 @@ def send_reset_link(to_email: str, reset_link: str) -> str | None:
         subtype="html",
     )
 
-    with smtplib.SMTP(host, port, timeout=15) as server:
-        server.starttls()
-        if user:
-            server.login(user, password)
-        server.send_message(msg)
+    try:
+        with smtplib.SMTP(host, port, timeout=15) as server:
+            server.starttls()
+            if user:
+                server.login(user, password)
+            server.send_message(msg)
+    except Exception:  # noqa: BLE001
+        # Bad credentials, refused connection, TLS trouble, rate limit — log
+        # the full traceback so operators can see WHY a reset email didn't go
+        # out (e.g. in the Render logs), but keep the API response stable.
+        log.error("Failed to send reset email to %s: %s", to_email, reset_link, exc_info=True)
+        return None
     return None

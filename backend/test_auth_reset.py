@@ -122,6 +122,21 @@ def test_forgot_password_skips_oauth_only_accounts(client):
     assert resp.json()["reset_link"] is None
 
 
+def test_forgot_password_never_500_on_smtp_failure(client, monkeypatch):
+    # Regression: with SMTP configured, a failed send (bad creds, refused
+    # connection) used to crash the endpoint into a 500 — which also leaked
+    # account existence (200 vs 500). send_reset_link swallows + logs now, so
+    # the response must stay a stable 200 even when the mail backend explodes.
+    def _boom(to_email, reset_link):  # simulate a throw inside the send path
+        raise RuntimeError("simulated SMTP auth failure")
+
+    import backend.routers.auth as auth_router
+    monkeypatch.setattr(auth_router, "send_reset_link", _boom)
+    resp = client.post("/auth/forgot-password", json={"email": "a@test.com"})
+    assert resp.status_code == 200
+    assert resp.json()["reset_link"] is None
+
+
 # ── reset-password ───────────────────────────────────────────────────────────
 
 def test_reset_password_works_and_new_password_signs_in(client):

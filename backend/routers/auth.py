@@ -129,7 +129,7 @@ def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)):
     The response is deliberately identical whether or not the email exists, so
     an attacker can't use this endpoint to enumerate registered accounts.
     """
-    user = db.query(User).filter(User.email == body.email.strip().lower()).first()
+    user = db.query(User).filter(func.lower(User.email) == body.email.strip().lower()).first()
 
     reset_link = None
     if user is not None and user.hashed_password is not None:
@@ -140,10 +140,17 @@ def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)):
             {"sub": user.id, "typ": "password_reset"},
             expires_delta=timedelta(hours=1),
         )
-        reset_link = send_reset_link(
-            user.email,
-            f"{frontend_url()}/auth/reset-password?token={token}",
-        )
+        try:
+            reset_link = send_reset_link(   # never raises — SMTP failure is logged inside
+                user.email,
+                f"{frontend_url()}/auth/reset-password?token={token}",
+            )
+        except Exception:  # noqa: BLE001
+            # Belt-and-braces: even if the mailer unexpectedly throws, the API
+            # must answer the same way as "no account" — a 500 here would both
+            # crash the flow AND leak account existence (200 vs 500).
+            log.error("send_reset_link raised for %s", user.email, exc_info=True)
+            reset_link = None
         # Dev-mode only: never leak the link through the API on Render.
         if reset_link is not None and not _allow_plaintext_reset_link():
             log.warning(
