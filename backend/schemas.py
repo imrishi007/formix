@@ -24,6 +24,11 @@ class UserResponse(BaseModel):
     id: str
     email: str
     name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    # Which provider the account was created/linked through ("google", "github",
+    # or None for email+password accounts). Exposed so the frontend can say
+    # "Signed in with Google" — oauth_subject stays private.
+    oauth_provider: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -38,6 +43,23 @@ class Token(BaseModel):
 
 class LoginRequest(BaseModel):
     email: str
+    password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    # Dev-mode only: populated (with the reset link) when no SMTP is configured
+    # so the flow is testable without email infra. Never present in production,
+    # where the link is emailed and this stays None.
+    reset_link: Optional[str] = None
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
     password: str
 
 
@@ -200,6 +222,91 @@ class PaginatedSubmissions(BaseModel):
     offset: int
 
 
+# ── Formix AI (LLM-backed chat) ───────────────────────────────────────────────
+
+# Mirrors lib/use-forml-compiler.ts FormlDiagnostic — the exact shape the WASM
+# compiler produces, threaded straight through to the model.
+class AiDiagnostic(BaseModel):
+    line: int
+    col: int
+    severity: Literal["error", "warning", "info"]
+    message: str
+
+
+class AiHistoryMessage(BaseModel):
+    """One stored conversation turn as the client threads it into a chat
+    request. `forml_code` is only meaningful for assistant messages — the full
+    revised .forml source that turn produced (used to ground follow-ups)."""
+    role: Literal["user", "assistant"]
+    content: str
+    forml_code: Optional[str] = None
+
+
+class AiRepairContext(BaseModel):
+    """Present when this request is a repair turn of the compile-and-repair
+    loop (see lib/ai-loop.ts): the model's previous attempt failed to compile
+    on the client's WASM compiler, and these are the exact diagnostics."""
+    attempt: int                                   # 1-based repair number
+    errors: list[AiDiagnostic] = []
+
+
+class AiChatRequest(BaseModel):
+    """
+    POST /ai/chat body — the full contract the client sends on every request:
+
+      - source            : the current FormL source (the baseline the model
+                            edits; on a repair turn this is the model's own
+                            previous, broken output)
+      - diagnostics       : compiler diagnostics from the last compile (empty
+                            on a clean form)
+      - selection         : the selected code range, if the user has one
+      - recent_messages   : the last 5-6 conversation messages VERBATIM
+      - history_summary   : a compressed one-line summary of any OLDER history
+      - repair_context    : set when this call is a compile-and-repair follow-up
+    """
+    form_id: str
+    user_message: str
+    source: str
+    diagnostics: list[AiDiagnostic] = []
+    selection: str = ""
+    recent_messages: list[AiHistoryMessage] = []
+    history_summary: str = ""
+    repair_context: Optional[AiRepairContext] = None
+
+
+class AiChatMessageRecord(BaseModel):
+    """A stored history message returned by GET /ai/chat/{form_id}/history."""
+    id: str
+    role: str
+    content: str
+    revised_source: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AiChatHistoryResponse(BaseModel):
+    """History envelope — the client keeps only the last ~10-20 messages, so
+    the response carries the full persisted list plus the capped window the
+    client is expected to retain."""
+    messages: list[AiChatMessageRecord]
+
+
+class AiAppendRequest(BaseModel):
+    """POST /ai/chat/{form_id}/messages body — persists one completed turn
+    (user message + assistant reply) once the client's compile-and-repair loop
+    has resolved, so the conversation survives reloads."""
+    user_message: str
+    assistant_message: str
+    revised_source: Optional[str] = None
+
+
+class AiAppendResponse(BaseModel):
+    ok: bool
+    count: int   # total messages stored for this form after the append
+
+
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
 class DashboardSummary(BaseModel):
@@ -224,6 +331,31 @@ class DashboardFormRow(BaseModel):
     updated_at: datetime
     submission_count: int
     last_response_at: Optional[datetime] = None
+
+
+# ── Profile ─────────────────────────────────────────────────────────────────
+
+class ProfileUpdate(BaseModel):
+    """PATCH /profile body — only fields present are changed."""
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
+class ProfileDayCount(BaseModel):
+    """One (date, count) bucket in the profile page's yearly heatmap."""
+    date: str    # ISO date, e.g. "2026-07-29"
+    count: int
+
+
+class ProfileResponse(BaseModel):
+    """GET /profile — the user's account info plus the aggregate stats and the
+    forms-created-per-day series the profile page's GitHub-style heatmap needs."""
+    user: UserResponse
+    member_since: datetime
+    total_forms: int
+    published_forms: int
+    total_submissions: int
+    forms_by_day: list[ProfileDayCount]
 
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
@@ -280,3 +412,16 @@ class FormAnalytics(BaseModel):
     avg_completion_seconds: Optional[float] = None
     completion_sample_size: int
     fields: list[FieldAnalytics]
+
+
+class DashboardActivity(BaseModel):
+    """Chart data for the dashboard's activity row — one endpoint so the
+    dashboard page makes a single extra call and renders all three charts.
+
+      - forms_by_day        : forms created per calendar day, last 30 days
+      - submissions_by_day  : responses received per calendar day, last 30 days
+      - top_forms           : the user's forms ranked by response count (top 5)
+    """
+    forms_by_day: list[AnalyticsDayCount]
+    submissions_by_day: list[AnalyticsDayCount]
+    top_forms: list[DashboardFormRow]

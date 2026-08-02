@@ -40,6 +40,24 @@ def _get_secret() -> str:
 ALGORITHM: str = os.environ.get("FORMIX_JWT_ALGORITHM", "HS256")
 EXPIRE_MINUTES: int = int(os.environ.get("FORMIX_JWT_EXPIRE_MINUTES", "60"))
 
+# ── Frontend URL helper ───────────────────────────────────────────────────────
+# Used whenever the backend must send the browser to the frontend (OAuth
+# callback redirect, password-reset links). Kept here (not in the routers) so
+# both auth.py and oauth.py share one definition without an import cycle.
+
+def frontend_url() -> str:
+    """The frontend's base URL. Configurable via FRONTEND_URL; falls back to
+    the first ALLOWED_ORIGINS entry, then http://localhost:3000."""
+    url = os.environ.get("FRONTEND_URL", "").strip().rstrip("/")
+    if url:
+        return url
+    for origin in os.environ.get("ALLOWED_ORIGINS", "").split(","):
+        origin = origin.strip().rstrip("/")
+        if origin:
+            return origin
+    return "http://localhost:3000"
+
+
 # ── Password hashing (direct bcrypt — avoids passlib/bcrypt 5.x incompatibility) ──
 
 def hash_password(plain: str) -> str:

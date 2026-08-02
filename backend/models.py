@@ -40,6 +40,12 @@ DUPLICATE_MODES = (DUPLICATE_MODE_MULTIPLE, DUPLICATE_MODE_SINGLE_PER_SESSION, D
 class User(Base):
     """
     An author account.  Respondents fill forms anonymously and never have an account.
+
+    Accounts are either email+password (hashed_password set, oauth_* NULL) or
+    OAuth-created via Google/GitHub (oauth_provider/oauth_subject set,
+    hashed_password NULL).  A user who originally signed up by email can later
+    "link" an OAuth identity onto their account — that's how a single Google
+    login keeps finding the same account.
     """
 
     __tablename__ = "users"
@@ -47,8 +53,21 @@ class User(Base):
     id              = Column(String, primary_key=True, default=_uuid)
     email           = Column(String, unique=True, nullable=False, index=True)
     name            = Column(String, nullable=True)
-    hashed_password = Column(String, nullable=False)
+    # Author profile picture. Stored as a base64 data URL (data:image/png;base64,...)
+    # so avatars work with zero static-file infrastructure on Render's free tier.
+    # Null until the author uploads one; the frontend falls back to an initial.
+    avatar_url      = Column(Text,   nullable=True)
+    hashed_password = Column(String, nullable=True)
+    # OAuth identity. Set only for accounts created or linked through
+    # "Continue with Google / GitHub". (provider, subject) is globally unique,
+    # which keeps find-or-create idempotent across logins.
+    oauth_provider  = Column(String(32), nullable=True)
+    oauth_subject   = Column(String(255), nullable=True)
     created_at      = Column(DateTime(timezone=True), default=_now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("oauth_provider", "oauth_subject", name="uq_users_oauth_provider_subject"),
+    )
 
     projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
 
@@ -107,6 +126,8 @@ class Form(Base):
     submissions = relationship("Submission", back_populates="form",
                                cascade="all, delete-orphan",
                                foreign_keys="Submission.form_id")
+    ai_messages = relationship("AiChatMessage", back_populates="form",
+                               cascade="all, delete-orphan")
     next_form   = relationship("Form", remote_side="Form.id", foreign_keys=[next_form_id])
 
 
@@ -145,6 +166,39 @@ class Submission(Base):
     submitted_at          = Column(DateTime(timezone=True), default=_now, nullable=False)
 
     form = relationship("Form", back_populates="submissions", foreign_keys=[form_id])
+
+
+# ── AI chat history (per form, server-side) ────────────────────────────────────
+# Persists the Formix AI conversation for a form so history survives reloads and
+# follow-up turns ("make that field optional") resolve against prior turns. The
+# client orchestrates the compile-and-repair loop and appends a completed turn
+# (user message + assistant reply) once it resolves — see routers/ai.py.
+# NOTE: a schema migration (alembic/versions/*) must stay in sync with this.
+
+class AiChatMessage(Base):
+    """
+    One stored message in a form's AI conversation.
+
+    - role           : "user" | "assistant"
+    - content        : the message prose. For assistant messages this is the
+                       explanation text (the diff view is what shows the user
+                       what actually changed).
+    - revised_source : assistant-only — the FULL revised .forml source the model
+                       returned for that turn. Only stored for turns that
+                       produced source (never a diff/partial patch), so a later
+                       turn can be given the exact code the assistant stood on.
+    """
+
+    __tablename__ = "ai_chat_messages"
+
+    id             = Column(String, primary_key=True, default=_uuid)
+    form_id        = Column(String, ForeignKey("forms.id"), nullable=False, index=True)
+    role           = Column(String, nullable=False)          # "user" | "assistant"
+    content        = Column(Text,   nullable=False)
+    revised_source = Column(Text,   nullable=True)
+    created_at     = Column(DateTime(timezone=True), default=_now, nullable=False)
+
+    form = relationship("Form", back_populates="ai_messages")
 
 
 # ── Form views (used to derive Submission.started_at) ──────────────────────────

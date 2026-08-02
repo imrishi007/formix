@@ -11,3 +11,5 @@ alembic
 openpyxl
 user-agents
 psycopg2-binary
+authlib
+itsdangerous

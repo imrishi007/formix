@@ -3,7 +3,9 @@ services:
     name: formix-backend
     runtime: python
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    # --forwarded-allow-ips "*" makes uvicorn trust Render's proxy headers so
+    # the request scheme is https (needed for the OAuth callback URL).
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --forwarded-allow-ips "*"
     healthCheckPath: /health
     envVars:
       # ⚠️  IMPORTANT — All sync:false vars MUST be set in the Render Dashboard
@@ -26,5 +28,35 @@ services:
       # GROQ_API_KEY — From https://console.groq.com/keys (only needed for AI features).
       - key: GROQ_API_KEY
         sync: false
+      # GEMINI_API_KEY — From https://aistudio.google.com/apikey (recommended:
+      # generous free tier). The router prefers AI_API_KEY, then GEMINI_API_KEY,
+      # then GROQ_API_KEY — set at least one.
+      - key: GEMINI_API_KEY
+        sync: false
       - key: FORMIX_JWT_EXPIRE_MINUTES
         value: "43200"
+      # FRONTEND_URL — your Vercel app, e.g. https://formix.vercel.app. Used for
+      # the OAuth redirect and password-reset links.
+      - key: FRONTEND_URL
+        sync: false
+      # OAuth credentials (see Google Cloud Console / GitHub OAuth Apps).
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      # SMTP for password-reset emails. If unset, the API returns the reset
+      # link in the response instead (dev mode).
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

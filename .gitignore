@@ -16,8 +16,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files
+# env files (real secrets never committed)
 .env*
+# ...but the secret-free template IS committed so fresh clones know what to set
+!.env.example
 
 # vercel
 .vercel
@@ -51,6 +53,9 @@ backend/uploads/
 *.obj
 *.out
 forml-compiler/build/
+
+# Unit test build output (node --test fixtures compiled via tests/tsconfig.json)
+tests/.build/
 
 # OS
 .DS_Store

@@ -25,6 +25,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 log = logging.getLogger("formix")
 
@@ -41,6 +42,9 @@ from .routers import forms as forms_router
 from .routers import auth as auth_router
 from .routers import projects as projects_router
 from .routers import dashboard as dashboard_router
+from .routers import ai as ai_router
+from .routers import profile as profile_router
+from .routers import oauth as oauth_router
 
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
@@ -138,11 +142,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Signed session cookies, used ONLY by the OAuth flow to hold the CSRF `state`
+# across the redirect out to Google/GitHub and back (authlib reads it).  The
+# session is short-lived (10 min) because nothing else in the app uses it.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.environ.get("FORMIX_JWT_SECRET", "formix-dev-session-secret"),
+    max_age=600,
+)
+
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(auth_router.router)        # /auth/register, /auth/login
+app.include_router(auth_router.router)        # /auth/register, /auth/login, /auth/me
 app.include_router(projects_router.router)    # /projects/*, /forms/{id}/link
 app.include_router(forms_router.router)       # /forms/*, /submissions/by-session/*
 app.include_router(dashboard_router.router)   # /dashboard/summary
+app.include_router(ai_router.router)          # /ai/forms/* chat + history
+app.include_router(profile_router.router)     # /profile
+app.include_router(oauth_router.router)       # /auth/oauth/google, /auth/oauth/github
 
 # Serves respondent-uploaded files (resumes, photos, etc.) back by their
 # stored URL — mounted after the routers so /forms/* etc. still take priority.
