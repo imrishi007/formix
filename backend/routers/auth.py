@@ -11,6 +11,7 @@ import os
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 log = logging.getLogger("formix.auth")
@@ -46,8 +47,13 @@ def register(body: UserCreate, db: Session = Depends(get_db)):
     """
     Create a new author account.
     Returns a JWT on success; 409 if the email is already registered.
+
+    Emails are stored lowercased (addresses are case-insensitive, and this is
+    what the case-insensitive login/oauth lookups expect) so "Foo@Bar.com" and
+    "foo@bar.com" can never create two accounts or miss each other.
     """
-    existing = db.query(User).filter(User.email == body.email).first()
+    email = body.email.strip().lower()
+    existing = db.query(User).filter(User.email == email).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -55,7 +61,7 @@ def register(body: UserCreate, db: Session = Depends(get_db)):
         )
 
     user = User(
-        email=body.email,
+        email=email,
         name=body.name,
         hashed_password=hash_password(body.password),
     )
@@ -74,8 +80,10 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     """
     Verify email + password, return a JWT.
     Returns 401 on invalid credentials (intentionally vague for security).
+
+    Email is compared case-insensitively to match stored (lowercased) emails.
     """
-    user = db.query(User).filter(User.email == body.email).first()
+    user = db.query(User).filter(func.lower(User.email) == body.email.strip().lower()).first()
     if not user or not verify_password(body.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -36,6 +36,8 @@ import httpx
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..auth import create_access_token, frontend_url
@@ -187,6 +189,14 @@ def _find_or_create_oauth_user(db: Session, provider: str, profile: dict) -> Use
 
     The (provider, subject) unique constraint makes step 1 idempotent — a
     user can never be duplicated by signing in twice.
+
+    Email matching is CASE-INSENSITIVE on purpose. Providers return the
+    canonical lowercase address (Google especially), but an author may have
+    registered with any casing ("RishiPraval@Gmail.com"). The users.email
+    column is unique, so a case-sensitive comparison would miss the existing
+    account and the create below would violate the constraint — surfacing as
+    the 500 "existing account" bug. `func.lower(User.email) == email.lower()`
+    makes the link idempotent regardless of how the address was typed.
     """
     subject = profile["subject"]
 
@@ -196,27 +206,50 @@ def _find_or_create_oauth_user(db: Session, provider: str, profile: dict) -> Use
         .first()
     )
     if user is not None:
+        # Every login refreshes the display avatar from the provider so the
+        # profile picture stays the author's current Gmail/GitHub image.
+        _sync_provider_avatar(db, user, profile)
         return user
 
     email = profile.get("email")
     if email:
-        user = db.query(User).filter(User.email == email).first()
+        user = (
+            db.query(User)
+            .filter(func.lower(User.email) == email.lower())
+            .first()
+        )
         if user is not None:
             # Existing account (e.g. signed up by email). Link the OAuth
             # identity onto it unless it already belongs to a different
             # provider — in that edge case just log them in as this user.
             if user.oauth_provider is None:
-                user.oauth_provider = provider
-                user.oauth_subject = subject
-                db.commit()
-                db.refresh(user)
+                try:
+                    user.oauth_provider = provider
+                    user.oauth_subject = subject
+                    db.commit()
+                except IntegrityError:
+                    # A concurrent sign-in won the race and linked this identity
+                    # first. Roll back, then re-query by (provider, subject) to
+                    # pick up whoever actually owns it.
+                    db.rollback()
+                    user = (
+                        db.query(User)
+                        .filter(User.oauth_provider == provider, User.oauth_subject == subject)
+                        .first()
+                    )
+                    if user is None:
+                        raise
+                else:
+                    db.refresh(user)
+            _sync_provider_avatar(db, user, profile)
             return user
 
     # Brand-new account. If the provider withheld the email (GitHub without a
     # verified public address), fall back to a synthetic unique address so the
-    # NOT NULL email column still gets a value.
+    # NOT NULL email column still gets a value. Store the address lowercased
+    # for consistency with the case-insensitive lookups above.
     user = User(
-        email=email or f"{provider}+{subject}@oauth.local",
+        email=(email or f"{provider}+{subject}@oauth.local").lower(),
         name=profile.get("name"),
         avatar_url=profile.get("avatar_url"),  # seed from provider; user can override
         hashed_password=None,
@@ -224,9 +257,38 @@ def _find_or_create_oauth_user(db: Session, provider: str, profile: dict) -> Use
         oauth_subject=subject,
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Same address already exists (belt-and-braces for a casing/race the
+        # lookup above missed) — roll back and reuse that account instead.
+        db.rollback()
+        user = (
+            db.query(User)
+            .filter(func.lower(User.email) == email.lower())
+            .first()
+            if email
+            else None
+        )
+        if user is None:
+            raise
     db.refresh(user)
     return user
+
+
+def _sync_provider_avatar(db: Session, user: User, profile: dict) -> None:
+    """Refresh the author's avatar from the provider on every OAuth login.
+
+    The user asked for the profile picture to track their Gmail image — this
+    is where that happens for OAuth sign-ins (email+password logins have no
+    provider picture to sync from). Only applied when the provider actually
+    returned a URL, and never touches the name/password.
+    """
+    avatar = profile.get("avatar_url")
+    if avatar and user.avatar_url != avatar:
+        user.avatar_url = avatar
+        db.commit()
+        db.refresh(user)
 
 
 def _oauth_callback_uri(request: Request, provider: str) -> str:

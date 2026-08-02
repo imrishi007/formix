@@ -131,6 +131,30 @@ def test_links_oauth_identity_to_existing_email_account():
     db.close()
 
 
+def test_links_existing_email_account_case_insensitively():
+    """Regression: the users.email column is unique, so a case-sensitive lookup
+    used to MISS the existing account and then violate the constraint on insert
+    (the 500 for "sign in with Google when the email is already registered")."""
+    db = _TestingSessionLocal()
+    user = _find_or_create_oauth_user(db, "google", {"subject": "g-1", "email": "A@Test.COM", "name": "Alice"})
+    assert user.id == "user_a"
+    assert user.oauth_provider == "google"
+    assert user.oauth_subject == "g-1"
+    assert db.query(models.User).count() == 1  # no duplicate row created
+    db.close()
+
+
+def test_login_links_and_syncs_avatar_from_provider():
+    """Every OAuth login refreshes the profile picture from the provider (the
+    'use my Gmail photo' behavior) without disturbing the account."""
+    db = _TestingSessionLocal()
+    profile = {"subject": "g-1", "email": "a@test.com", "name": "Alice", "avatar_url": "https://pic/v2"}
+    user = _find_or_create_oauth_user(db, "google", profile)
+    assert user.avatar_url == "https://pic/v2"
+    assert user.name == "Alice"
+    db.close()
+
+
 def test_does_not_overwrite_identity_of_other_provider():
     db = _TestingSessionLocal()
     db.add(models.User(id="user_b", email="b@test.com", name="Bea", hashed_password="x",

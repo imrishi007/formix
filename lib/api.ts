@@ -306,7 +306,12 @@ async function request<T>(
   let res: Response;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 65_000); // 65s — Render free tier can take ~40s to cold-start
+    // 120s — Render free tier cold-starts can take ~50s, plus first-request
+    // latency; 65s was too tight and occasionally killed the very request that
+    // was doing the cold start (the reset-password "could not reach the server"
+    // reports). A scheduled keep-alive ping keeps it warm in practice; this is
+    // the safety net for when that misses.
+    const timeoutId = setTimeout(() => controller.abort(), 120_000);
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
