@@ -69,7 +69,7 @@ export default function RootLayout({
             what glass panels blur against; without it nothing reads as
             glass. Single instance, never per-section. */}
         <div className="bg-hue-wash" aria-hidden="true" />
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
           <AuthProvider>
             {children}
             <GlobalThemeToggle />
