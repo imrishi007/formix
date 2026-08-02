@@ -209,3 +209,45 @@ def test_callback_unconfigured_provider_redirects_with_error(client):
     resp = client.get("/auth/oauth/google/callback", follow_redirects=False)
     assert resp.status_code in (302, 307)
     assert resp.headers["location"].startswith("http://localhost:3000/auth/oauth/callback?error=")
+
+
+def test_callback_never_500s_when_token_exchange_raises(client, monkeypatch):
+    """Regression: authlib raises its own exception family (OAuthError,
+    MismatchingStateError, InvalidGrantError, ...) that the original catch
+    tuple — (HTTPException, KeyError, ValueError, httpx.HTTPError) — missed.
+    A failed code exchange therefore surfaced as a raw 500 ("Internal Server
+    Error") in production. Any exchange-stage exception must now bounce back
+    to the frontend with a readable error instead."""
+    class _ExplodingClient:
+        async def authorize_access_token(self, request, redirect_uri):
+            raise RuntimeError("simulated authlib OAuthError")
+
+    monkeypatch.setattr("backend.routers.oauth._configured_or_503", lambda provider: _ExplodingClient())
+    resp = client.get("/auth/oauth/google/callback", follow_redirects=False)
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"].startswith("http://localhost:3000/auth/oauth/callback?error=")
+
+
+def test_callback_never_500s_when_find_or_create_raises(client, monkeypatch):
+    """Same guarantee for the account-linking stage: a DB or JWT failure must
+    redirect with an error, never 500."""
+    def _boom(db, provider, profile):
+        raise RuntimeError("simulated DB failure")
+
+    monkeypatch.setattr("backend.routers.oauth._find_or_create_oauth_user", _boom)
+    monkeypatch.setattr(
+        "backend.routers.oauth._configured_or_503",
+        lambda provider: type(
+            "_FakeClient",
+            (),
+            {
+                "authorize_access_token": lambda self, request, redirect_uri: {
+                    "access_token": "fake"
+                }
+            },
+        )(),
+    )
+    monkeypatch.setattr("backend.routers.oauth._fetch_google_profile", lambda token: {"subject": "g-1", "email": "x@test.com"})
+    resp = client.get("/auth/oauth/google/callback", follow_redirects=False)
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"].startswith("http://localhost:3000/auth/oauth/callback?error=")

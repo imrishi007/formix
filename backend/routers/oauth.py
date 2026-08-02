@@ -319,12 +319,27 @@ async def oauth_authorize(provider: str, request: Request):
 
 @router.get("/{provider}/callback", name="oauth_callback")
 async def oauth_callback(provider: str, request: Request):
-    """Step 2: exchange the code, find-or-create the user, hand out a JWT."""
+    """Step 2: exchange the code, find-or-create the user, hand out a JWT.
+
+    The whole handler is wrapped in broad excepts on purpose. A callback must
+    NEVER surface as a raw 500 — the author's browser just came back from
+    Google's consent page and the only way out is through us. Any failure
+    (token exchange, provider hiccup, DB, JWT) logs the full traceback to the
+    Render logs and bounces back to the frontend with a readable message.
+
+    Why `except Exception` instead of the previous narrower tuple: authlib
+    raises its own exception family (OAuthError, MismatchingStateError,
+    InvalidGrantError, MissingTokenError, ...) which are NOT subclasses of
+    ValueError/KeyError/httpx.HTTPError. That original tuple let a failed
+    code exchange — exactly the "Internal Server Error" seen in production —
+    slip through to a raw 500. Catch everything, log everything, never 500.
+    """
     redirect_uri = _oauth_callback_uri(request, provider)
     _redirect = lambda **params: RedirectResponse(
         f"{frontend_url()}/auth/oauth/callback?{urlencode(params)}"
     )
 
+    # Stage 1: provider client + code exchange + profile fetch.
     try:
         client = _configured_or_503(provider)
         token = await client.authorize_access_token(request, redirect_uri=redirect_uri)
@@ -332,25 +347,31 @@ async def oauth_callback(provider: str, request: Request):
             profile = await _fetch_google_profile(token["access_token"])
         else:
             profile = await _fetch_github_profile(token["access_token"])
-    except (HTTPException, KeyError, ValueError, httpx.HTTPError) as exc:
-        # User denied consent, state mismatch, or provider hiccup — bounce back
-        # to the frontend with a readable reason rather than a bare error page.
-        log.warning("OAuth callback failed for %s: %s", provider, exc)
+    except Exception as exc:  # noqa: BLE001
+        log.error("OAuth %s exchange failed: %s", provider, exc, exc_info=True)
         return _redirect(error="Could not sign in — please try again.")
 
+    # Stage 2: find-or-create the account and mint the JWT.
     db = next(get_db())
     try:
         user = _find_or_create_oauth_user(db, provider, profile)
+        jwt_token = create_access_token({"sub": user.id})
     except Exception as exc:  # noqa: BLE001
-        # A find-or-create failure must never surface as a raw 500 — that
-        # leaves the author staring at "Internal Server Error" with no way to
-        # recover. Log the full traceback (so the real cause is in the Render
-        # logs) and bounce back to the frontend with a readable message.
         db.rollback()
-        log.error("find_or_create failed for %s %s", provider, profile.get("email"), exc_info=True)
+        # Log the request context too (was the CSRF state present? did the
+        # session cookie survive the provider round-trip?) so a prod-only
+        # failure is diagnosable from the logs alone.
+        log.error(
+            "OAuth %s find-or-create/token failed (email=%s, state_present=%s, session_cookie_present=%s): %s",
+            provider,
+            profile.get("email"),
+            bool(request.query_params.get("state")),
+            bool(request.cookies.get("session")),
+            exc,
+            exc_info=True,
+        )
         return _redirect(error="Could not finish sign-in. Please try again or sign in with your email.")
     finally:
         db.close()
 
-    jwt_token = create_access_token({"sub": user.id})
     return _redirect(token=jwt_token)
