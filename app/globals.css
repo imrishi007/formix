@@ -5,122 +5,293 @@
 
 /*
  * ─────────────────────────────────────────────────────────────────────────
- * FORMIX STUDIO — design system
+ * FORMIX DESIGN SYSTEM v3 — OKLCH scales, light + dark themes
  * ─────────────────────────────────────────────────────────────────────────
- * One premium dark theme, always on — no light/dark split. Deep graphite
- * canvas (#0F172A page / #111827 panels) with a single signature accent:
- * elegant violet (#7C3AED) carrying a subtle blue co-accent (#3B82F6) for
- * gradients, glows, and secondary highlights. Surfaces are glass — soft
- * translucency, backdrop blur, and hairline borders — rather than flat
- * opaque cards, so depth reads from layered light instead of a light/dark
- * swap. Three-tier elevation: background (page) < card (raised surface) <
- * popover (floating: menus/dialogs/tooltips), each a visible step "lighter"
- * than the last.
+ * design.md is the single source of truth. Every color here is an OKLCH
+ * 10-step scale (perceptually even lightness steps), exposed as CSS custom
+ * properties. Components NEVER hardcode hex values — they reference the
+ * semantic tokens below, so the theme toggle is a single variable swap on
+ * the `.dark` class, not a per-component rewrite.
  *
- * Typography: Inter for UI text, JetBrains Mono for code/data, Instrument
- * Serif reserved for editorial display moments (marketing headlines only).
- * Use Tailwind's default text-xs…text-5xl scale — arbitrary text-[Npx]
- * values are reserved for genuine one-off display treatments, not routine
- * UI copy.
+ * Token anatomy:
+ *   Raw scales  : --neutral-* (warm, light mode), --blue-* (brand accent),
+ *                 --amber-*, --emerald-*, --rose-*
+ *   Theme tokens: --bg-*, --ink-*, --border-*, --accent-* (redefined in .dark)
+ *   Shadows     : --shadow-* (re-tuned per theme — glow in dark, soft in light)
+ *   Code        : --code-* (design.md syntax colors — Latte values light /
+ *                 navy+accent-blue values dark, for the Monaco canvas and
+ *                 inline code blocks alike)
  *
- * Motion: --ease-signature is the house curve (a confident, slightly
- * overshooting ease-out) for reveals and emphasis; ordinary hover/press
- * feedback stays on Tailwind's default duration-150/duration-200 + ease-out.
- * Icons: lucide-react throughout, sized to the type scale (14px dense UI,
- * 16px default, 20px section headers, 24–32px empty-state glyphs).
+ * design.md v2: accent moved violet → blue.
+ * design.md v3 (dark rebuild): the `.dark` block uses design.md's EXACT hex
+ * values — navy base #0A0E17 / surface #0F1522 / raised #141B2B, one blue
+ * accent #5B8DEF, toned-down 8px glass. NO purple/violet/indigo in dark.
+ * The light theme is LOCKED (do not modify).
+ *
+ * Fonts: Geist (UI) + Geist Mono / JetBrains Mono (code), loaded via
+ * next/font in layout.tsx.
  * ─────────────────────────────────────────────────────────────────────────
  */
+
 :root {
-  --background: #0b1220;
-  --foreground: #f1f5f9;
-  --card: #111827;
-  --card-foreground: #f1f5f9;
-  --popover: #16213b;
-  --popover-foreground: #f1f5f9;
-  --primary: #7c3aed;
-  --primary-foreground: #ffffff;
-  --secondary: #1a2540;
-  --secondary-foreground: #e2e8f0;
-  --muted: #16213b;
-  --muted-foreground: #94a3b8;
-  --accent: #7c3aed;
-  --accent-foreground: #ffffff;
-  --accent-blue: #3b82f6;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: rgba(148, 163, 184, 0.14);
-  --input: rgba(148, 163, 184, 0.14);
-  --ring: #7c3aed;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --chart-1: #7c3aed;
-  --chart-2: #3b82f6;
-  --chart-3: #a78bfa;
-  --chart-4: #60a5fa;
-  --chart-5: #c4b5fd;
+  /* ── OKLCH scales ─────────────────────────────────────────────────── */
+  /* Neutral (warm, not pure white/black). Both themes walk the SAME scale
+     in opposite directions. */
+  --neutral-50:  oklch(98.5% 0.004 90);
+  --neutral-100: oklch(96.5% 0.006 85);
+  --neutral-150: oklch(94% 0.007 85);
+  --neutral-200: oklch(91% 0.008 80);
+  --neutral-300: oklch(84% 0.009 80);
+  --neutral-400: oklch(70% 0.010 75);
+  --neutral-500: oklch(55% 0.010 75);
+  --neutral-600: oklch(42% 0.009 75);
+  --neutral-700: oklch(30% 0.008 70);
+  --neutral-800: oklch(20% 0.007 65);
+  --neutral-900: oklch(13% 0.006 60);
+  --neutral-950: oklch(9% 0.005 60);
+
+  /* Blue — primary brand accent, both themes. Replaces violet this pass
+     (design.md). Tuned toward Catppuccin's Blue/Sapphire family, not a
+     bright electric blue. */
+  --blue-50:  oklch(96% 0.02  255);
+  --blue-100: oklch(91% 0.04  256);
+  --blue-200: oklch(84% 0.07  257);
+  --blue-300: oklch(75% 0.10  258);
+  --blue-400: oklch(68% 0.13  259);   /* dark-mode primary — lighter for contrast on navy */
+  --blue-500: oklch(58% 0.16  260);   /* light-mode primary — buttons, links, brand mark */
+  --blue-600: oklch(50% 0.16  260);   /* light-mode hover */
+  --blue-700: oklch(42% 0.15  261);
+  --blue-800: oklch(33% 0.12  262);
+  --blue-900: oklch(24% 0.08  263);
+
+  /* Amber — secondary emphasis, highlights */
+  --amber-100: oklch(94% 0.05  75);
+  --amber-300: oklch(83% 0.13  73);
+  --amber-500: oklch(72% 0.17  70);     /* secondary accent */
+  --amber-700: oklch(52% 0.15  55);
+
+  /* Emerald — success/published states ONLY */
+  --emerald-100: oklch(93% 0.045 155);
+  --emerald-500: oklch(58% 0.13  155);  /* success */
+  --emerald-700: oklch(40% 0.10  155);
+
+  /* Rose — danger/destructive ONLY */
+  --rose-100: oklch(93% 0.035 15);
+  --rose-500: oklch(58% 0.18  15);
+  --rose-700: oklch(42% 0.15  15);
+
+  /* ── Light theme (default) ────────────────────────────────────────── */
+  --bg-base:          var(--neutral-50);
+  --bg-subtle:        var(--neutral-100);
+  --bg-surface:       #FFFFFF;
+  --bg-surface-glass: color-mix(in oklch, white 65%, transparent);
+
+  --ink-primary:      var(--neutral-700);   /* near-black, not pure black */
+  --ink-secondary:    color-mix(in oklch, var(--neutral-700) 70%, var(--neutral-400));
+  --ink-tertiary:     var(--neutral-400);
+  /* Disabled/de-emphasized ink — not a design.md semantic token, but used
+     by auth steppers and editor empty-states; derived from the neutral scale. */
+  --ink-disabled:     var(--neutral-300);
+
+  --border-hairline:        color-mix(in oklch, var(--neutral-700) 8%, transparent);
+  --border-hairline-strong: color-mix(in oklch, var(--neutral-700) 14%, transparent);
+  --border-glass:           color-mix(in oklch, white 60%, transparent);
+
+  --accent-primary:      var(--blue-500);
+  --accent-primary-hover: var(--blue-600);
+  --accent-primary-tint:  var(--blue-50);
+  --accent-secondary:        var(--amber-500);
+  --accent-secondary-tint:   var(--amber-100);
+  --accent-success:          var(--emerald-500);
+  --accent-success-tint:     var(--emerald-100);
+  --accent-danger:           var(--rose-500);
+  --accent-danger-tint:      var(--rose-100);
+
+  /* Text/icon color that sits ON a solid accent fill. White in BOTH themes
+     (design.md: verify against --blue-400 on --navy-950 — white holds). */
+  --on-accent: #FFFFFF;
+
+  /* ── Shadows — layered, soft (light) ──────────────────────────────── */
+  --shadow-sm: 0 1px 2px oklch(20% 0 0 / 4%), 0 1px 1px oklch(20% 0 0 / 3%);
+  --shadow-md: 0 4px 12px oklch(20% 0 0 / 6%), 0 2px 4px oklch(20% 0 0 / 4%);
+  --shadow-lg: 0 12px 32px oklch(20% 0 0 / 8%), 0 4px 8px oklch(20% 0 0 / 4%);
+  --shadow-glass: 0 8px 32px color-mix(in oklch, var(--blue-500) 10%, transparent),
+                  inset 0 1px 0 oklch(100% 0 0 / 50%);
+  --shadow-btn-primary: 0 8px 24px color-mix(in oklch, var(--blue-500) 20%, transparent);
+  --shadow-btn-primary-hover: 0 12px 32px color-mix(in oklch, var(--blue-500) 26%, transparent);
+
+  /* Accent gradient — buttons/small chrome only, max 2 colors from the
+     blue scale (design.md Gradients rule). */
+  --accent-gradient: linear-gradient(135deg, var(--blue-500), var(--blue-400));
+
+  /* ── Typography ────────────────────────────────────────────────────── */
+  --font-geist: 'Geist', 'Inter Tight', -apple-system, sans-serif;
+  --font-geist-mono: 'Geist Mono', 'JetBrains Mono', monospace;
+
+  /* ── Radius ────────────────────────────────────────────────────────── */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-pill: 9999px;
+
+  /* ── Code canvas — Catppuccin Latte (light) / Mocha (dark) ────────── */
+  /* design.md §Code Editor. Used by the Monaco canvas AND inline code
+     blocks (markdown-preview) so code reads identically everywhere. */
+  --code-bg:            #eff1f5;   /* base */
+  --code-bg-subtle:     #e6e9ef;   /* mantle */
+  --code-surface:       #ccd0da;   /* surface0 */
+  --code-text:          #4c4f69;
+  --code-comment:       #6c6f85;   /* overlay0 */
+  --code-keyword:       #8839ef;   /* mauve */
+  --code-string:        #40a02b;   /* green */
+  --code-number:        #fe640b;   /* peach */
+  --code-operator:      #1e66f5;   /* blue */
+  --code-attr:          #df8e1d;   /* yellow — DSL attribute/property keys */
+  --code-error:         #d20f39;   /* red */
+
+  /* ── Legacy shadcn/ui aliases ──────────────────────────────────────── */
+  --background: var(--bg-base);
+  --foreground: var(--ink-primary);
+  --card: var(--bg-surface);
+  --card-foreground: var(--ink-primary);
+  --popover: var(--bg-surface);
+  --popover-foreground: var(--ink-primary);
+  --primary: var(--accent-primary);
+  --primary-foreground: var(--on-accent);
+  --secondary: var(--bg-subtle);
+  --secondary-foreground: var(--ink-primary);
+  --muted: var(--bg-subtle);
+  --muted-foreground: var(--ink-secondary);
+  --accent: var(--accent-primary);
+  --accent-foreground: var(--on-accent);
+  --destructive: var(--accent-danger);
+  --destructive-foreground: #FFFFFF;
+  --success: var(--accent-success);
+  --warning: var(--accent-secondary);
+  --border: var(--border-hairline);
+  --input: var(--border-hairline);
+  --ring: var(--accent-primary);
+  --chart-1: var(--accent-primary);
+  --chart-2: var(--accent-secondary);
+  --chart-3: var(--blue-300);
+  --chart-4: var(--amber-300);
+  --chart-5: var(--emerald-500);
   --radius: 0.75rem;
-  --ease-signature: cubic-bezier(0.22, 1, 0.36, 1);
-  --shadow-color: 262 60% 4%;
-  --glass-bg: linear-gradient(180deg, rgba(148, 163, 184, 0.08), rgba(148, 163, 184, 0.02));
-  --glass-border: rgba(148, 163, 184, 0.14);
-  --sidebar: #0e1626;
-  --sidebar-foreground: #f1f5f9;
-  --sidebar-primary: #7c3aed;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: rgba(124, 58, 237, 0.12);
-  --sidebar-accent-foreground: #f1f5f9;
-  --sidebar-border: rgba(148, 163, 184, 0.14);
-  --sidebar-ring: #7c3aed;
+  --sidebar: var(--bg-surface);
+  --sidebar-foreground: var(--ink-primary);
+  --sidebar-primary: var(--accent-primary);
+  --sidebar-primary-foreground: var(--on-accent);
+  --sidebar-accent: var(--accent-primary-tint);
+  --sidebar-accent-foreground: var(--ink-primary);
+  --sidebar-border: var(--border-hairline);
+  --sidebar-ring: var(--accent-primary);
 }
 
-/* Formix has one theme: premium dark. .dark mirrors :root exactly so
-   next-themes' forced "dark" class (see ThemeProvider) and any `dark:`
-   utility variants resolve identically to the base palette — there is no
-   second palette to fall back to. */
+/* ── Dark theme — design.md v3, exact-hex navy (NOT an inverted warm gray
+   and NOT the old Catppuccin violet). Every token below is the literal hex
+   from design.md's Dark Theme section: a real navy code-editor theme with
+   ONE confident blue accent (#5B8DEF) and no purple/violet/indigo anywhere.
+   Glass is toned way down (8px blur, 5% white fill, hairline border, no
+   inner sheen) so it reads as a slightly lighter pane of dark glass. ─────── */
 .dark {
-  --background: #0b1220;
-  --foreground: #f1f5f9;
-  --card: #111827;
-  --card-foreground: #f1f5f9;
-  --popover: #16213b;
-  --popover-foreground: #f1f5f9;
-  --primary: #7c3aed;
-  --primary-foreground: #ffffff;
-  --secondary: #1a2540;
-  --secondary-foreground: #e2e8f0;
-  --muted: #16213b;
-  --muted-foreground: #94a3b8;
-  --accent: #7c3aed;
-  --accent-foreground: #ffffff;
-  --accent-blue: #3b82f6;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: rgba(148, 163, 184, 0.14);
-  --input: rgba(148, 163, 184, 0.14);
-  --ring: #7c3aed;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --chart-1: #7c3aed;
-  --chart-2: #3b82f6;
-  --chart-3: #a78bfa;
-  --chart-4: #60a5fa;
-  --chart-5: #c4b5fd;
-  --shadow-color: 262 60% 4%;
-  --sidebar: #0e1626;
-  --sidebar-foreground: #f1f5f9;
-  --sidebar-primary: #7c3aed;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: rgba(124, 58, 237, 0.12);
-  --sidebar-accent-foreground: #f1f5f9;
-  --sidebar-border: rgba(148, 163, 184, 0.14);
-  --sidebar-ring: #7c3aed;
+  /* ── Base / surface ───────────────────────────────────────────────── */
+  --bg-base:          #0A0E17;   /* app background, outermost layer */
+  --bg-subtle:        #141B2B;   /* raised — toolbars, section bands, hovers */
+  --bg-surface:       #0F1522;   /* cards, panels, nav bar */
+  --bg-surface-raised:#141B2B;   /* editor panel, modals, hover states */
+  --bg-surface-glass: color-mix(in srgb, white 5%, transparent); /* 4-6% glass fill */
+
+  /* ── Ink ─────────────────────────────────────────────────────────── */
+  --ink-primary:      #E6E9F0;   /* text-primary */
+  --ink-secondary:    #9AA4B8;   /* text-secondary */
+  --ink-tertiary:     #5C6779;   /* text-muted — placeholder, disabled, timestamps */
+  --ink-disabled:     #5C6779;
+
+  /* ── Borders — subtle by default, strong on focus/active ─────────── */
+  --border-hairline:        #1E2536;   /* border-subtle */
+  --border-hairline-strong: #2A3348;   /* border-strong — focused inputs, active panels */
+  --border-glass:           #1E2536;   /* glass uses border-subtle, not a bright edge */
+
+  /* ── Accent — single blue, no purple drift ───────────────────────── */
+  --accent-primary:       #5B8DEF;   /* primary buttons, links, active nav */
+  --accent-primary-hover: #4A7CE0;   /* hover on accent elements */
+  --accent-primary-tint:  color-mix(in srgb, #5B8DEF 12%, transparent); /* accent-soft */
+  --accent-secondary:     #FBBF24;   /* warning */
+  --accent-secondary-tint: color-mix(in srgb, #FBBF24 12%, transparent);
+  --accent-success:       #4ADE80;   /* success */
+  --accent-success-tint:  color-mix(in srgb, #4ADE80 12%, transparent);
+  --accent-danger:        #F87171;   /* error */
+  --accent-danger-tint:   color-mix(in srgb, #F87171 12%, transparent);
+
+  /* Text on accent fills — design.md says text-primary on the accent fill */
+  --on-accent: #E6E9F0;
+
+  /* ── Shadows — glow-based, but glass gets NO inner sheen ─────────── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-hairline);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-hairline);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.45);   /* no inset highlight */
+  --shadow-btn-primary: 0 0 24px color-mix(in srgb, #5B8DEF 20%, transparent);
+  --shadow-btn-primary-hover: 0 0 28px color-mix(in srgb, #5B8DEF 28%, transparent);
+
+  /* Max 2 blues — never toward purple (design.md Accent section) */
+  --accent-gradient: linear-gradient(135deg, #5B8DEF, #3D6BC7);
+
+  /* ── Code canvas — design.md Code editor syntax colors (dark) ────── */
+  --code-bg:            #0F1522;   /* bg-surface — not pure black */
+  --code-bg-subtle:     #141B2B;   /* bg-surface-raised */
+  --code-surface:       #1E2536;   /* border-subtle */
+  --code-text:          #E6E9F0;   /* text-primary */
+  --code-comment:       #5C6779;   /* text-muted */
+  --code-keyword:       #5B8DEF;   /* accent blue — form/field/validate/ui/action */
+  --code-operator:      #4ADE80;   /* soft green — types (text/email/select) */
+  --code-string:        #E0B989;   /* muted warm amber */
+  --code-number:        #F0A868;
+  --code-attr:          #9AA4B8;   /* property names — label/placeholder */
+  --code-error:         #F87171;
+
+  --background: var(--bg-base);
+  --foreground: var(--ink-primary);
+  --card: var(--bg-surface);
+  --card-foreground: var(--ink-primary);
+  --popover: var(--bg-surface);
+  --popover-foreground: var(--ink-primary);
+  --primary: var(--accent-primary);
+  --primary-foreground: var(--on-accent);
+  --secondary: var(--bg-subtle);
+  --secondary-foreground: var(--ink-primary);
+  --muted: var(--bg-subtle);
+  --muted-foreground: var(--ink-secondary);
+  --accent: var(--accent-primary);
+  --accent-foreground: var(--on-accent);
+  --destructive: var(--accent-danger);
+  --destructive-foreground: #FFFFFF;
+  --success: var(--accent-success);
+  --warning: var(--accent-secondary);
+  --border: var(--border-hairline);
+  --input: var(--border-hairline);
+  --ring: var(--accent-primary);
+  --chart-1: var(--accent-primary);
+  --chart-2: var(--accent-secondary);
+  --chart-3: var(--blue-600);
+  --chart-4: var(--amber-700);
+  --chart-5: var(--emerald-500);
+  --radius: 0.75rem;
+  --sidebar: var(--bg-surface);
+  --sidebar-foreground: var(--ink-primary);
+  --sidebar-primary: var(--accent-primary);
+  --sidebar-primary-foreground: var(--on-accent);
+  --sidebar-accent: var(--accent-primary-tint);
+  --sidebar-accent-foreground: var(--ink-primary);
+  --sidebar-border: var(--border-hairline);
+  --sidebar-ring: var(--accent-primary);
 }
 
 @theme inline {
-  --font-sans: var(--font-instrument), 'Instrument Sans', system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), 'JetBrains Mono', monospace;
-  --font-display: var(--font-instrument-serif), 'Instrument Serif', Georgia, serif;
-  --font-inter: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-sans: var(--font-geist), 'Geist', 'Inter Tight', -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono), 'Geist Mono', 'JetBrains Mono', monospace;
+  --font-display: var(--font-geist), 'Geist', 'Inter Tight', -apple-system, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -135,7 +306,6 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
-  --color-accent-blue: var(--accent-blue);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
@@ -148,10 +318,10 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -171,27 +341,45 @@
     height: 100%;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-[--bg-base] text-[--ink-primary];
     min-height: 100%;
     overflow-x: hidden;
+    font-family: var(--font-geist), 'Geist', 'Inter Tight', -apple-system, sans-serif;
+    transition: background-color 200ms ease-out, color 200ms ease-out;
   }
-
   html {
-    color-scheme: dark;
+    color-scheme: light;
     scroll-behavior: smooth;
+  }
+  html.dark {
+    color-scheme: dark;
   }
 }
 
 @layer utilities {
-  .font-display {
-    font-family: var(--font-display);
+  /* ── Typography ──────────────────────────────────────────────────── */
+  .text-caption {
+    font-family: var(--font-geist), 'Geist', 'Inter Tight', -apple-system, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-tertiary);
+    letter-spacing: 0.02em;
+  }
+  .text-label {
+    font-family: var(--font-geist), 'Geist', 'Inter Tight', -apple-system, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-tertiary);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
   }
 
-  .font-inter {
-    font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
+  /* ── Code / Mono ─────────────────────────────────────────────────── */
+  .font-code {
+    font-family: var(--font-geist-mono), 'Geist Mono', 'JetBrains Mono', monospace;
   }
 
-  /* IDE dark panel scrollbar */
+  /* ── Scrollbar ───────────────────────────────────────────────────── */
   .formix-scroll::-webkit-scrollbar {
     width: 4px;
     height: 4px;
@@ -200,432 +388,431 @@
     background: transparent;
   }
   .formix-scroll::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,0.08);
+    background: var(--border-hairline-strong);
     border-radius: 2px;
   }
   .formix-scroll::-webkit-scrollbar-thumb:hover {
-    background: rgba(255,255,255,0.16);
+    background: var(--ink-tertiary);
   }
 
   .ide-shell ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
-
   .ide-shell ::-webkit-scrollbar-track {
     background: transparent;
   }
-
   .ide-shell ::-webkit-scrollbar-thumb {
     border: 2px solid transparent;
     border-radius: 999px;
-    background: rgba(255,255,255,0.10);
+    background: var(--border-hairline-strong);
     background-clip: padding-box;
   }
-
   .ide-shell ::-webkit-scrollbar-thumb:hover {
-    background: rgba(139,92,246,0.55);
+    background: var(--accent-primary);
     background-clip: padding-box;
   }
 
-  .hero-ide-frame {
-    perspective: 1800px;
-  }
-
-  .hero-ide-window {
-    transform: rotateY(-2deg) rotateX(1deg);
-    transform-origin: center right;
-    box-shadow:
-      0 46px 100px rgba(34, 18, 55, 0.22),
-      0 18px 38px rgba(0, 0, 0, 0.22),
-      inset 0 1px 0 rgba(255,255,255,0.12);
-    animation: hero-window-float 8s ease-in-out infinite;
-  }
-
-  .hero-ide-window::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: linear-gradient(120deg, rgba(255,255,255,0.08), transparent 24%, transparent 70%, rgba(139,92,246,0.04));
-    mix-blend-mode: screen;
-  }
-
-  .hero-ide-glow {
-    position: absolute;
-    inset: 7% -3% -8% 7%;
-    border-radius: 40px;
-    background: rgba(139,92,246,0.18);
-    filter: blur(55px);
-  }
-
-  @keyframes hero-window-float {
-    0%, 100% { transform: rotateY(-2deg) rotateX(1deg) translateY(0); }
-    50% { transform: rotateY(-2deg) rotateX(1deg) translateY(-6px); }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .hero-ide-window { animation: none; }
-  }
-  
-  .text-stroke {
-    -webkit-text-stroke: 1.5px currentColor;
-    -webkit-text-fill-color: transparent;
-  }
-  
-  .marquee {
-    animation: marquee 30s linear infinite;
-  }
-  
-  .marquee-reverse {
-    animation: marquee-reverse 25s linear infinite;
-  }
-
-  @keyframes marquee {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
-  }
-  
-  @keyframes marquee-reverse {
-    0% { transform: translateX(-50%); }
-    100% { transform: translateX(0); }
-  }
-  
-  .line-reveal {
-    clip-path: inset(0 100% 0 0);
-    animation: line-reveal 0.8s cubic-bezier(0.77, 0, 0.175, 1) forwards;
-  }
-  
-  @keyframes line-reveal {
-    to { clip-path: inset(0 0 0 0); }
-  }
-  
-  .hover-lift {
-    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-  
-  .hover-lift:hover {
-    transform: translateY(-4px);
-  }
-  
-  .letter-spin {
-    display: inline-block;
-    transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-  
-  .letter-spin:hover {
-    transform: rotateY(360deg);
-  }
-  
-  .animate-char-in {
-    animation: char-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-    opacity: 0;
-    filter: blur(40px);
-    transform: translateY(100%);
-  }
-  
-  @keyframes char-in {
-    0% {
-      opacity: 0;
-      filter: blur(40px);
-      transform: translateY(100%);
-    }
-    100% {
-      opacity: 1;
-      filter: blur(0);
-      transform: translateY(0);
-    }
-  }
-
-  .noise-overlay {
-    position: relative;
-  }
-  
-  .noise-overlay::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-    opacity: 0.03;
-    pointer-events: none;
-    z-index: 1;
-  }
-  
-  .border-sketch {
-    border: 1px solid transparent;
-    background: 
-      linear-gradient(var(--background), var(--background)) padding-box,
-      linear-gradient(135deg, var(--foreground) 25%, transparent 25%, transparent 50%, var(--foreground) 50%, var(--foreground) 75%, transparent 75%) border-box;
-    background-size: 100% 100%, 8px 8px;
-  }
-
-  /* ── AST Visualizer animations ─────────────────────────────── */
-
-  /* Data-packet dot drops from parser to AST panel */
-  .ast-packet-flow {
-    animation: ast-packet 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  }
-
-  @keyframes ast-packet {
-    0%   { transform: translateY(-6px); opacity: 0; }
-    20%  { opacity: 1; }
-    80%  { opacity: 1; }
-    100% { transform: translateY(6px);  opacity: 0; }
-  }
-
-  /* Amber blink for "compiling" status indicator */
-  .ast-status-blink {
-    animation: ast-blink 0.6s step-end infinite;
-  }
-
-  @keyframes ast-blink {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.1; }
-  }
-
-  /* Green pulse for "parse ok" status indicator */
-  .ast-status-pulse {
-    animation: ast-pulse 2s ease-in-out infinite;
-  }
-
-  @keyframes ast-pulse {
-    0%, 100% { opacity: 1;   transform: scale(1); }
-    50%       { opacity: 0.5; transform: scale(0.85); }
-  }
-
-  /* Auth panel: compiler status dot blink while working */
-  @keyframes statusPulse {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.15; }
-  }
-
-  /* Auth panel: right side dot grid */
-  .auth-dot-grid {
-    background-image: radial-gradient(circle, rgba(0,0,0,0.1) 1px, transparent 1px);
-    background-size: 28px 28px;
-  }
-
-  /* ── Formix Studio: shared motifs ──────────────────────────────────── */
-
-  /* Signature ease — reveals and emphasis moments, not routine hover/press. */
-  .ease-signature {
-    transition-timing-function: var(--ease-signature);
-  }
-
-  /* Theme-aware dot grid — the "blueprint" motif used for empty states,
-     hero backdrops, and auth panels. Unlike .auth-dot-grid this reads the
-     current foreground color, so it stays visible in both themes instead
-     of disappearing against a dark background. */
-  .bg-dot-grid {
-    background-image: radial-gradient(circle, color-mix(in oklch, var(--foreground) 14%, transparent) 1px, transparent 1px);
-    background-size: 24px 24px;
-  }
-
-  /* Soft, tinted elevation for premium surfaces (hero cards, dialogs, the
-     publish success card) — used selectively, not as the default card
-     shadow. Warmer / more colorful than a flat black drop shadow. */
-  .shadow-elevated {
-    box-shadow:
-      0 1px 2px hsl(var(--shadow-color) / 0.06),
-      0 12px 32px -8px hsl(var(--shadow-color) / 0.18),
-      0 24px 64px -16px hsl(var(--shadow-color) / 0.16);
-  }
-
-  .shadow-elevated-lg {
-    box-shadow:
-      0 2px 4px hsl(var(--shadow-color) / 0.08),
-      0 24px 48px -12px hsl(var(--shadow-color) / 0.22),
-      0 48px 96px -24px hsl(var(--shadow-color) / 0.2);
-  }
-
-  /* ── Glass surfaces ─────────────────────────────────────────────────
-     The house "premium" surface: translucent, blurred, hairline-bordered.
-     Used for nav bars, cards, dialogs, and panels in place of flat opaque
-     fills so depth reads from layered light rather than a color swap. */
+  /* ── Glassmorphism ───────────────────────────────────────────────── */
+  /* Applied only to: floating nav, theme toggle, modals/dropdowns, AI
+     panel, hero floating elements. NOT to regular cards (design.md).   */
   .glass-panel {
-    background: var(--glass-bg);
-    -webkit-backdrop-filter: blur(20px);
-    backdrop-filter: blur(20px);
-    border: 1px solid var(--glass-border);
+    background: var(--bg-surface-glass);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    /* 1px border in --border-glass per spec; top inner edge catches light */
+    border: 1px solid var(--border-glass);
+    border-top-color: color-mix(in oklch, white 75%, transparent);
+    box-shadow: var(--shadow-glass);
+  }
+
+  /* Dark glass is deliberately toned down (design.md §Glassmorphism — dark):
+     blur capped at 8px, fill is 4-6% white (--bg-surface-glass), border is
+     the subtle #1E2536 hairline, and the top sheen is removed. It must read
+     as a slightly lighter pane of dark glass, not frosted white. */
+  .dark .glass-panel {
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    border-top-color: var(--border-glass);
   }
 
   .glass-card {
-    background: var(--glass-bg);
-    -webkit-backdrop-filter: blur(24px);
-    backdrop-filter: blur(24px);
-    border: 1px solid var(--glass-border);
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.04) inset,
-      0 1px 2px hsl(var(--shadow-color) / 0.1),
-      0 16px 40px -12px hsl(var(--shadow-color) / 0.5);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-hairline);
+    box-shadow: var(--shadow-sm);
   }
 
-  /* Violet → blue gradient, the one signature gradient used sparingly for
-     hero CTAs, active states, and brand marks. */
+  /* ── Cards / Elevated ────────────────────────────────────────────── */
+  .card-base {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 150ms ease-out, transform 150ms ease-out;
+  }
+  .card-base:hover {
+    box-shadow: var(--shadow-md);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-lg);
+  }
+
+  .shadow-elevated-lg {
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* ── Buttons — radius-md (14px), colored shadow, NOT pill ──────── */
+  /* Pills are badges/chips only per design.md. */
+  .btn-primary {
+    background: var(--accent-primary);
+    color: var(--on-accent);
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    padding: 14px 28px;
+    box-shadow: var(--shadow-btn-primary);
+    transition: box-shadow 150ms ease-out, transform 150ms ease-out, background 150ms ease-out;
+  }
+  .btn-primary:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-btn-primary-hover);
+    background: var(--accent-primary-hover);
+  }
+  .btn-primary:active {
+    transform: scale(0.98);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* One hero CTA per page may use the gradient variant */
+  .btn-primary-gradient {
+    background: var(--accent-gradient);
+    color: var(--on-accent);
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    padding: 14px 28px;
+    box-shadow: var(--shadow-btn-primary);
+    transition: box-shadow 150ms ease-out, transform 150ms ease-out;
+  }
+  .btn-primary-gradient:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-btn-primary-hover);
+  }
+  .btn-primary-gradient:active {
+    transform: scale(0.98);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ── Accent gradient (buttons only, never on text) ──────────────── */
   .gradient-accent {
-    background: linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%);
+    background: var(--accent-gradient);
   }
 
-  .text-gradient-accent {
-    background: linear-gradient(135deg, #c4b5fd 0%, #93c5fd 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+  /* ── MacBook mockup frame ────────────────────────────────────────── */
+  .macbook-frame {
+    perspective: 1200px;
   }
-
-  .border-gradient-accent {
-    position: relative;
-    border: 1px solid transparent;
-    background:
-      linear-gradient(var(--card), var(--card)) padding-box,
-      linear-gradient(135deg, rgba(124, 58, 237, 0.6), rgba(59, 130, 246, 0.4)) border-box;
-  }
-
-  /* Soft violet halo behind hero art / empty states — the "futuristic glow"
-     motif, always used blurred and low-opacity, never as a flat fill. */
-  .glow-accent {
-    position: absolute;
-    border-radius: 9999px;
-    background: radial-gradient(circle, rgba(124, 58, 237, 0.35), transparent 70%);
-    filter: blur(60px);
-    pointer-events: none;
-  }
-
-  .glow-on-hover {
-    transition: box-shadow 0.3s var(--ease-signature), transform 0.3s var(--ease-signature);
-  }
-
-  .glow-on-hover:hover {
-    box-shadow:
-      0 0 0 1px rgba(124, 58, 237, 0.4),
-      0 8px 28px -6px rgba(124, 58, 237, 0.5);
-    transform: translateY(-2px);
-  }
-
-  /* Faint animated shimmer sweep across gradient CTAs — off by default,
-     opt-in via .shimmer so it never fights with reduced-motion users. */
-  .shimmer {
-    position: relative;
+  .macbook-screen {
+    border-radius: var(--radius-xl);
     overflow: hidden;
+    border: 1px solid var(--border-hairline);
+    box-shadow: var(--shadow-lg);
+    background: var(--bg-surface);
+    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .macbook-screen-tilt {
+    transform: perspective(1200px) rotateX(4deg);
+  }
+  .macbook-screen-straight {
+    transform: perspective(1200px) rotateX(0deg);
   }
 
-  .shimmer::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.16) 50%, transparent 80%);
-    background-size: 200% 100%;
-    animation: shimmer-sweep 4.5s ease-in-out infinite;
-  }
-
-  @keyframes shimmer-sweep {
-    0% { background-position: 150% 0; }
-    60%, 100% { background-position: -50% 0; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .shimmer::after { animation: none; }
-  }
-
-  /* ── Homepage 2.0 (app/page.tsx + components/home/*) ─────────────────────
-     A handful of motifs unique to the new homepage: an orbiting-keyword
-     ring behind the hero, a "comet" that travels along the pipeline's
-     connector lines, drifting gradient blobs for ambient depth, and a
-     mouse-tracked spotlight for feature cards. Everything here still reads
-     off the shared --accent/--accent-blue tokens — no new colors. */
-
-  @keyframes orbit-rotate {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-  }
-  @keyframes orbit-rotate-reverse {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(-360deg); }
-  }
-  .orbit-track {
-    animation-name: orbit-rotate;
-    animation-timing-function: linear;
-    animation-iteration-count: infinite;
-  }
-  .orbit-counter {
-    animation-name: orbit-rotate-reverse;
-    animation-timing-function: linear;
-    animation-iteration-count: infinite;
-  }
-
-  @keyframes flow-comet {
-    0%   { left: -8%; opacity: 0; }
-    10%  { opacity: 1; }
-    90%  { opacity: 1; }
-    100% { left: 108%; opacity: 0; }
-  }
-  .flow-comet {
-    position: absolute;
-    top: 50%;
-    translate: 0 -50%;
-    animation-name: flow-comet;
-    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    animation-iteration-count: infinite;
-  }
-
-  @keyframes flow-comet-vertical {
-    0%   { top: -8%; opacity: 0; }
-    10%  { opacity: 1; }
-    90%  { opacity: 1; }
-    100% { top: 108%; opacity: 0; }
-  }
-  .flow-comet-vertical {
-    position: absolute;
-    left: 50%;
-    translate: -50% 0;
-    animation-name: flow-comet-vertical;
-    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    animation-iteration-count: infinite;
-  }
-
-  @keyframes blob-drift {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33%       { transform: translate(4%, -6%) scale(1.08); }
-    66%       { transform: translate(-3%, 4%) scale(0.94); }
-  }
-  .blob-drift {
-    animation: blob-drift 20s ease-in-out infinite;
-  }
-  .blob-drift-slow {
-    animation: blob-drift 28s ease-in-out infinite reverse;
-  }
-
-  .card-spotlight {
+  /* ── Browser chrome bar — Safari/Arc-style window toolbar ────────── */
+  /* Real macOS titlebars are ~40-48px with a very subtle vertical sheen,
+     traffic lights at 12px with ~8px gaps, and the URL bar as a recessed
+     pill. The gradient + inset top highlight above the hairline is what
+     stops the bar reading as a flat strip. */
+  .browser-chrome {
     position: relative;
-    isolation: isolate;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 46px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border-hairline);
+    background: linear-gradient(
+        to bottom,
+        color-mix(in oklch, var(--bg-surface) 55%, transparent),
+        color-mix(in oklch, var(--bg-subtle) 88%, transparent)
+      ),
+      var(--bg-subtle);
+    box-shadow: inset 0 1px 0 color-mix(in oklch, white 30%, transparent);
   }
-  .card-spotlight::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    background: radial-gradient(360px circle at var(--spot-x, 50%) var(--spot-y, 50%), rgba(124, 58, 237, 0.16), transparent 65%);
+
+  /* Traffic-light cluster: macOS dots are 12px, 8px apart, with a top-left
+     specular highlight, a darker rim, and a 1px drop — not flat fills.
+     The red/yellow/green are fixed macOS system colors by design (they do
+     NOT follow the app theme, exactly like real macOS traffic lights). */
+  .browser-traffic-lights {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .browser-dot {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    border-radius: 9999px;
+    flex-shrink: 0;
+  }
+  /* On hovering the cluster, macOS reveals the close/min/max glyphs. */
+  .browser-dot::after {
+    content: "×";
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1;
+    color: rgba(0, 0, 0, 0.55);
     opacity: 0;
-    transition: opacity 0.4s var(--ease-signature);
-    pointer-events: none;
+    transition: opacity 120ms ease-out;
   }
-  .card-spotlight:hover::before {
+  .browser-traffic-lights:hover .browser-dot::after {
     opacity: 1;
   }
+  .browser-dot-yellow::after { content: "−"; }
+  .browser-dot-green::after { content: "+"; }
 
-  @keyframes rise-fade {
-    from { opacity: 0; transform: translateY(28px); }
-    to   { opacity: 1; transform: translateY(0); }
+  .browser-dot-red {
+    background:
+      radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0) 55%),
+      linear-gradient(to bottom, #ff6b63, #fe5f57 55%, #ee4f45);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      inset 0 0 0 0.5px rgba(0, 0, 0, 0.18),
+      0 1px 1.5px rgba(0, 0, 0, 0.18);
   }
-  .rise-fade {
-    animation: rise-fade 0.7s var(--ease-signature) both;
+  .browser-dot-yellow {
+    background:
+      radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0) 55%),
+      linear-gradient(to bottom, #ffce4d, #febc2e 55%, #eaa51f);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      inset 0 0 0 0.5px rgba(0, 0, 0, 0.18),
+      0 1px 1.5px rgba(0, 0, 0, 0.18);
+  }
+  .browser-dot-green {
+    background:
+      radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0) 55%),
+      linear-gradient(to bottom, #3fd457, #2bc740 55%, #22ae38);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      inset 0 0 0 0.5px rgba(0, 0, 0, 0.18),
+      0 1px 1.5px rgba(0, 0, 0, 0.18);
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .orbit-track, .orbit-counter, .flow-comet, .flow-comet-vertical, .blob-drift, .blob-drift-slow, .rise-fade {
-      animation: none;
-    }
+  /* Address bar — recessed pill, 28px tall, inset shadow so it reads as a
+     sunken field rather than a flat box. Text is flex-centered (this is the
+     fix for the old vertical-centering drift). Light uses a soft gray inset,
+     dark a real black inset — swapped via .dark so the pill stays recessed. */
+  .browser-address-bar {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    min-width: 0;
+    padding: 0 16px;
+    border-radius: 9999px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-hairline);
+    box-shadow:
+      inset 0 1px 2px oklch(20% 0 0 / 10%),
+      inset 0 0 0 0.5px color-mix(in oklch, var(--ink-primary) 3%, transparent),
+      0 1px 0 color-mix(in oklch, white 55%, transparent);
+    font-family: var(--font-geist-mono), 'Geist Mono', 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--ink-secondary);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dark .browser-address-bar {
+    box-shadow:
+      inset 0 1px 3px oklch(0% 0 0 / 45%),
+      0 1px 0 color-mix(in oklch, white 6%, transparent);
+  }
+
+  /* ── NO scroll-triggered animations (design.md Motion section) ──── */
+  /* .scroll-fade-in removed: content is visible immediately on load.   */
+  /* Hover transitions only — 150-200ms ease-out on all interactive.    */
+  .hover-transition {
+    transition: all 150ms ease-out;
+  }
+
+  /* ── Dot grid (background pattern) ───────────────────────────────── */
+  .bg-dot-grid {
+    background-image: radial-gradient(circle, color-mix(in oklch, var(--ink-primary) 8%, transparent) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  /* ── Background hue whisper (design.md Color System) ─────────────── */
+  /* One radial wash behind content in both themes — low chroma, gives depth
+     to an otherwise flat field. This is what glass panels blur against.
+     Sits fixed behind content, top-left origin. In dark mode the wash is
+     blue-900 at 30% — must READ as navy, not be barely-there. */
+  .bg-hue-wash {
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        60% 60% at 0% 0%,
+        color-mix(in oklch, var(--blue-50) 35%, transparent) 0%,
+        transparent 100%
+      );
+  }
+  .dark .bg-hue-wash {
+    /* design.md dark wash: a blue-900-ish radial at 30% — rendered here as the
+       design.md accent mixed toward the base so it reads as navy, never indigo. */
+    background:
+      radial-gradient(
+        60% 60% at 0% 0%,
+        color-mix(in srgb, #5B8DEF 16%, #0A0E17) 0%,
+        transparent 100%
+      );
+  }
+
+  /* ── Badge pill shape ────────────────────────────────────────────── */
+  .badge-pill {
+    border-radius: var(--radius-pill);
+    padding: 2px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  .badge-success {
+    background: var(--accent-success-tint);
+    color: var(--accent-success);
+  }
+
+  .badge-neutral {
+    background: var(--bg-subtle);
+    color: var(--ink-secondary);
+  }
+
+  /* ── Progress bar ────────────────────────────────────────────────── */
+  .progress-track {
+    background: var(--bg-subtle);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+  }
+  .progress-fill {
+    background: var(--accent-primary);
+    border-radius: var(--radius-pill);
+    height: 100%;
+    transition: width 300ms ease-out;
+  }
+
+  /* ── Section eyebrows ────────────────────────────────────────────── */
+  .section-eyebrow {
+    font-family: var(--font-geist), 'Geist', 'Inter Tight', -apple-system, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--accent-primary);
+  }
+
+  /* ── Accent badge circle (pipeline steps) ────────────────────────── */
+  .badge-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 9999px;
+    background: var(--accent-primary);
+    color: var(--on-accent);
+    font-family: var(--font-geist-mono), 'Geist Mono', 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  /* ── Pipeline connecting line ────────────────────────────────────── */
+  .pipeline-line {
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .pipeline-line svg {
+    width: 100%;
+    height: 100%;
+  }
+  .pipeline-line path {
+    stroke: var(--accent-primary);
+    stroke-width: 2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-dasharray: 2000;
+    stroke-dashoffset: 2000;
+    transition: stroke-dashoffset 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .pipeline-line.visible path {
+    stroke-dashoffset: 0;
+  }
+
+  /* ── Section background tinted washes ────────────────────────────── */
+  /* Accent tint */
+  .bg-tint-accent {
+    background: color-mix(in oklch, var(--accent-primary) 3%, transparent);
+  }
+  .bg-tint-amber {
+    background: color-mix(in oklch, var(--accent-secondary) 3%, transparent);
+  }
+
+  /* ── Abstract form-field background motifs ───────────────────────── */
+  .bg-compile-pattern {
+    background-image:
+      radial-gradient(ellipse 60% 50% at 20% 40%, color-mix(in oklch, var(--accent-primary) 6%, transparent) 0%, transparent 100%),
+      radial-gradient(ellipse 40% 60% at 80% 60%, color-mix(in oklch, var(--accent-secondary) 4%, transparent) 0%, transparent 100%);
+  }
+  .bg-form-outline {
+    background-image:
+      repeating-linear-gradient(90deg, color-mix(in oklch, var(--accent-primary) 4%, transparent) 0px, color-mix(in oklch, var(--accent-primary) 4%, transparent) 1px, transparent 1px, transparent 32px),
+      repeating-linear-gradient(0deg, color-mix(in oklch, var(--accent-primary) 4%, transparent) 0px, color-mix(in oklch, var(--accent-primary) 4%, transparent) 1px, transparent 1px, transparent 32px);
+  }
+
+  /* ── Glow (auth layout left panel) ───────────────────────────────── */
+  .glow-accent {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    background: var(--accent-primary);
+    opacity: 0.15;
+    pointer-events: none;
   }
 }
 
+/* ── Theme swap crossfade ────────────────────────────────────────────── */
+/* The ThemeToggle adds this class to <html> for ~200ms around a toggle so
+   the swap animates background/color/border — no flash, no layout shift.
+   Scoped behind a class so it can't fight component hover transitions.   */
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition:
+    background-color 200ms ease-out,
+    color 200ms ease-out,
+    border-color 200ms ease-out,
+    box-shadow 200ms ease-out !important;
+}

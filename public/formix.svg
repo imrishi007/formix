@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" role="img" aria-label="Formix">
+  <!-- Formix mark (geometry from components/brand/formix-logo.tsx), accent blue. -->
+  <path d="M201.14 109.71 L73.14 256" stroke="#3D77D7" stroke-width="43.89" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M73.14 256 L201.14 402.29" stroke="#3D77D7" stroke-width="43.89" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M310.86 109.71 L438.86 256" stroke="#3D77D7" stroke-width="43.89" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M438.86 256 L310.86 402.29" stroke="#3D77D7" stroke-width="43.89" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M256 173.71 L256 338.29" stroke="#3D77D7" stroke-width="40.23" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

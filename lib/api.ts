@@ -75,6 +75,7 @@ export interface UserResponse {
   id: string;
   email: string;
   name?: string | null;
+  avatar_url?: string | null;
   created_at: string;
 }
 
@@ -205,6 +206,34 @@ export interface DashboardSummary {
   submissions_last_7_days: number;
 }
 
+/** Chart data for the dashboard's activity row (one call, three charts). */
+export interface DashboardActivity {
+  forms_by_day: AnalyticsDayCount[];
+  submissions_by_day: AnalyticsDayCount[];
+  top_forms: DashboardFormRow[];
+}
+
+// Profile
+export interface ProfileUpdate {
+  name?: string;
+  avatar_url?: string;
+}
+
+export interface ProfileDayCount {
+  date: string;
+  count: number;
+}
+
+export interface ProfileResponse {
+  user: UserResponse;
+  member_since: string;
+  total_forms: number;
+  published_forms: number;
+  total_submissions: number;
+  /** Forms created per day over the last year — backs the profile heatmap. */
+  forms_by_day: ProfileDayCount[];
+}
+
 // Analytics
 export interface AnalyticsDayCount {
   date: string;
@@ -301,13 +330,24 @@ async function request<T>(
       message = body?.detail ?? message;
     } catch { /* non-JSON error body */ }
 
-    // Only treat a 401 as an expired/invalid session when the client-side
-    // expiry confirms the token is no longer valid. A 401 while the token is
-    // still within its 30-day window is most likely a transient server error;
-    // clearing the session in that case would log the user out unnecessarily.
-    if (res.status === 401 && token && !isSessionValid()) {
-      clearStoredToken();
-      if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    // Only treat a 401 as an expired/invalid session when either (a) the
+    // client-side expiry timestamp confirms the token is past its 30-day
+    // window, or (b) the backend says the token itself is unverifiable
+    // ("Could not validate credentials" / "User not found" — the exact
+    // messages emitted by backend/auth.py's decode_access_token / user lookup
+    // when the signature, exp claim, or user record fails). Case (b) matters:
+    // if the backend's FORMIX_JWT_SECRET was rotated, the token sits happily
+    // inside its client-side window yet 401s on every call, leaving the user
+    // stranded on "Failed to load workspace". Any OTHER 401 body is treated as
+    // a transient server error and left alone, so we never log someone out on
+    // an unrelated backend hiccup.
+    if (res.status === 401 && token) {
+      const authFailDetails = ["could not validate credentials", "user not found", "not authenticated"];
+      const detailSaysAuthFailed = authFailDetails.some((d) => message.toLowerCase().includes(d));
+      if (!isSessionValid() || detailSaysAuthFailed) {
+        clearStoredToken();
+        if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+      }
     }
 
     throw new ApiError(res.status, message);
@@ -357,6 +397,42 @@ export function login(email: string, password: string): Promise<AuthResult> {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+}
+
+/** Current user for a stored session — used by the OAuth callback page after
+ *  the backend redirects back with a fresh token. */
+export function getMe(): Promise<UserResponse> {
+  return request<UserResponse>("/auth/me");
+}
+
+export interface ForgotPasswordResult {
+  message: string;
+  /** Dev-mode only — a reset link the backend returned instead of emailing it
+   *  (only populated when no SMTP is configured). */
+  reset_link?: string | null;
+}
+
+/** Kick off a password reset. In dev mode the backend returns reset_link so
+ *  the flow works without email infrastructure. */
+export function forgotPassword(email: string): Promise<ForgotPasswordResult> {
+  return request<ForgotPasswordResult>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(token: string, password: string): Promise<{ message: string }> {
+  return request<{ message: string }>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  });
+}
+
+/** Entry point that starts the "Continue with Google / GitHub" redirect flow.
+ *  The backend does the whole dance and bounces back to
+ *  /auth/oauth/callback?token=... when done. */
+export function oauthLoginUrl(provider: "google" | "github"): string {
+  return `${API_BASE}/auth/oauth/${provider}`;
 }
 
 // ── Projects ──────────────────────────────────────────────────────────────────
@@ -523,6 +599,150 @@ export async function downloadExport(formId: string, format: "csv" | "xlsx", fil
   URL.revokeObjectURL(url);
 }
 
+// ── Formix AI (LLM-backed chat, backend/routers/ai.py) ───────────────────────
+
+// These mirror backend/schemas.py + lib/use-forml-compiler.ts exactly — the
+// backend threads the WASM compiler's own FormlDiagnostic shape straight
+// through to the model, so the client sends what it already has.
+
+export interface AiDiagnosticInput {
+  line: number;
+  col: number;
+  severity: "error" | "warning" | "info";
+  message: string;
+}
+
+/** One conversation turn threaded into a chat request. `forml_code` is only
+ *  meaningful for assistant turns — the full revised .forml source that turn
+ *  produced (see backend/schemas.py AiHistoryMessage). */
+export interface AiHistoryMessageInput {
+  role: "user" | "assistant";
+  content: string;
+  forml_code?: string | null;
+}
+
+/** Body for POST /ai/forms/{id}/chat — the full contract the client sends on
+ *  every request (source, diagnostics, selection, recent messages verbatim,
+ *  one-line summary of older history, and the repair loop's context when this
+ *  call is a compile-and-repair follow-up). */
+export interface AiChatRequestPayload {
+  form_id: string;
+  user_message: string;
+  source: string;
+  diagnostics: AiDiagnosticInput[];
+  selection: string;
+  recent_messages: AiHistoryMessageInput[];
+  history_summary: string;
+  repair_context?: { attempt: number; errors: AiDiagnosticInput[] } | null;
+}
+
+/** SSE events streamed by the chat endpoint. `revised_source` is null on a
+ *  conversational turn (no form edit); a string on an edit turn. */
+export type AiChatEvent =
+  | { type: "delta"; text: string }
+  | { type: "result"; explanation: string; revised_source: string | null }
+  | { type: "error"; message: string };
+
+export interface AiHistoryRecord {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  revised_source?: string | null;
+  created_at: string;
+}
+
+export interface AiHistoryResponse {
+  messages: AiHistoryRecord[];
+}
+
+export function getAiHistory(formId: string): Promise<AiHistoryRecord[]> {
+  return request<AiHistoryResponse>(`/ai/forms/${formId}/history`).then((r) => r.messages);
+}
+
+/** Persist one completed turn (user message + assistant reply) after the
+ *  client's compile-and-repair loop resolves — server-side history survives
+ *  reloads (the localStorage history this replaces). */
+export function appendAiMessage(
+  formId: string,
+  payload: { user_message: string; assistant_message: string; revised_source?: string | null },
+): Promise<{ ok: boolean; count: number }> {
+  return request(`/ai/forms/${formId}/messages`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function clearAiHistory(formId: string): Promise<{ ok: boolean; count: number }> {
+  return request(`/ai/forms/${formId}/messages`, { method: "DELETE" });
+}
+
+/**
+ * Run one AI chat turn, consuming the SSE stream as it arrives.
+ *
+ * Calls `onEvent` for each parsed SSE event (delta / result / error) in real
+ * time, so the panel can render the explanation while the model is still
+ * producing it. Throws ApiError on a non-OK HTTP response.
+ */
+export async function chatAiStream(
+  formId: string,
+  payload: AiChatRequestPayload,
+  onEvent: (evt: AiChatEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const token = getStoredToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/ai/forms/${formId}/chat`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+      signal,
+    });
+  } catch (fetchErr) {
+    const isAbort = fetchErr instanceof DOMException && fetchErr.name === "AbortError";
+    throw new ApiError(0, isAbort ? "Cancelled" : `Could not reach the Formix server at ${API_BASE} — is the backend running?`);
+  }
+
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      message = body?.detail ?? message;
+    } catch { /* non-JSON error body */ }
+    throw new ApiError(res.status, message);
+  }
+
+  if (!res.body) return;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // SSE events are separated by a blank line; extract as many complete
+    // events as have arrived so far and keep the partial tail in the buffer.
+    let idx = buffer.indexOf("\n\n");
+    while (idx !== -1) {
+      const raw = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      for (const line of raw.split("\n")) {
+        if (!line.startsWith("data:")) continue;
+        const dataText = line.slice(5).trim();
+        if (!dataText) continue;
+        try {
+          onEvent(JSON.parse(dataText) as AiChatEvent);
+        } catch { /* ignore a malformed event rather than killing the stream */ }
+      }
+      idx = buffer.indexOf("\n\n");
+    }
+  }
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export function getDashboardSummary(): Promise<DashboardSummary> {
@@ -531,6 +751,25 @@ export function getDashboardSummary(): Promise<DashboardSummary> {
 
 export function getDashboardForms(): Promise<DashboardFormRow[]> {
   return request<DashboardFormRow[]>("/dashboard/forms");
+}
+
+/** Chart data for the dashboard's activity row (forms/responses per day + top forms). */
+export function getDashboardActivity(): Promise<DashboardActivity> {
+  return request<DashboardActivity>("/dashboard/activity");
+}
+
+// ── Profile ───────────────────────────────────────────────────────────────────
+
+export function getProfile(): Promise<ProfileResponse> {
+  return request<ProfileResponse>("/profile");
+}
+
+/** Update editable profile fields (name, avatar). Only fields sent are changed. */
+export function updateProfile(payload: ProfileUpdate): Promise<UserResponse> {
+  return request<UserResponse>("/profile", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 // ── Public respondent routes (no auth) ─────────────────────────────────────────

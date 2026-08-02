@@ -27,7 +27,7 @@ export interface MonacoThemeRule {
 }
 
 export interface MonacoTheme {
-  base: "vs-dark";
+  base: "vs" | "vs-dark";
   inherit: boolean;
   rules: MonacoThemeRule[];
   colors: Record<string, string>;
@@ -168,8 +168,22 @@ export const MONACO_OPTIONS = {
 export const FORML_MONARCH_TOKENIZER = {
   tokenizer: {
     root: [
+      // Order matters: field types and attribute keys are also in the keyword
+      // list below, so they must match FIRST to win their own token. This is
+      // what lets the dark theme color types green and property names gray
+      // (design.md §Code editor syntax colors) instead of lumping them in
+      // with structure keywords. The light theme's rules reproduce the old
+      // all-mauve look exactly, so nothing changes visually in light.
       [
-        /\b(?:form|field|ui|validate|action|submit|option|required|minLength|maxLength|pattern|min|max|accept|maxSize|multiple|minFiles|maxFiles|POST|PUT|PATCH|text|email|select|radio|checkbox|upload|file|image|pdf|document|integer|float|date|boolean|url|label|placeholder|helpText|endpoint|method|default|bind|page|section|group|use|var|repeat|count|if|else|on|compute|from|map|row|column|load|change|blur|hide|show|clear|set|navigate)\b/,
+        /\b(?:text|integer|float|email|date|boolean|url|select|radio|checkbox|upload)\b/,
+        "type",
+      ],
+      [
+        /\b(?:label|placeholder|helpText|endpoint|method|default|bind)\b/,
+        "property",
+      ],
+      [
+        /\b(?:form|field|ui|validate|action|submit|option|required|minLength|maxLength|pattern|min|max|accept|maxSize|multiple|minFiles|maxFiles|POST|PUT|PATCH|page|section|group|use|var|repeat|count|if|else|on|compute|from|map|row|column|load|change|blur|hide|show|clear|set|navigate|file|image|pdf|document)\b/,
         "keyword",
       ],
       [/"([^"\\]|\\.)*$/, "string.invalid"],
@@ -188,79 +202,173 @@ export const FORML_MONARCH_TOKENIZER = {
   },
 } as const;
 
-// ── Theme ────────────────────────────────────────────────────────────────────
-// "formix-mono" — a calm dark theme tuned for the brown/purple Formix palette.
+// ── Themes ────────────────────────────────────────────────────────────────────
+// The Monaco canvas follows the app theme (design.md §Code Editor — the
+// reverse of the old "always dark" rule):
+//   - Dark  → FORML_THEME_MOCHA, design.md v3 syntax colors: blue keywords,
+//     soft-green types, muted-amber strings, muted-gray comments, on the
+//     app's bg-surface #0F1522. No mauve/violet (Catppuccin palette removed).
+//   - Light → FORML_THEME_LATTE, the original palette, LOCKED/untouched.
+// Only the canvas is themed here; tab bars / explorer / status bars keep the
+// app's own tokens (--bg-surface etc.), so chrome and code read as one surface.
+// Theme names are exported so editor components can hand them to Monaco's
+// `theme` prop and swap live when the app theme toggles.
 
-export const FORML_THEME: MonacoTheme = {
+export const FORML_THEME_DARK = "formix-mocha";
+export const FORML_THEME_LIGHT = "formix-latte";
+
+// Formix dark — design.md v3 syntax colors (NOT Catppuccin; that palette's
+// mauve/pink is gone entirely). Reference:
+// keywords → accent blue #5B8DEF · types → soft green #4ADE80 ·
+// strings → muted warm amber #E0B989 · comments → muted gray #5C6779 ·
+// numbers → warm orange #F0A868 · operators → soft green · property names
+// → muted blue-gray #9AA4B8 · editor canvas → bg-surface #0F1522
+export const FORML_THEME_MOCHA: MonacoTheme = {
   base: "vs-dark",
   inherit: false,
   rules: [
-    { token: "", foreground: "EDEDEB" },
-    { token: "keyword", foreground: "C4B5FD", fontStyle: "bold" },
-    { token: "string", foreground: "A5D6A7" },
-    { token: "string.invalid", foreground: "FCA5A5" },
-    { token: "number", foreground: "F9C978" },
-    { token: "delimiter", foreground: "A78BFA" },
-    { token: "operator", foreground: "F0ABFC" },
-    { token: "identifier", foreground: "D4D4D8" },
-    { token: "comment", foreground: "71717A", fontStyle: "italic" },
+    { token: "", foreground: "E6E9F0" },
+    { token: "keyword", foreground: "5B8DEF" },
+    { token: "type", foreground: "4ADE80" },
+    { token: "property", foreground: "9AA4B8" },
+    { token: "string", foreground: "E0B989" },
+    { token: "string.invalid", foreground: "F87171" },
+    { token: "number", foreground: "F0A868" },
+    { token: "delimiter", foreground: "9AA4B8" },
+    { token: "operator", foreground: "4ADE80" },
+    { token: "identifier", foreground: "E6E9F0" },
+    { token: "comment", foreground: "5C6779", fontStyle: "italic" },
   ],
   colors: {
-    "editor.background": "#0f172a",
-    "editor.foreground": "#F4F4F5",
-    "editorLineNumber.foreground": "#475569",
-    "editorLineNumber.activeForeground": "#a1a1aa",
-    "editorGutter.background": "#0f172a",
-    "editorCursor.foreground": "#C4B5FD",
-    "editor.selectionBackground": "#8B5CF64D",
-    "editor.inactiveSelectionBackground": "#8B5CF626",
-    "editor.lineHighlightBackground": "#16213b",
-    "editor.lineHighlightBorder": "#1e293b",
-    "editorIndentGuide.background1": "#1e293b",
-    "editorIndentGuide.activeBackground1": "#4C3A77",
-    "editorWhitespace.foreground": "#1e293b",
-    "editorWidget.background": "#16213b",
-    "editorWidget.border": "#334155",
-    "editorWidget.foreground": "#EDEDEB",
+    // Canvas sits on the app's own surface token so chrome and code read as
+    // one surface (design.md §Code Editor).
+    "editor.background": "#0F1522",
+    "editor.foreground": "#e6e9f0",
+    "editorLineNumber.foreground": "#5C6779",
+    "editorLineNumber.activeForeground": "#e6e9f0",
+    "editorGutter.background": "#0F1522",
+    "editorCursor.foreground": "#5B8DEF",
+    "editor.selectionBackground": "#5B8DEF44",
+    "editor.inactiveSelectionBackground": "#2A3348",
+    "editor.lineHighlightBackground": "#141B2B",
+    "editor.lineHighlightBorder": "#141B2B",
+    "editorIndentGuide.background1": "#1E2536",
+    "editorIndentGuide.activeBackground1": "#2A3348",
+    "editorWhitespace.foreground": "#1E2536",
+    "editorWidget.background": "#141B2B",
+    "editorWidget.border": "#2A3348",
+    "editorWidget.foreground": "#e6e9f0",
     "scrollbar.shadow": "#00000000",
-    "scrollbarSlider.background": "#FFFFFF0A",
-    "scrollbarSlider.hoverBackground": "#FFFFFF18",
-    "scrollbarSlider.activeBackground": "#FFFFFF28",
+    "scrollbarSlider.background": "#1E2536",
+    "scrollbarSlider.hoverBackground": "#2A3348",
+    "scrollbarSlider.activeBackground": "#5C6779",
     "editorOverviewRuler.border": "#00000000",
-    "focusBorder": "#8B5CF640",
-    "editorError.foreground": "#E05252",
-    "editorWarning.foreground": "#C4A35A",
-    "editorInfo.foreground": "#8B5CF6",
-    "editorOverviewRuler.errorForeground": "#E05252",
-    "editorOverviewRuler.warningForeground": "#C4A35A",
-    "editorOverviewRuler.infoForeground": "#8B5CF6",
-    // Suggest / hover widgets — explicit so they stay on-theme (inherit: false
-    // means these would otherwise fall back to Monaco's generic defaults).
-    "editorSuggestWidget.background": "#16213b",
-    "editorSuggestWidget.border": "#334155",
-    "editorSuggestWidget.foreground": "#D4D4D8",
-    "editorSuggestWidget.selectedBackground": "#8B5CF633",
-    "editorSuggestWidget.highlightForeground": "#C4B5FD",
-    "editorHoverWidget.background": "#16213b",
-    "editorHoverWidget.border": "#334155",
-    "editorHoverWidget.foreground": "#D4D4D8",
-    // Bracket matching + pair colorization, tuned to the Formix palette
-    // instead of Monaco's default rainbow.
-    "editorBracketMatch.background": "#8B5CF633",
-    "editorBracketMatch.border": "#8B5CF680",
-    "editorBracketHighlight.foreground1": "#C4B5FD",
-    "editorBracketHighlight.foreground2": "#F9C978",
-    "editorBracketHighlight.foreground3": "#A5D6A7",
-    "editorBracketHighlight.foreground4": "#F0ABFC",
-    "editorBracketHighlight.foreground5": "#7DD3FC",
-    "editorBracketHighlight.foreground6": "#FCA5A5",
-    "editorBracketHighlight.unexpectedBracket.foreground": "#E05252",
-    "editorBracketPairGuide.background1": "#C4B5FD1A",
-    "editorBracketPairGuide.background2": "#F9C9781A",
-    "editorBracketPairGuide.background3": "#A5D6A71A",
-    // Folding + gutter
-    "editorGutter.foldingControlForeground": "#71717A",
-    "editor.foldBackground": "#8B5CF60D",
+    "focusBorder": "#5B8DEF66",
+    "editorError.foreground": "#f87171",
+    "editorWarning.foreground": "#fbbf24",
+    "editorInfo.foreground": "#5b8def",
+    "editorOverviewRuler.errorForeground": "#f87171",
+    "editorOverviewRuler.warningForeground": "#fbbf24",
+    "editorOverviewRuler.infoForeground": "#5b8def",
+    "editorSuggestWidget.background": "#141B2B",
+    "editorSuggestWidget.border": "#2A3348",
+    "editorSuggestWidget.foreground": "#e6e9f0",
+    "editorSuggestWidget.selectedBackground": "#1E2536",
+    "editorSuggestWidget.highlightForeground": "#5B8DEF",
+    "editorHoverWidget.background": "#141B2B",
+    "editorHoverWidget.border": "#2A3348",
+    "editorHoverWidget.foreground": "#e6e9f0",
+    // Bracket matching + pair colorization — design.md palette (no mauve/pink)
+    "editorBracketMatch.background": "#2A3348",
+    "editorBracketMatch.border": "#5C6779",
+    "editorBracketHighlight.foreground1": "#5b8def",
+    "editorBracketHighlight.foreground2": "#4ade80",
+    "editorBracketHighlight.foreground3": "#e0b989",
+    "editorBracketHighlight.foreground4": "#f87171",
+    "editorBracketHighlight.foreground5": "#fbbf24",
+    "editorBracketHighlight.foreground6": "#2dd4bf",
+    "editorBracketHighlight.unexpectedBracket.foreground": "#f87171",
+    "editorBracketPairGuide.background1": "#5b8def1a",
+    "editorBracketPairGuide.background2": "#4ade801a",
+    "editorBracketPairGuide.background3": "#e0b9891a",
+    "editorGutter.foldingControlForeground": "#5C6779",
+    "editor.foldBackground": "#141B2B",
+  },
+};
+
+// Catppuccin Latte — light. Reference tokens (design.md):
+// base #eff1f5 · mantle #e6e9ef · text #4c4f69 · blue #1e66f5 ·
+// mauve #8839ef · green #40a02b · yellow #df8e1d · peach #fe640b ·
+// red #d20f39
+export const FORML_THEME_LATTE: MonacoTheme = {
+  base: "vs",
+  inherit: false,
+  rules: [
+    { token: "", foreground: "4C4F69" },
+    { token: "keyword", foreground: "8839EF" },
+    // type/property tokens exist so the DARK theme can color them distinctly
+    // (design.md); light theme keeps them the old mauve to stay untouched.
+    { token: "type", foreground: "8839EF" },
+    { token: "property", foreground: "8839EF" },
+    { token: "string", foreground: "40A02B" },
+    { token: "string.invalid", foreground: "D20F39" },
+    { token: "number", foreground: "FE640B" },
+    { token: "delimiter", foreground: "1E66F5" },
+    { token: "operator", foreground: "1E66F5" },
+    { token: "identifier", foreground: "4C4F69" },
+    { token: "comment", foreground: "6C6F85", fontStyle: "italic" },
+  ],
+  colors: {
+    "editor.background": "#eff1f5",
+    "editor.foreground": "#4c4f69",
+    "editorLineNumber.foreground": "#bcc0cc",
+    "editorLineNumber.activeForeground": "#4c4f69",
+    "editorGutter.background": "#eff1f5",
+    "editorCursor.foreground": "#7287fd",
+    "editor.selectionBackground": "#acb0be",
+    "editor.inactiveSelectionBackground": "#bcc0cc",
+    "editor.lineHighlightBackground": "#e6e9ef",
+    "editor.lineHighlightBorder": "#e6e9ef",
+    "editorIndentGuide.background1": "#ccd0da",
+    "editorIndentGuide.activeBackground1": "#6c6f85",
+    "editorWhitespace.foreground": "#ccd0da",
+    "editorWidget.background": "#e6e9ef",
+    "editorWidget.border": "#bcc0cc",
+    "editorWidget.foreground": "#4c4f69",
+    "scrollbar.shadow": "#00000000",
+    "scrollbarSlider.background": "#ccd0da",
+    "scrollbarSlider.hoverBackground": "#bcc0cc",
+    "scrollbarSlider.activeBackground": "#acb0be",
+    "editorOverviewRuler.border": "#00000000",
+    "focusBorder": "#1e66f555",
+    "editorError.foreground": "#d20f39",
+    "editorWarning.foreground": "#df8e1d",
+    "editorInfo.foreground": "#1e66f5",
+    "editorOverviewRuler.errorForeground": "#d20f39",
+    "editorOverviewRuler.warningForeground": "#df8e1d",
+    "editorOverviewRuler.infoForeground": "#1e66f5",
+    "editorSuggestWidget.background": "#e6e9ef",
+    "editorSuggestWidget.border": "#bcc0cc",
+    "editorSuggestWidget.foreground": "#4c4f69",
+    "editorSuggestWidget.selectedBackground": "#ccd0da",
+    "editorSuggestWidget.highlightForeground": "#1e66f5",
+    "editorHoverWidget.background": "#e6e9ef",
+    "editorHoverWidget.border": "#bcc0cc",
+    "editorHoverWidget.foreground": "#4c4f69",
+    "editorBracketMatch.background": "#acb0be",
+    "editorBracketMatch.border": "#6c6f85",
+    "editorBracketHighlight.foreground1": "#1e66f5",
+    "editorBracketHighlight.foreground2": "#8839ef",
+    "editorBracketHighlight.foreground3": "#179299",
+    "editorBracketHighlight.foreground4": "#d20f39",
+    "editorBracketHighlight.foreground5": "#df8e1d",
+    "editorBracketHighlight.foreground6": "#ea76cb",
+    "editorBracketHighlight.unexpectedBracket.foreground": "#d20f39",
+    "editorBracketPairGuide.background1": "#1e66f51a",
+    "editorBracketPairGuide.background2": "#8839ef1a",
+    "editorBracketPairGuide.background3": "#1792991a",
+    "editorGutter.foldingControlForeground": "#6c6f85",
+    "editor.foldBackground": "#e6e9ef",
   },
 };
 
@@ -327,7 +435,10 @@ export function defineFormixMono(monaco: MonacoLike | unknown): void {
     FORML_LANGUAGE_CONFIG as unknown as Record<string, unknown>,
   );
 
-  m.editor.defineTheme("formix-mono", FORML_THEME);
+  // Register both Catppuccin canvas themes up front so editor components can
+  // swap between them reactively via Monaco's `theme` prop.
+  m.editor.defineTheme(FORML_THEME_DARK, FORML_THEME_MOCHA);
+  m.editor.defineTheme(FORML_THEME_LIGHT, FORML_THEME_LATTE);
 
   // Mark that the language service (completions, hovers) can be attached.
   // The language service itself is registered separately by

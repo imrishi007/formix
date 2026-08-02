@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import {
   register as apiRegister,
   login as apiLogin,
+  getMe as apiGetMe,
   getStoredToken,
   setStoredToken,
   clearStoredToken,
@@ -40,6 +41,12 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name?: string) => Promise<void>;
   logout: () => void;
+  /** Replace the stored user (e.g. after a profile edit) and re-persist to
+   *  localStorage so the avatar/name update survives reloads. */
+  applyUser: (updated: UserResponse) => void;
+  /** Finish an OAuth sign-in: store the token the backend bounced back with,
+   *  fetch the user via /auth/me, and persist the full session. */
+  completeOAuth: (token: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -98,6 +105,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const applyUser = useCallback((updated: UserResponse) => {
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
+    setUser(updated);
+  }, []);
+
+  const completeOAuth = useCallback(async (token: string) => {
+    // Persist the token first so request() picks it up for the /auth/me call.
+    setStoredToken(token);
+    const user = await apiGetMe();
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+    setToken(token);
+    setUser(user);
+  }, []);
+
   // lib/api.ts fires this when a request carrying our Bearer token comes
   // back 401 (expired/invalid session, or the user no longer exists on the
   // backend) — without this, every subsequent request would keep silently
@@ -115,8 +136,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, token, isLoading, login, register, logout }),
-    [user, token, isLoading, login, register, logout],
+    () => ({ user, token, isLoading, login, register, logout, applyUser, completeOAuth }),
+    [user, token, isLoading, login, register, logout, applyUser, completeOAuth],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
