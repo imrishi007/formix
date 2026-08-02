@@ -1,88 +1,129 @@
-"use client";
+﻿"use client";
 
-/**
- * components/home/hero.tsx
- * Brand-new hero for the rebuilt homepage. Same destinations as the old
- * hero (/editor/demo?ai=1, /editor/demo). Kept deliberately clean — no
- * floating decorative keywords — just the headline, copy, and CTAs on the
- * same dark graphite canvas as the rest of the page.
- */
-
-import { useEffect, useState } from "react";
+import { useRef, useCallback } from "react";
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowRight } from "lucide-react";
+
+// ─── Pointer parallax hook ────────────────────────────────────────────────────
+// Tracks pointer position relative to the element's own center, translates
+// it into a small X/Y offset that makes the copy block feel like it has depth.
+// Applied ONLY on hover — pointer-driven, never scroll-driven. (design.md §Depth)
+function usePointerParallax(strength = 8) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  const onMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const el = ref.current;
+      if (!el) return;
+      const { left, top, width, height } = el.getBoundingClientRect();
+      // Normalised pointer position in [-0.5, 0.5]
+      const nx = (e.clientX - left - width / 2) / width;
+      const ny = (e.clientY - top - height / 2) / height;
+      // Apply as a subtle translate — not a rotate, not a 3D scene
+      el.style.transform = `translate(${nx * strength}px, ${ny * strength}px)`;
+    },
+    [strength],
+  );
+
+  const onMouseLeave = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Settle smoothly back to center (150ms ease-out per design.md Motion)
+    el.style.transition = "transform 200ms ease-out";
+    el.style.transform = "translate(0px, 0px)";
+    // Clear inline transition so normal CSS picks up after
+    setTimeout(() => {
+      if (el) el.style.transition = "";
+    }, 200);
+  }, []);
+
+  return { ref, onMouseMove, onMouseLeave };
+}
 
 export function Hero() {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => setVisible(true), []);
+  // Content is visible immediately on load — no mount fade, no translate-in.
+  // design.md Motion: "No scroll-triggered animations of any kind. Content is
+  // visible immediately on load/navigation."
+  const parallax = usePointerParallax(6);
 
   return (
-    <section className="relative flex min-h-[100svh] items-center justify-center overflow-hidden px-6 pt-32 pb-24">
-      {/* Ambient background — same dark canvas throughout, just depth cues */}
-      <div className="absolute inset-0 -z-10 overflow-hidden">
-        <div className="bg-dot-grid absolute inset-0 opacity-40" />
-        <div className="blob-drift absolute left-1/2 top-1/4 h-[560px] w-[560px] -translate-x-1/2 rounded-full bg-[#7c3aed]/20 blur-[140px]" />
-        <div className="blob-drift-slow absolute bottom-0 right-1/4 h-[420px] w-[420px] rounded-full bg-[#3b82f6]/20 blur-[130px]" />
-      </div>
+    <section
+      className="relative flex min-h-[100svh] items-center justify-center overflow-hidden bg-(--bg-base) px-8 pt-36 pb-28"
+    >
+      {/* Dot grid — very faint, gives the page subtle texture without competing */}
+      <div className="bg-dot-grid pointer-events-none absolute inset-0 -z-10 opacity-30" />
 
-      <div className="relative z-10 mx-auto flex max-w-3xl flex-col items-center text-center">
-        <div
-          className={`glass-panel mb-8 flex items-center gap-2 rounded-full px-4 py-1.5 transition-all duration-700 ${
-            visible ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
-          }`}
-        >
-          <Sparkles className="h-3.5 w-3.5 text-accent" />
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+      <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center text-center">
+
+        {/* ── Eyebrow pill — status chip, pill radius is correct here (badge) ── */}
+        <div className="mb-10 flex items-center gap-2.5 rounded-(--radius-pill) border border-(--border-hairline) bg-(--bg-surface) px-5 py-2 shadow-(--shadow-sm)">
+          {/* Amber dot — uses accent-secondary (warm amber) as the "live" indicator */}
+          <span className="relative flex h-2 w-2 flex-shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-(--accent-secondary) opacity-50" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-(--accent-secondary)" />
+          </span>
+          <span className="font-mono text-xs font-medium uppercase tracking-[0.08em] text-(--ink-tertiary)">
             AI-native forms, compiled
           </span>
         </div>
 
-        <h1
-          className={`font-display text-[clamp(2.75rem,8vw,6.5rem)] leading-[0.98] tracking-tight text-foreground transition-all duration-700 delay-100 ${
-            visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
-          }`}
-        >
-          <span className="block">From a sentence</span>
-          <span className="text-gradient-accent block">to a running form.</span>
-        </h1>
-
-        <p
-          className={`mt-8 max-w-xl text-balance text-lg leading-relaxed text-muted-foreground transition-all duration-700 delay-200 ${
-            visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
-          }`}
-        >
-          Describe what you need. Formix AI writes it in <strong className="font-semibold text-foreground">FormL</strong> — a real
-          language, parsed by a hand-written C++ compiler running as WebAssembly, right in your browser.
-        </p>
-
+        {/* ── Headline — pointer-parallax on the copy block ─────────────── */}
+        {/* The outer div is the parallax receiver; the inner content has
+            pointer events so it doesn't eat child interactions. */}
         <div
-          className={`mt-10 flex flex-col items-center gap-4 transition-all duration-700 delay-300 sm:flex-row ${
-            visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
-          }`}
+          {...parallax}
+          style={{ willChange: "transform" }}
+          className="flex flex-col items-center"
         >
-          <Button asChild size="lg" className="group h-14 gap-2 rounded-full px-8 text-base">
-            <Link href="/editor/demo?ai=1">
+          <h1 className="text-[clamp(2.75rem,8vw,5.5rem)] leading-[1.05] tracking-[-0.02em] text-(--ink-primary)">
+            <span className="block font-[550]">From a sentence</span>
+            <span className="block font-[550]">
+              to a{" "}
+              {/* accent-primary on the brand phrase — one instance per page */}
+              <span className="text-(--accent-primary)">running form</span>.
+            </span>
+          </h1>
+
+          <p className="mt-8 max-w-2xl text-balance text-xl leading-relaxed text-(--ink-secondary)">
+            Describe what you need. Formix AI writes it in{" "}
+            <strong className="font-semibold text-(--ink-primary)">FormL</strong> — a real
+            language, parsed by a hand-written C++ compiler running as WebAssembly, right in
+            your browser.
+          </p>
+
+          {/* ── CTAs — radius-md (14px), colored shadow, scale on hover ── */}
+          {/* Primary gets the gradient fill (one hero CTA per page max,
+              per design.md gradient rule). Secondary is outline. */}
+          <div className="mt-12 flex flex-col items-center gap-5 sm:flex-row">
+            {/* Primary CTA — btn-primary-gradient: the one hero gradient per
+                page (design.md rule), --accent-gradient (blue-500→400 light,
+                blue-400→300 dark), --shadow-btn-primary growing on hover,
+                text --on-accent (white in both themes). No hardcoded hex —
+                all tokenized. */}
+            <Link
+              href="/editor/demo?ai=1"
+              id="hero-cta-primary"
+              className="group inline-flex items-center gap-3 rounded-(--radius-md) px-8 py-4 text-lg font-semibold btn-primary-gradient"
+            >
               Talk to Formix AI
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              <ArrowRight className="size-5 transition-transform duration-150 group-hover:translate-x-1" />
             </Link>
-          </Button>
-          <Button asChild size="lg" variant="outline" className="h-14 rounded-full px-8 text-base">
-            <Link href="/editor/demo">Open the Editor</Link>
-          </Button>
+
+            {/* Secondary CTA — outline, radius-md matches primary */}
+            <Link
+              href="/editor/demo"
+              id="hero-cta-secondary"
+              className="inline-flex items-center rounded-(--radius-md) border border-(--border-hairline-strong) bg-transparent px-8 py-4 text-lg font-semibold text-(--ink-primary) transition-all duration-150 hover:bg-(--bg-subtle) active:scale-[0.98]"
+            >
+              Open the Editor
+            </Link>
+          </div>
         </div>
 
-        <div
-          className={`mt-10 flex items-center gap-2 transition-all delay-500 duration-700 ${
-            visible ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
-          </span>
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground/70">
-            Compiler running live in your browser — zero network latency
+        {/* ── Sub-caption — compiler stack proof-point ─────────────────── */}
+        <div className="mt-12 flex items-center gap-3">
+          <span className="font-mono text-xs text-(--ink-tertiary) opacity-60">
+            hand-written C++ parser · compiled to WebAssembly · runs in your browser
           </span>
         </div>
       </div>

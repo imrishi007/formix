@@ -1,70 +1,141 @@
-"use client";
-
-/**
- * components/home/pipeline.tsx
- * "AI → Compiler Pipeline" — a brand-new animated node-flow diagram showing
- * the real path a request takes through Formix: Natural Language → Formix
- * AI → FormL → WASM Compiler → AST → Live Form. Purely presentational (the
- * real thing happens in the editor / demo section below), but every stage
- * name matches an actual part of the system, not marketing fluff.
- */
+﻿"use client";
 
 import { motion } from "framer-motion";
 import { Cpu, FileCode2, MessageSquareText, MonitorCheck, Sparkles, Workflow } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 const STAGES = [
-  { icon: MessageSquareText, label: "Natural Language", desc: "\"A feedback form with a rating\"" },
-  { icon: Sparkles, label: "Formix AI", desc: "Interprets intent, drafts structure" },
-  { icon: FileCode2, label: "FormL", desc: "A real, readable DSL — not JSON" },
-  { icon: Cpu, label: "WASM Compiler", desc: "Hand-written C++, runs in-browser" },
-  { icon: Workflow, label: "AST", desc: "Typed JSON tree, zero network calls" },
-  { icon: MonitorCheck, label: "Live Form", desc: "Rendered, validated, ready to ship" },
+  { icon: MessageSquareText, label: "Natural Language", desc: "\"A feedback form with a rating\"", accent: "--accent-primary" },
+  { icon: Sparkles, label: "Formix AI", desc: "Interprets intent, drafts structure", accent: "--accent-secondary" },
+  { icon: FileCode2, label: "FormL", desc: "A real, readable DSL — not JSON", accent: "--accent-primary" },
+  { icon: Cpu, label: "WASM Compiler", desc: "Hand-written C++, runs in-browser", accent: "--accent-secondary" },
+  { icon: Workflow, label: "AST", desc: "Typed JSON tree, zero network calls", accent: "--accent-primary" },
+  { icon: MonitorCheck, label: "Live Form", desc: "Rendered, validated, ready to ship", accent: "--accent-secondary" },
 ] as const;
 
 export function Pipeline() {
+  const [pathD, setPathD] = useState("");
+  const [isVisible, setIsVisible] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+
+    const computePath = () => {
+      const sectionRect = section.getBoundingClientRect();
+      const centers = cardRefs.current
+        .filter((c): c is HTMLDivElement => c !== null)
+        .map((card) => {
+          const rect = card.getBoundingClientRect();
+          return {
+            x: rect.left + rect.width / 2 - sectionRect.left,
+            y: rect.top + rect.height / 2 - sectionRect.top,
+          };
+        });
+
+      if (centers.length < 2) return;
+
+      let d = `M ${centers[0].x} ${centers[0].y}`;
+      for (let i = 1; i < centers.length; i++) {
+        const prev = centers[i - 1];
+        const curr = centers[i];
+        const cx = (prev.x + curr.x) / 2;
+        d += ` C ${cx} ${prev.y}, ${cx} ${curr.y}, ${curr.x} ${curr.y}`;
+      }
+      setPathD(d);
+    };
+
+    computePath();
+    window.addEventListener("resize", computePath);
+    return () => window.removeEventListener("resize", computePath);
+  }, []);
+
   return (
-    <section id="pipeline" className="relative px-6 py-32">
+    <section
+      id="pipeline"
+      ref={sectionRef}
+      className="relative overflow-hidden bg-tint-accent bg-compile-pattern px-8 py-36"
+    >
       <div className="mx-auto max-w-6xl">
         <div className="mx-auto max-w-2xl text-center">
-          <span className="font-mono text-xs uppercase tracking-[0.2em] text-accent">How it works</span>
-          <h2 className="mt-4 font-display text-4xl tracking-tight text-foreground sm:text-5xl">
+          <span className="section-eyebrow">How it works</span>
+          <h2 className="mt-5 text-4xl tracking-[-0.02em] text-(--ink-primary) sm:text-5xl font-[550]">
             One pipeline, start to finish.
           </h2>
-          <p className="mt-4 text-balance text-muted-foreground">
+          <p className="mt-5 text-balance text-lg text-(--ink-secondary)">
             Nothing here is a diagram for its own sake — this is the literal path your words take, from the chat
             panel to a rendered field on screen.
           </p>
         </div>
 
-        <div className="relative mt-20">
-          <div className="absolute inset-x-8 top-[3.25rem] hidden h-px overflow-visible bg-gradient-to-r from-transparent via-white/15 to-transparent lg:block">
-            <span className="flow-comet h-2 w-2 rounded-full bg-accent shadow-[0_0_10px_2px_rgba(124,58,237,0.65)]" style={{ animationDuration: "4s" }} />
-            <span className="flow-comet h-2 w-2 rounded-full bg-[#3b82f6] shadow-[0_0_10px_2px_rgba(59,130,246,0.6)]" style={{ animationDuration: "4s", animationDelay: "2s" }} />
-          </div>
+        <div className="relative mt-24">
+          {pathD && (
+            <svg
+              className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full lg:block"
+              style={{ overflow: "visible" }}
+            >
+              <motion.path
+                d={pathD}
+                stroke="var(--accent-primary)"
+                strokeWidth="2"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={isVisible ? { pathLength: 1, opacity: 0.4 } : {}}
+                transition={{ duration: 1.5, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              />
+            </svg>
+          )}
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 lg:gap-3">
+          <div className="relative z-10 grid grid-cols-2 gap-6 sm:grid-cols-3">
             {STAGES.map((stage, i) => (
               <motion.div
                 key={stage.label}
-                initial={{ opacity: 0, y: 24 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                ref={(el) => { cardRefs.current[i] = el; }}
+                initial={{ opacity: 0, y: 24, scale: 0.95 }}
+                whileInView={{ opacity: 1, y: 0, scale: 1 }}
                 viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.6, delay: i * 0.09, ease: [0.22, 1, 0.36, 1] }}
-                className="glass-card card-spotlight relative flex flex-col items-center gap-3 rounded-2xl px-4 py-6 text-center"
-                onMouseMove={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  e.currentTarget.style.setProperty("--spot-x", `${e.clientX - rect.left}px`);
-                  e.currentTarget.style.setProperty("--spot-y", `${e.clientY - rect.top}px`);
+                transition={{
+                  duration: 0.6,
+                  delay: 0.15 + i * 0.1,
+                  ease: [0.16, 1, 0.3, 1],
                 }}
+                className="card-base relative flex flex-col gap-4 px-6 py-8"
               >
-                <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl border border-accent/25 bg-accent/10">
-                  <stage.icon className="h-5 w-5 text-accent" />
+                <div className="absolute left-4 top-4">
+                  <span className="badge-step">{String(i + 1).padStart(2, "0")}</span>
+                </div>
+
+                <span
+                  className="mt-6 flex h-14 w-14 flex-none items-center justify-center rounded-(--radius-md)"
+                  style={{ backgroundColor: `color-mix(in srgb, var(${stage.accent}) 12%, transparent)` }}
+                >
+                  <stage.icon className="size-7" style={{ color: `var(${stage.accent})` }} />
                 </span>
-                <span className="font-inter text-sm font-semibold text-foreground">{stage.label}</span>
-                <span className="font-mono text-[11px] leading-snug text-muted-foreground/80">{stage.desc}</span>
-                <span className="absolute right-3 top-3 font-mono text-[10px] text-muted-foreground/30">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
+
+                <div className="flex flex-col gap-1">
+                  <span className="text-base font-semibold text-(--ink-primary)">{stage.label}</span>
+                  <span className="text-sm leading-snug text-(--ink-tertiary)">{stage.desc}</span>
+                </div>
               </motion.div>
             ))}
           </div>
