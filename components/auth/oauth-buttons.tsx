@@ -33,14 +33,15 @@ function GitHubIcon({ className = "h-4 w-4" }: { className?: string }) {
 export function OAuthButtons() {
   const router = useRouter();
 
-  // TEMPORARILY DISABLED: Google/GitHub sign-in is paused until the prod-only
-  // callback failure is root-caused (see backend/routers/oauth.py — the
-  // hardened callback now logs the exact exception to the Render logs).
-  // Keep the markup + wiring intact so re-enabling is a one-line flip.
-  const oauthDisabled = true;
+  // Google sign-in is re-enabled — the OAuth credentials in backend/.env were
+  // refreshed (see backend/routers/oauth.py, which logs any callback failure to
+  // the Render logs). GitHub stays disabled until its credentials are sorted.
+  const googleDisabled = false;
+  const githubDisabled = true;
 
   const start = (provider: "google" | "github") => {
-    if (oauthDisabled) return;
+    if (provider === "google" && googleDisabled) return;
+    if (provider === "github" && githubDisabled) return;
     // Full-page redirect: we leave the app, come back with ?token=... on the
     // /auth/oauth/callback route, which finishes the sign-in.
     router.push(oauthLoginUrl(provider));
@@ -58,8 +59,8 @@ export function OAuthButtons() {
       <button
         type="button"
         onClick={() => start("google")}
-        disabled={oauthDisabled}
-        title={oauthDisabled ? "Temporarily unavailable" : undefined}
+        disabled={googleDisabled}
+        title={googleDisabled ? "Temporarily unavailable" : undefined}
         className="flex w-full items-center justify-center gap-2.5 rounded-full border border-border bg-transparent px-7 py-3 text-sm font-medium text-foreground transition-colors hover:bg-accent/40 disabled:opacity-60 disabled:hover:bg-transparent"
       >
         <GoogleIcon />
@@ -69,17 +70,17 @@ export function OAuthButtons() {
       <button
         type="button"
         onClick={() => start("github")}
-        disabled={oauthDisabled}
-        title={oauthDisabled ? "Temporarily unavailable" : undefined}
+        disabled={githubDisabled}
+        title={githubDisabled ? "Temporarily unavailable" : undefined}
         className="flex w-full items-center justify-center gap-2.5 rounded-full border border-border bg-transparent px-7 py-3 text-sm font-medium text-foreground transition-colors hover:bg-accent/40 disabled:opacity-60 disabled:hover:bg-transparent"
       >
         <GitHubIcon />
         Continue with GitHub
       </button>
 
-      {oauthDisabled && (
+      {githubDisabled && (
         <p className="text-center font-mono text-[11px] text-muted-foreground/60">
-          Google / GitHub sign-in is temporarily unavailable — sign in with your email instead.
+          GitHub sign-in is temporarily unavailable — sign in with your email instead.
         </p>
       )}
     </div>
