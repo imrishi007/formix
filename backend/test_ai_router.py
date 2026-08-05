@@ -130,6 +130,16 @@ def _parse_sse(text: str) -> list[dict]:
     return events
 
 
+def _raises(text: str) -> bool:
+    """True when the string is genuinely invalid JSON (the test's sanity check
+    that a repair case was actually broken to begin with)."""
+    try:
+        json.loads(text)
+        return False
+    except (json.JSONDecodeError, ValueError):
+        return True
+
+
 VALID_REPLY = (
     '{"explanation": "Added a required email field with validation.\\n\\n'
     'It is now the first field.", '
@@ -232,6 +242,86 @@ def test_parse_strict_accepts_both_response_shapes():
     assert ai_module._parse_strict("definitely not json") is None
 
 
+def test_parse_strict_recovers_raw_multiline_revised_source():
+    """The model's single most common failure: embedding the Forml source in
+    revisedSource with LITERAL newlines instead of \\n escapes — invalid JSON
+    that the lenient repair must recover (this is the GATE-score case)."""
+    raw = (
+        '{\n'
+        '  "explanation": "Here is your form. It collects the GATE score and '
+        'the candidate roll number.",\n'
+        '  "revisedSource": "form GATE Registration {\n'
+        '    field rollNumber : text {\n'
+        '      validate { required }\n'
+        '    }\n'
+        '    field score : integer {\n'
+        '      validate { min: 0 max: 100 required }\n'
+        '    }\n'
+        '  }"\n'
+        '}'
+    )
+    assert _raises(raw)  # sanity: it really is broken
+    parsed = ai_module._parse_strict(raw)
+    assert parsed is not None
+    assert parsed["explanation"].startswith("Here is your form.")
+    assert "field rollNumber : text" in parsed["revisedSource"]
+    assert "validate { min: 0 max: 100 required }" in parsed["revisedSource"]
+
+
+def test_parse_strict_repairs_unescaped_quotes():
+    """A label with quotes inside revisedSource, left unescaped by the model,
+    must be recovered — Forml sources are full of \" (labels, options,
+    patterns), so this is not a corner case."""
+    raw = (
+        '{"explanation": "Added the field the way you asked.", '
+        '"revisedSource": "form GATE { field score : integer { label "GATE Score" } }"}'
+    )
+    assert _raises(raw)  # sanity: the unescaped quotes really are broken JSON
+    parsed = ai_module._parse_strict(raw)
+    assert parsed is not None
+    assert 'label "GATE Score"' in parsed["revisedSource"]
+    assert parsed["explanation"] == "Added the field the way you asked."
+
+
+def test_parse_strict_repairs_newlines_quotes_and_trailing_commas():
+    """The nastiest realistic reply: literal newlines AND unescaped quotes AND
+    a trailing comma all at once. The repair must recover it as a whole."""
+    raw = (
+        '{\n'
+        '  "explanation": "The label is "GATE Score", as requested.",\n'
+        '  "revisedSource": "form GATE {\n'
+        '    field score : integer\n'
+        '  }",\n'
+        '}'
+    )
+    assert _raises(raw)
+    parsed = ai_module._parse_strict(raw)
+    assert parsed is not None
+    assert parsed["explanation"] == 'The label is "GATE Score", as requested.'
+    assert "field score : integer" in parsed["revisedSource"]
+
+
+def test_parse_strict_tolerates_prose_and_fences_around_json():
+    """Models wrap the JSON in ```json fences and/or add commentary around it.
+    The parser must find the object either way."""
+    for raw in (
+        "Sure! Here you go:\n\n```json\n" + VALID_REPLY + "\n```\n\nHope that helps.",
+        "Sure! Here you go:\n\n" + VALID_REPLY + "\n\nThat should do it.",
+    ):
+        parsed = ai_module._parse_strict(raw)
+        assert parsed is not None
+        assert "field email : email" in parsed["revisedSource"]
+
+
+def test_default_max_tokens_is_8192(monkeypatch):
+    """Edit turns embed the whole form source in one JSON string; the old 4096
+    default truncated long forms mid-JSON. 8192 must be the new default."""
+    for key in ("AI_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+    assert ai_module._active_config()["max_tokens"] == 8192
+
+
 def test_chat_streams_explanation_and_returns_result(client, monkeypatch):
     monkeypatch.setattr(ai_module, "_call_ai_stream", _stream_of(VALID_REPLY))
     monkeypatch.setattr(ai_module, "_call_ai_complete", lambda m: "{}")
@@ -294,6 +384,49 @@ def test_chat_fails_when_reply_never_matches_the_shape(client, monkeypatch):
     assert len(errors) == 1
     assert "JSON shape" in errors[0]["message"]
     assert not [e for e in events if e["type"] == "result"]
+
+
+def test_chat_truncation_recovered_by_retry(client, monkeypatch):
+    """The stream ends with finish_reason 'length' (reply cut off mid-JSON).
+    The corrective retry must use the truncation instruction and can still
+    produce a usable result."""
+    async def stream(messages):
+        yield '{"explanation": "cut off right here', None
+        yield "", "length"
+    calls = {"n": 0}
+    async def complete(messages):
+        calls["n"] += 1
+        assert any("cut off before it finished" in m["content"] for m in messages)
+        return VALID_REPLY
+    monkeypatch.setattr(ai_module, "_call_ai_stream", stream)
+    monkeypatch.setattr(ai_module, "_call_ai_complete", complete)
+
+    resp = client.post("/ai/forms/form_1/chat", json=_chat_payload())
+    assert resp.status_code == 200
+    results = [e for e in _parse_sse(resp.text) if e["type"] == "result"]
+    assert len(results) == 1
+    assert "field email : email" in results[0]["revised_source"]
+    assert calls["n"] == 1
+
+
+def test_chat_truncation_failure_yields_cutoff_message(client, monkeypatch):
+    """A reply cut off at the token limit (and a failed retry) must produce an
+    actionable truncation message, not the generic JSON-shape one."""
+    async def stream(messages):
+        yield '{"explanation": "cut off', None
+        yield "", "length"
+    async def complete(messages):
+        return "still not json"
+    monkeypatch.setattr(ai_module, "_call_ai_stream", stream)
+    monkeypatch.setattr(ai_module, "_call_ai_complete", complete)
+
+    resp = client.post("/ai/forms/form_1/chat", json=_chat_payload())
+    assert resp.status_code == 200
+    errors = [e for e in _parse_sse(resp.text) if e["type"] == "error"]
+    assert len(errors) == 1
+    assert "cut off" in errors[0]["message"]
+    assert "JSON shape" not in errors[0]["message"]
+    assert not [e for e in _parse_sse(resp.text) if e["type"] == "result"]
 
 
 def test_chat_conversational_reply_streams_and_returns_null_revised_source(client, monkeypatch):

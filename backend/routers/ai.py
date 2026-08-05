@@ -12,10 +12,13 @@ LLM call. This router:
     model choosing the shape per turn (see _parse_strict)
   - streams the explanation to the client token-by-token (SSE) while the
     full reply is still being generated
-  - validates the complete reply, and on any deviation (markdown fences,
-    extra commentary, malformed JSON) makes ONE corrective retry before giving
-    up with an error event; repair turns (repair_context) still require a full
-    revised source so a broken form is never silently accepted
+  - validates the complete reply (tolerating fences, surrounding prose, and
+    repairing the classic model mistakes — literal newlines, unescaped quotes,
+    trailing commas), and on any remaining deviation makes ONE corrective retry
+    before giving up with an error event; a reply truncated at the token limit
+    (finish_reason "length") is detected and retried with a truncation-specific
+    instruction; repair turns (repair_context) still require a full revised
+    source so a broken form is never silently accepted
   - persists the conversation per form server-side (last HISTORY_CAP messages),
     since the frontend's localStorage history is being replaced by this
 
@@ -80,6 +83,12 @@ DEFAULT_AI_MODEL = "gemini-3.6-flash"
 DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 
+# Default output-token budget. This was 4096 and is now 8192 because an edit
+# turn embeds the ENTIRE revised .forml source in one JSON string — a form with
+# a few fields and validation rules can easily approach 4096 tokens, and a reply
+# that hits the cap mid-JSON is unparseable (see TRUNCATION_INSTRUCTION).
+# 8192 is the safe ceiling for both Gemini flash and Groq's llama-3.3-70b.
+
 # 429 rate-limit handling. Both free tiers throttle per minute, and a burst of
 # chat turns will hit it; retry up to this many times, honouring the provider's
 # Retry-After / reset headers (see _retry_after).
@@ -109,7 +118,7 @@ def _active_config() -> dict | None:
             "model": os.environ.get("AI_MODEL", "").strip() or DEFAULT_AI_MODEL,
             "api_key": ai_key,
             "temperature": float(os.environ.get("AI_TEMPERATURE", "0.3")),
-            "max_tokens": int(os.environ.get("AI_MAX_TOKENS", "4096")),
+            "max_tokens": int(os.environ.get("AI_MAX_TOKENS", "8192")),
         }
     # Google AI Studio's preferred env var name; maps to the same Gemini
     # defaults as AI_API_KEY so either spelling works.
@@ -120,7 +129,7 @@ def _active_config() -> dict | None:
             "model": os.environ.get("AI_MODEL", "").strip() or DEFAULT_AI_MODEL,
             "api_key": gemini_key,
             "temperature": float(os.environ.get("AI_TEMPERATURE", "0.3")),
-            "max_tokens": int(os.environ.get("AI_MAX_TOKENS", "4096")),
+            "max_tokens": int(os.environ.get("AI_MAX_TOKENS", "8192")),
         }
     groq_key = os.environ.get("GROQ_API_KEY", "").strip()
     if groq_key:
@@ -129,7 +138,7 @@ def _active_config() -> dict | None:
             "model": os.environ.get("GROQ_MODEL", "").strip() or DEFAULT_GROQ_MODEL,
             "api_key": groq_key,
             "temperature": float(os.environ.get("GROQ_TEMPERATURE", "0.3")),
-            "max_tokens": int(os.environ.get("GROQ_MAX_TOKENS", "4096")),
+            "max_tokens": int(os.environ.get("GROQ_MAX_TOKENS", "8192")),
         }
     return None
 
@@ -337,6 +346,211 @@ class StreamingJsonScanner:
         return self._states[key].value
 
 
+def _repair_candidates(text: str, max_candidates: int = 64) -> list[str]:
+    """Generate candidate repaired-JSON strings for `text`, most-likely first.
+
+    Real models — Gemini especially — emit replies that `json.loads` rejects for
+    a handful of reproducible reasons:
+
+      - literal newlines / tabs / control characters inside string values
+        instead of the `\\n` / `\\t` / `\\uXXXX` escapes JSON requires
+      - unescaped double quotes inside string values (a Forml label like
+        `label "GATE Score"` ends up inside `revisedSource`, and the model
+        forgets to escape the quotes around the label)
+      - trailing commas before `}` or `]`
+      - a string left open because the reply was cut off a hair too early
+
+    The first three are fixed by a deterministic left-to-right walk that tracks
+    one fact: am I inside a string value? The genuinely ambiguous decision is
+    whether a `"` inside a string is the REAL closing quote or an unescaped
+    inner quote. A single-pass heuristic can't tell (an inner quote in `"GATE
+    Score", as requested` looks exactly like a closing quote), so we BRANCH on
+    both interpretations and let a full json.loads pick the winner: the correct
+    close is the one after which the rest of the document still parses, so
+    wrong branches die fast. Branches are capped so a pathological reply can't
+    explode.
+
+    Within a string: backslash escapes are copied verbatim (the model may have
+    escaped correctly in places); an unambiguous inner quote (next char is
+    anything but a JSON continuation) becomes `\\"`; a literal newline/tab/CR/
+    control char becomes its escape sequence. Outside a string: a `,` followed
+    by `}`/`]` is a trailing comma and is dropped. A string still open at end
+    of input is closed with a quote.
+    """
+    results: list[str] = []
+
+    def walk(i: int, in_string: bool, out: list[str]) -> None:
+        if len(results) >= max_candidates:
+            return
+        n = len(text)
+        while i < n:
+            if len(results) >= max_candidates:
+                return
+            ch = text[i]
+            if in_string:
+                if ch == "\\":
+                    out.append(ch)
+                    if i + 1 < n:
+                        out.append(text[i + 1])
+                        i += 2
+                    else:
+                        i += 1
+                    continue
+                if ch == '"':
+                    j = i + 1
+                    while j < n and text[j] in " \t\r\n":
+                        j += 1
+                    nxt = text[j] if j < n else ""
+                    if nxt in (",", "}", "]", ":", ""):
+                        # Ambiguous. Branch both ways, close-interpretation
+                        # first (it fails fast when wrong because the next
+                        # tokens won't form valid JSON). The escape branch
+                        # keeps the string open past this quote.
+                        branch_close = out.copy()
+                        branch_close.append(ch)
+                        walk(i + 1, False, branch_close)
+                        branch_escape = out.copy()
+                        branch_escape.append('\\"')
+                        walk(i + 1, True, branch_escape)
+                        return
+                    out.append('\\"')  # unambiguously an inner quote
+                    i += 1
+                    continue
+                if ch == "\n":
+                    out.append("\\n")
+                    i += 1
+                    continue
+                if ch == "\r":
+                    if i + 1 < n and text[i + 1] == "\n":
+                        out.append("\\n")
+                        i += 2
+                    else:
+                        out.append("\\r")
+                        i += 1
+                    continue
+                if ch == "\t":
+                    out.append("\\t")
+                    i += 1
+                    continue
+                if ord(ch) < 0x20:  # any other unescaped control character
+                    out.append(f"\\u{ord(ch):04x}")
+                    i += 1
+                    continue
+                out.append(ch)
+                i += 1
+                continue
+            # Outside a string.
+            if ch == '"':
+                out.append(ch)
+                i += 1
+                in_string = True
+                continue
+            if ch == ",":
+                j = i + 1
+                while j < n and text[j] in " \t\r\n":
+                    j += 1
+                if j < n and text[j] in "}]":
+                    i += 1  # trailing comma — drop it
+                    continue
+            out.append(ch)
+            i += 1
+        if in_string:
+            out.append('"')  # unterminated string at end of input — close it
+        results.append("".join(out))
+
+    walk(0, False, [])
+    return results
+
+
+def _extract_fenced_blocks(text: str) -> list[str]:
+    """Return the contents of every markdown fenced code block (```...```) in
+    the text. Models wrap the JSON in a fence despite being told not to; taking
+    ALL fences (not just the first) survives the case where the explanation
+    string itself also contains an example fence that would otherwise be
+    misidentified as the reply. Bad candidates are simply skipped later."""
+    blocks: list[str] = []
+    for match in re.finditer(r"```[a-zA-Z0-9_+-]*\s*\n?(.*?)\n?```", text, re.DOTALL):
+        content = match.group(1).strip()
+        if content:
+            blocks.append(content)
+    return blocks
+
+
+def _balanced_spans(text: str, limit: int = 16) -> list[str]:
+    """Return the text of each complete top-level `{...}` object in `text`.
+
+    A single left-to-right scan tracks whether we are inside a string (honoring
+    backslash escapes) so braces that live inside string values — a Forml source
+    inside `revisedSource`, a code example inside `explanation` — never confuse
+    the matcher. Prose before/after the JSON is simply skipped, which is exactly
+    the "Here is the JSON:" + trailing commentary pattern. Capped at `limit`
+    candidates so a pathological reply can't turn the later parse attempts into
+    O(n^2)."""
+    spans: list[str] = []
+    stack: list[int] = []
+    in_string = False
+    i, n = 0, len(text)
+    while i < n and len(spans) < limit:
+        ch = text[i]
+        if in_string:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            stack.append(i)
+        elif ch == "}":
+            if stack:
+                start = stack.pop()
+                if not stack:  # a complete top-level object — capture it
+                    spans.append(text[start:i + 1])
+        i += 1
+    return spans
+
+
+def _loads_lenient(text: str) -> list:
+    """json.loads strict first, then every repaired candidate.
+
+    Returns the list of successfully parsed objects (usually 0 or 1; the repair
+    branching in _repair_candidates can yield several). Strict success short-
+    circuits: valid JSON needs no repair, and the shape check below decides
+    whether it's acceptable."""
+    try:
+        return [json.loads(text)]
+    except (json.JSONDecodeError, ValueError):
+        pass
+    results: list = []
+    for candidate in _repair_candidates(text):
+        try:
+            results.append(json.loads(candidate))
+        except (json.JSONDecodeError, ValueError):
+            continue
+    # Dedupe identical objects — several repair branches converge on the same
+    # shape, and callers only need each interpretation once.
+    deduped: list = []
+    seen: set[str] = set()
+    for obj in results:
+        key = json.dumps(obj, sort_keys=True)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(obj)
+    return deduped
+
+
+def _summarize_raw(raw: str, limit: int = 8000) -> str:
+    """Raw reply for the logs: full text when short, a cut-down version with an
+    explicit truncation note when long (so one bad reply can't flood Render's
+    log stream)."""
+    if len(raw) <= limit:
+        return raw
+    return f"{raw[:limit]}... [log truncated {len(raw) - limit} more chars]"
+
+
 def _parse_strict(raw: str):
     """Parse the model's reply into the accepted response shapes.
 
@@ -344,51 +558,45 @@ def _parse_strict(raw: str):
     (str), or None. Two shapes are valid:
       - {"explanation": "..."}                  — conversational turn
       - {"explanation": "...", "revisedSource": "..."} — edit turn
-    Tolerates only (a) pure JSON, (b) JSON wrapped in a single markdown fence,
-    and (c) JSON embedded in surrounding prose — anything else is a shape
-    violation and triggers the corrective retry.
+
+    Tolerates, in order of preference:
+      1. pure JSON
+      2. JSON wrapped in markdown fences (any number, so an example fence
+         inside the explanation can't be mistaken for the reply)
+      3. JSON embedded in surrounding prose (balanced-brace scan that ignores
+         braces inside strings)
+      4. on top of all of the above, a lenient repair of the classic model
+         mistakes — literal newlines, unescaped quotes and trailing commas (see
+         _repair_candidates). Anything else is a shape violation and triggers
+         the corrective retry.
     """
-    candidates = []
     text = (raw or "").strip()
+    candidates: list[str] = []
     if text:
         candidates.append(text)
+    candidates.extend(_extract_fenced_blocks(text))
+    candidates.extend(_balanced_spans(text))
 
-    # A single markdown fenced block around the JSON (```` ```json ... ``` ````).
-    if text.startswith("```"):
-        body = text
-        for line in text.splitlines():
-            if line.strip().startswith("```"):
-                body = body[body.find(line) + len(line):].lstrip("\n")
-                break
-        if body.rstrip().endswith("```"):
-            body = body.rstrip()[:-3].rstrip()
-        if body.strip():
-            candidates.append(body.strip())
-
-    # Largest {...} span in the text, as a last resort for stray prose around
-    # the JSON.
-    start = text.find("{")
-    end = text.rfind("}")
-    if 0 <= start < end:
-        span = text[start:end + 1]
-        if span not in candidates:
-            candidates.append(span)
-
+    seen: set[str] = set()
     for candidate in candidates:
-        try:
-            obj = json.loads(candidate)
-        except (json.JSONDecodeError, ValueError):
+        if candidate in seen:
             continue
-        if not isinstance(obj, dict):
-            continue
-        # "explanation" is mandatory in both shapes.
-        if not isinstance(obj.get("explanation"), str):
-            continue
-        # "revisedSource" is optional (conversational) but, when present, must
-        # be a string (an edit). Numbers/objects/etc. are shape violations.
-        rs = obj.get("revisedSource")
-        if rs is None or isinstance(rs, str):
-            return obj
+        seen.add(candidate)
+        # Every repair interpretation is a candidate: a wrong branch may parse
+        # as valid JSON, so the shape check must run on each of them, not just
+        # the first parse.
+        for obj in _loads_lenient(candidate):
+            if not isinstance(obj, dict):
+                continue
+            # "explanation" is mandatory in both shapes.
+            if not isinstance(obj.get("explanation"), str):
+                continue
+            # "revisedSource" is optional (conversational) but, when present,
+            # must be a string (an edit). Numbers/objects/etc. are shape
+            # violations.
+            rs = obj.get("revisedSource")
+            if rs is None or isinstance(rs, str):
+                return obj
     return None
 
 
@@ -401,6 +609,17 @@ FIXUP_INSTRUCTION = (
     '{"explanation": "...", "revisedSource": "..."} when editing the form. '
     "Make sure every quote, backslash, and newline inside the strings is "
     "properly JSON-escaped."
+)
+
+TRUNCATION_INSTRUCTION = (
+    "Your previous reply was cut off before it finished — the output hit the "
+    "maximum token limit while the JSON object was still incomplete, so it "
+    "could not be parsed. Reply again with EXACTLY a single JSON object — no "
+    "markdown fences, no code blocks, no text outside the JSON — using one of "
+    "these two shapes, matching the turn: "
+    '{"explanation": "..."} or {"explanation": "...", "revisedSource": "..."}. '
+    "The revisedSource may be long, so keep the explanation to ONE short "
+    "sentence so the whole reply fits in the token budget."
 )
 
 
@@ -695,9 +914,16 @@ async def _chat_stream(req: AiChatRequest, user_context: str = ""):
     scanner = StreamingJsonScanner(keys=["explanation"])
     raw = ""
     streamed_explanation = ""
+    truncated = False
     try:
-        async for chunk, _reason in _call_ai_stream(messages):
+        async for chunk, reason in _call_ai_stream(messages):
             raw += chunk
+            # finish_reason "length" means the provider stopped us mid-reply at
+            # the token budget — the JSON is guaranteed incomplete. Remember it
+            # so we can (a) tell the model the real cause on retry and (b) give
+            # the user an actionable message instead of a generic shape error.
+            if reason == "length":
+                truncated = True
             deltas = scanner.feed(chunk)
             for text in deltas.values():
                 if text:
@@ -711,10 +937,14 @@ async def _chat_stream(req: AiChatRequest, user_context: str = ""):
     # Validate the complete reply against the accepted shapes.
     parsed = _parse_strict(raw)
     if parsed is None:
-        # One corrective retry, asking for exactly the right shape.
+        # One corrective retry. A truncated reply is a DIFFERENT failure from a
+        # shape violation — the model needs to know it ran out of tokens (and
+        # that the explanation should be short) rather than be told its JSON
+        # was malformed.
+        fixup = TRUNCATION_INSTRUCTION if truncated else FIXUP_INSTRUCTION
         try:
             retry_content = await _call_ai_complete(messages + [
-                {"role": "user", "content": FIXUP_INSTRUCTION},
+                {"role": "user", "content": fixup},
             ])
             parsed = _parse_strict(retry_content)
         except RuntimeError as exc:
@@ -722,11 +952,19 @@ async def _chat_stream(req: AiChatRequest, user_context: str = ""):
             yield _sse({"type": "error", "message": f"Could not reach the AI model: {exc}"})
             return
     if parsed is None:
-        logger.warning("AI reply failed shape validation; raw=%r", raw[:300])
-        yield _sse({
-            "type": "error",
-            "message": "The AI returned a reply that isn't the required JSON shape. Try again.",
-        })
+        logger.warning(
+            "AI reply failed (%s); raw=%r",
+            "truncated at token limit" if truncated else "shape validation",
+            _summarize_raw(raw),
+        )
+        if truncated:
+            message = (
+                "The AI reply was cut off before it finished — the form was too "
+                "large for a single response. Try again, or ask for a smaller change."
+            )
+        else:
+            message = "The AI returned a reply that isn't the required JSON shape. Try again."
+        yield _sse({"type": "error", "message": message})
         return
 
     explanation = parsed.get("explanation", "")
@@ -738,7 +976,7 @@ async def _chat_stream(req: AiChatRequest, user_context: str = ""):
     # errors, which is a shape failure (never silently accept a still-broken
     # source as "no change").
     if req.repair_context is not None and not isinstance(revised_source, str):
-        logger.warning("AI repair reply missing revisedSource; raw=%r", raw[:300])
+        logger.warning("AI repair reply missing revisedSource; raw=%r", _summarize_raw(raw))
         yield _sse({
             "type": "error",
             "message": "The AI returned a reply that isn't the required JSON shape. Try again.",
