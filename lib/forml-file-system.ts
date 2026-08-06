@@ -1069,6 +1069,46 @@ emits a typed JSON AST and a diagnostics array.
     method: POST
   }
 }`,
+
+  // 16. Simple data-entry: books, authors, and publication dates
+  "book-catalog.forml": `form "Book Catalog" {
+
+  field title : text
+    ui {
+      label: "Book Title"
+      placeholder: "The Great Gatsby"
+      helpText: "The full title of the book."
+    }
+    validate {
+      required
+      minLength: 1
+    }
+
+  field author : text
+    ui {
+      label: "Author"
+      placeholder: "F. Scott Fitzgerald"
+      helpText: "The author(s) of the book."
+    }
+    validate {
+      required
+      minLength: 2
+    }
+
+  field published : date
+    ui {
+      label: "Date Published"
+      helpText: "The date the book was published."
+    }
+    validate {
+      required
+    }
+
+  action submit {
+    endpoint: "https://api.formix.dev/books"
+    method: POST
+  }
+}`,
 };
 
 // ── Virtual file system factory ──────────────────────────────────────────────

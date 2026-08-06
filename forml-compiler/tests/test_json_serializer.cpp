@@ -73,6 +73,7 @@ int main() {
         "../tests/fixtures/09_var_with_identifier.forml",
         "../tests/fixtures/10_validation_type_mismatch.forml",
         "../tests/fixtures/11_malformed_expression.forml",
+        "../tests/fixtures/12_book_catalog.forml",
     };
 
     for (const auto& path : fixtures) {

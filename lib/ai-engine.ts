@@ -54,6 +54,7 @@ const TEMPLATE_MATCHERS: TemplateMatcher[] = [
   { test: /\bmedical\b|\bhealth record\b|\bpatient\b/i, file: "medical-report.forml", label: "Medical Report Submission", blurb: "a medical report submission form" },
   { test: /\bproject submission\b|\bsubmission portal\b|\bassignment submission\b/i, file: "project-submission.forml", label: "Project Submission Portal", blurb: "a project submission portal" },
   { test: /\blibrary\b|\bborrow/i, file: "library-checkout.forml", label: "Library Checkout Form", blurb: "a library book checkout form" },
+  { test: /\bbooks?\b.*\bauthor\b|\bcatalog\b/i, file: "book-catalog.forml", label: "Book Catalog Form", blurb: "a book catalog form for recording books, their authors, and publication dates" },
   { test: /\bhotel\b|\broom booking\b/i, file: "hotel-booking.forml", label: "Hotel Booking Form", blurb: "a hotel room booking form" },
   { test: /\binsurance\b|\bpremium\b|\bquote\b/i, file: "insurance-quote.forml", label: "Insurance Quote Form", blurb: "an insurance quote calculator" },
   { test: /\bnewsletter\b|\bmailing list\b/i, file: "newsletter-signup.forml", label: "Newsletter Signup Form", blurb: "a newsletter signup form" },
