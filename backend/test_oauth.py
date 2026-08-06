@@ -219,13 +219,28 @@ def test_error_reason_mismatching_state_mentions_session():
     assert "session" in reason
 
 
-def test_error_reason_unknown_failure_is_generic():
+def test_error_reason_unknown_failure_names_exception_type():
     reason = _oauth_error_reason(
         RuntimeError("some bizarre upstream thing"),
         "github",
         "https://api.example.com/auth/oauth/github/callback",
     )
-    assert reason == "Could not sign in. Please try again."
+    # Unknown failures name the exception type so the UI is self-diagnosing.
+    assert reason == "Could not sign in (RuntimeError). Please try again."
+
+
+def test_error_reason_unconfigured_provider_is_distinct():
+    """The 503 from _configured_or_503 must not masquerade as a generic sign-in
+    failure — an unconfigured provider is an env fix the author can make."""
+    from fastapi import HTTPException, status
+
+    reason = _oauth_error_reason(
+        HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="not configured"),
+        "github",
+        "https://api.example.com/auth/oauth/github/callback",
+    )
+    assert "not configured on the server" in reason
+    assert "GITHUB_CLIENT_ID" in reason and "GITHUB_CLIENT_SECRET" in reason
 
 
 # ── GET /auth/me ─────────────────────────────────────────────────────────────
@@ -260,9 +275,15 @@ def test_authorize_unconfigured_provider_is_503(client):
 
 
 def test_callback_unconfigured_provider_redirects_with_error(client):
-    resp = client.get("/auth/oauth/google/callback", follow_redirects=False)
+    resp = client.get("/auth/oauth/github/callback", follow_redirects=False)
     assert resp.status_code in (302, 307)
-    assert resp.headers["location"].startswith("http://localhost:3000/auth/oauth/callback?error=")
+    from urllib.parse import unquote_plus
+    location = unquote_plus(resp.headers["location"])
+    assert location.startswith("http://localhost:3000/auth/oauth/callback?error=")
+    # The unconfigured-provider message must be distinct and actionable, not
+    # the generic "Could not sign in."
+    assert "not configured on the server" in location
+    assert "GITHUB_CLIENT_ID" in location
 
 
 def test_callback_never_500s_when_token_exchange_raises(client, monkeypatch):

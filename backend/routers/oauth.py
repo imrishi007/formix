@@ -319,10 +319,20 @@ def _oauth_error_reason(exc: Exception, provider: str, redirect_uri: str) -> str
     failure when credentials are refreshed (Google/GitHub reject the exchange
     unless the app's console lists the exact callback URL). Surfacing the URI
     the server used lets the author copy-paste it into the console and unblock
-    themselves without a code deploy. Unknown failures get a generic message.
+    themselves without a code deploy. Unknown failures fall back to naming the
+    exception type so the cause is visible in the UI, not just the logs.
     """
     name = type(exc).__name__.lower()
     text = f"{exc}".lower()
+
+    if isinstance(exc, HTTPException):
+        # The 503 from _configured_or_503 ("'github' sign-in is not configured
+        # on the server") must not masquerade as a generic failure — an
+        # unconfigured provider is an env problem the author can fix directly.
+        return (
+            f"'{provider}' sign-in is not configured on the server. "
+            f"Set {provider.upper()}_CLIENT_ID and {provider.upper()}_CLIENT_SECRET."
+        )
 
     if name == "mismatchingstateerror" or "mismatch" in text and "state" in text:
         return "Your sign-in session expired. Please try again."
@@ -339,7 +349,10 @@ def _oauth_error_reason(exc: Exception, provider: str, redirect_uri: str) -> str
         return "That sign-in attempt has expired. Please try again."
     if "server_error" in text:
         return "The sign-in provider is having a temporary problem. Please try again in a moment."
-    return "Could not sign in. Please try again."
+    # Unknown failure — surface the exception TYPE (safe, it is just a class
+    # name) so the next attempt tells us what actually went wrong instead of a
+    # black-box generic message. The full exception body stays in the logs.
+    return f"Could not sign in ({type(exc).__name__}). Please try again."
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -385,7 +398,13 @@ async def oauth_callback(provider: str, request: Request):
         else:
             profile = await _fetch_github_profile(token["access_token"])
     except Exception as exc:  # noqa: BLE001
-        log.error("OAuth %s exchange failed: %s", provider, exc, exc_info=True)
+        log.error(
+            "OAuth %s exchange failed (redirect_uri=%s): %s",
+            provider,
+            redirect_uri,
+            exc,
+            exc_info=True,
+        )
         return _redirect(error=_oauth_error_reason(exc, provider, redirect_uri))
 
     # Stage 2: find-or-create the account and mint the JWT.
