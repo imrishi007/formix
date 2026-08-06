@@ -97,6 +97,17 @@ HISTORY_CAP = 20
 DEFAULT_AI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 DEFAULT_AI_MODEL = "gemini-3.6-flash"
 DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+# llama-3.3-70b-versatile is the strongest STABLE model on Groq's free tier.
+# The other options measured live on this org are all worse: llama-3.1-8b-
+# instant caps at 6K TPM, gpt-oss-20b/120b at 8K TPM, and groq/compound's
+# nominal 70K TPM is misleading — it is a ROUTER that fans out to sub-models
+# (llama-4-scout, gpt-oss-120b) each with their own tiny pools, and it hard-
+# rejects non-streaming requests over ~3.3K tokens with a 413, which breaks
+# the corrective-fixup path. 70b's 12K TPM is the largest pool that works on
+# BOTH the streaming and non-streaming paths, and it demonstrably generated a
+# correct form when the pool was idle. Its 413 "tokens per minute" rejections
+# are transient — the per-minute bucket refills — so the transports back off
+# and retry them (see _is_tpm_limit) rather than erroring out.
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 
 # Default output-token budget. This was 4096 and is now 8192 because an edit
@@ -115,6 +126,33 @@ MAX_AI_RETRIES = 3
 # forml-compiler/EBNF_grammar.md
 _GRAMMAR_PATH = Path(__file__).resolve().parents[2] / "forml-compiler" / "EBNF_grammar.md"
 
+# The backend/.env file, resolved relative to this file: backend/routers/ai.py
+# -> parents[1] == backend/.
+_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+
+
+def _refresh_env() -> None:
+    """Re-read backend/.env so a key swap takes effect WITHOUT a restart.
+
+    backend/main.py calls load_dotenv exactly once at import time, so a running
+    `uvicorn --reload` server keeps serving the OLD key (and its exhausted /
+    saturated rate-limit pools) until it is restarted — the "I added a new GROQ
+    key but still get 413" trap. The provider chain reads the environment on
+    EVERY request, so re-loading the file here makes an edited GROQ_API_KEY (or
+    a newly added provider block) live the moment the file changes.
+
+    `override=True` lets the .env value win over a stale value the process was
+    started with — in dev that is the whole point of editing .env. In
+    production there is no .env file (Render sets env vars directly), so this
+    call is a no-op there. Reading a ~1KB file per request is negligible.
+    """
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(_ENV_FILE, override=True)
+    except ImportError:
+        pass  # python-dotenv absent (pre pip install -r requirements.txt)
+
 
 def _all_configs() -> list[dict]:
     """Every configured provider, highest priority first.
@@ -130,6 +168,7 @@ def _all_configs() -> list[dict]:
     {"base_url", "model", "api_key", "temperature", "max_tokens"}. Empty when
     no key is configured at all (callers surface a friendly error).
     """
+    _refresh_env()
     configs: list[dict] = []
     seen: set[tuple[str, str]] = set()
 
@@ -722,8 +761,11 @@ def _missing_key_message() -> str:
 # request, 404 bad route) mean OUR request is wrong and would fail identically
 # on every provider, so they raise without burning the fallback. 401/403 are
 # included because a bad/revoked key on one provider is a common real-world
-# state that a valid key on another provider will happily serve through.
-_PROVIDER_TRANSIENT_STATUSES = {401, 403, 429, 500, 502, 503, 504}
+# state that a valid key on another provider will happily serve through. 413
+# (request too large) is included because it is provider-SPECIFIC: a request
+# that Groq's 12K-TPM free tier rejects as oversized (see DEFAULT_GROQ_MODEL)
+# fits comfortably in another provider's far larger context window.
+_PROVIDER_TRANSIENT_STATUSES = {401, 403, 413, 429, 500, 502, 503, 504}
 
 
 def _should_fail_over(status_code: int) -> bool:
@@ -748,6 +790,22 @@ def _is_quota_exhausted(resp) -> bool:
         or "quota exceeded" in text
         or "quota was exceeded" in text
     )
+
+
+def _is_tpm_limit(resp) -> bool:
+    """True when a 413/429 body is a TOKENS-PER-MINUTE ceiling rather than a
+    request that is structurally too large.
+
+    Groq's free-tier TPM budgets are tiny and shared org-wide (measured live:
+    llama-3.3-70b-versatile caps at 12K TPM), and its rejection body reads
+    "Request too large for model `X` ... on tokens per minute (TPM): Limit N".
+    That is a TRANSIENT condition — the per-minute bucket refills on a timer —
+    so it deserves a backoff retry, exactly like a plain 429 rate limit. A bare
+    "Request Entity Too Large" (no TPM mention) is permanent for that request
+    size and is only worth a fail-over, not a retry.
+    """
+    text = (resp.text or "").lower()
+    return "tokens per minute" in text or "request too large for model" in text
 
 
 async def _call_ai_complete(messages: list[dict]) -> str:
@@ -776,21 +834,30 @@ async def _call_ai_complete(messages: list[dict]) -> str:
                     return data["choices"][0]["message"]["content"]
                 err_text = f"AI API error {resp.status_code}: {resp.text[:200]}"
                 last_error = err_text
-                if resp.status_code == 429:
-                    if _is_quota_exhausted(resp):
-                        # A spent daily cap will not clear inside the retry
-                        # window — skip the sleeps and move providers now.
-                        logger.warning(
-                            "AI quota exhausted on %s; failing over: %s",
-                            cfg["base_url"],
-                            err_text,
-                        )
-                        break
-                    if attempt < MAX_AI_RETRIES:
-                        wait = _retry_after(resp)
-                        logger.info("AI rate limit (429); retrying in %.1fs", wait)
-                        await asyncio.sleep(wait)
-                        continue
+                if resp.status_code == 429 and _is_quota_exhausted(resp):
+                    # A spent daily cap will not clear inside the retry
+                    # window — skip the sleeps and move providers now.
+                    logger.warning(
+                        "AI quota exhausted on %s; failing over: %s",
+                        cfg["base_url"],
+                        err_text,
+                    )
+                    break
+                # Retryable: a per-minute rate limit (429) OR a transient TPM
+                # saturation (413 whose body says "tokens per minute" — the
+                # shared free-tier bucket refills on a timer). Wait out the
+                # provider's reset and try again; this is what recovers the
+                # exact "Request too large ... on tokens per minute" 413 that
+                # surfaced when a burst of turns saturated Groq's pool.
+                retryable = (
+                    resp.status_code == 429
+                    or (resp.status_code == 413 and _is_tpm_limit(resp))
+                )
+                if retryable and attempt < MAX_AI_RETRIES:
+                    wait = _retry_after(resp)
+                    logger.info("AI rate limit (%s); retrying in %.1fs", resp.status_code, wait)
+                    await asyncio.sleep(wait)
+                    continue
                 if _should_fail_over(resp.status_code) and cfg is not configs[-1]:
                     logger.warning(
                         "AI provider %s unavailable; failing over: %s",
@@ -851,13 +918,28 @@ async def _call_ai_stream(messages: list[dict]):
                     err_body = (await resp.aread()).decode("utf-8", "replace")
                 err_text = f"AI API error {resp.status_code}: {err_body[:200]}"
                 last_error = err_text
-                if (
+                if resp.status_code == 429 and _is_quota_exhausted(resp):
+                    # A spent daily cap will not clear inside the retry window —
+                    # skip the sleeps and move providers now.
+                    logger.warning(
+                        "AI quota exhausted on %s; failing over: %s",
+                        cfg["base_url"],
+                        err_text,
+                    )
+                    break
+                # Retryable: a per-minute rate limit (429) OR a transient TPM
+                # saturation (413 whose body says "tokens per minute"; the
+                # shared free-tier bucket refills on a timer). Wait out the
+                # provider's reset and try again — this recovers the exact
+                # "Request too large ... on tokens per minute" 413 a burst of
+                # turns hit on Groq's pool.
+                retryable = (
                     resp.status_code == 429
-                    and not _is_quota_exhausted(resp)
-                    and attempt < MAX_AI_RETRIES
-                ):
+                    or (resp.status_code == 413 and _is_tpm_limit(resp))
+                )
+                if retryable and attempt < MAX_AI_RETRIES:
                     wait = _retry_after(resp)
-                    logger.info("AI rate limit (429); retrying in %.1fs", wait)
+                    logger.info("AI rate limit (%s); retrying in %.1fs", resp.status_code, wait)
                     await asyncio.sleep(wait)
                     continue
                 if _should_fail_over(resp.status_code) and cfg is not configs[-1]:
@@ -876,6 +958,24 @@ async def _call_ai_stream(messages: list[dict]):
 # Cap on how many of the user's forms are listed verbatim in the author
 # context block; beyond this they're summarized so the prompt stays small.
 AUTHOR_CONTEXT_FORM_CAP = 50
+
+# Caps on how much of the conversation history is embedded VERBATIM in the
+# prompt. History exists so follow-ups stay grounded in what was said, but the
+# raw text (a form source can be many KB and every assistant turn re-attaches
+# it) inflates the request until free-tier TPM ceilings reject it outright —
+# Groq's llama-3.3-70b-versatile limits at 12K tokens/minute, and a single
+# turn plus its fixup retry can blow that in one request. Long text is clipped
+# to a bounded prefix with an explicit note so the model knows it's partial.
+HISTORY_MESSAGE_CLIP = 2000
+HISTORY_FORM_CODE_CLIP = 2000
+
+
+def _clip(text: str, limit: int) -> str:
+    """Truncate `text` to `limit` chars, marking the cut so the model knows the
+    text is partial rather than assuming it's the whole thing."""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"\n[... {len(text) - limit} chars omitted]"
 
 
 def _user_context(db: Session, user: User) -> str:
@@ -993,9 +1093,13 @@ def _build_messages(req: AiChatRequest, system_prompt: str, user_context: str = 
         )
 
     for m in req.recent_messages:
-        content = m.content or ""
+        content = _clip(m.content or "", HISTORY_MESSAGE_CLIP)
         if m.role == "assistant" and m.forml_code:
-            content += "\n\nThe complete FormL source I produced then was:\n\n```forml\n" + m.forml_code + "\n```"
+            content += (
+                "\n\nThe complete FormL source I produced then was:\n\n```forml\n"
+                + _clip(m.forml_code, HISTORY_FORM_CODE_CLIP)
+                + "\n```"
+            )
         messages.append({"role": m.role, "content": content})
 
     if req.repair_context is not None:

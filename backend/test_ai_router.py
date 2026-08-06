@@ -62,12 +62,14 @@ def _override_get_db():
 
 
 @pytest.fixture(autouse=True)
-def _reset_overrides():
-    """Clear dependency overrides and the DB between tests, and default the
-    current user to user A."""
+def _reset_overrides(monkeypatch):
+    """Clear dependency overrides and the DB between tests, default the current
+    user to user A, and point _refresh_env() at a nonexistent .env so the real
+    backend/.env keys can't leak into tests that monkeypatch the environment."""
     app.dependency_overrides.clear()
     Base.metadata.drop_all(_engine)
     Base.metadata.create_all(_engine)
+    monkeypatch.setattr(ai_module, "_ENV_FILE", Path("__no_env_file__"))
 
     db = _TestingSessionLocal()
     user_a = models.User(id="user_a", email="a@test.com", hashed_password="x")
@@ -313,6 +315,65 @@ def test_retry_after_parsing():
     assert ai_module._retry_after(FakeResp({})) == 5.0  # conservative default
 
 
+def test_default_groq_model_is_the_stable_12k_tpm_workhorse(monkeypatch):
+    """llama-3.3-70b-versatile is the default Groq model (measured live: 12K TPM,
+    the largest pool that works on BOTH the streaming and the non-streaming
+    paths — llama-3.1-8b-instant is 6K TPM, and groq/compound's 70K is nominal
+    because it routes to tiny sub-pools and 413s non-streaming requests over
+    ~3.3K tokens). Its TPM rejections are transient and handled by backoff."""
+    assert ai_module.DEFAULT_GROQ_MODEL == "llama-3.3-70b-versatile"
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+    cfg = ai_module._active_config()
+    assert cfg["model"] == "llama-3.3-70b-versatile"
+
+
+def test_request_too_large_is_a_failover_trigger():
+    """A 413 (request too large) is provider-specific: a prompt Groq's tight TPM
+    tier rejects can fit another provider's much larger context, so it must be
+    treated like the other transient statuses rather than a hard client error."""
+    assert ai_module._should_fail_over(413)
+    assert not ai_module._should_fail_over(400)  # malformed request is OUR bug
+    assert not ai_module._should_fail_over(404)
+
+
+def test_clip_truncates_and_marks_the_cut():
+    assert ai_module._clip("short", 50) == "short"
+    out = ai_module._clip("x" * 3000, 2000)
+    assert len(out) < 2100
+    assert "omitted" in out
+
+
+def test_build_messages_clips_oversized_history(monkeypatch):
+    """Long conversation history (an assistant turn re-attaches the full form
+    source, which grows every edit) must be clipped before it is embedded in
+    the prompt, so a long chat can't blow a provider's TPM ceiling."""
+    from backend.schemas import AiChatRequest
+
+    req = AiChatRequest(
+        form_id="form_1",
+        user_message="Make it better",
+        source="",
+        recent_messages=[
+            {"role": "user", "content": "u" * 5000, "forml_code": None},
+            {"role": "assistant", "content": "made an edit", "forml_code": "f" * 9000},
+        ],
+    )
+    messages = ai_module._build_messages(req, "system")
+    # system prompt + context + 2 history + current turn = 5 messages.
+    assert len(messages) == 5
+    user_content = messages[2]["content"]
+    assistant_content = messages[3]["content"]
+    assert len(user_content) <= ai_module.HISTORY_MESSAGE_CLIP + 100
+    assert "omitted" in user_content
+    assert len(assistant_content) <= ai_module.HISTORY_FORM_CODE_CLIP + 400
+    assert "omitted" in assistant_content
+    # The clipped source is still clearly delimited as the forml code block.
+    assert "```forml" in assistant_content
+    assert assistant_content.rstrip().endswith("```")
+
+
 # ── Provider failover (the fix for the persistent Gemini 429) ─────────────────
 
 def test_all_configs_enumerates_the_failover_chain(monkeypatch):
@@ -335,6 +396,25 @@ def test_all_configs_dedupes_identical_base_and_key(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "same-key")
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     assert len(ai_module._all_configs()) == 1
+
+
+def test_refresh_env_picks_up_a_key_swap_without_a_restart(tmp_path, monkeypatch):
+    """backend/main.py loads .env once at import, so a running server keeps the
+    OLD key until restarted — the "I added a new GROQ key but still 413" trap.
+    _refresh_env() re-reads .env on every config read, so an edit takes effect
+    immediately (the new key has fresh rate-limit pools)."""
+    env_file = tmp_path / ".env"
+    monkeypatch.setattr(ai_module, "_ENV_FILE", env_file)
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    env_file.write_text("GROQ_API_KEY=old-key\n", encoding="utf-8")
+    assert ai_module._all_configs()[0]["api_key"] == "old-key"
+
+    # Edit .env while the server is "running" — the next read sees the new key.
+    env_file.write_text("GROQ_API_KEY=new-key\n", encoding="utf-8")
+    assert ai_module._all_configs()[0]["api_key"] == "new-key"
 
 
 def test_is_quota_exhausted_distinguishes_quota_from_rate_limit():
@@ -428,6 +508,131 @@ def test_stream_fails_over_to_groq_when_gemini_quota_exhausted(monkeypatch):
     assert len(urls) == 2
     assert "generativelanguage" in urls[0]
     assert "api.groq.com" in urls[1]
+
+
+def test_stream_fails_over_when_provider_rejects_request_as_too_large(monkeypatch):
+    """A generic 413 "request too large" (no TPM mention — a structural size
+    rejection) on the primary provider must not hard-fail the turn: the request
+    is only too large FOR THAT PROVIDER, so the same turn continues on the
+    fallback."""
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gem-key")
+    monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+
+    too_large = _FakeStreamResponse(
+        413, body='{"error": {"message": "Request Entity Too Large", "code": "request_too_large"}}'
+    )
+    groq_sse = [
+        'data: {"choices":[{"delta":{"content":"Created the form "},"finish_reason":null}]}',
+        'data: {"choices":[{"delta":{"content":"with name and age."},"finish_reason":"stop"}]}',
+        "data: [DONE]",
+    ]
+    ok = _FakeStreamResponse(200, lines=groq_sse)
+    created: dict = {}
+
+    def _client(**kw):
+        created["client"] = _FakeStreamClient([too_large, ok])
+        return created["client"]
+
+    monkeypatch.setattr(ai_module.httpx, "AsyncClient", _client)
+
+    async def _collect():
+        out = []
+        async for chunk, _reason in ai_module._call_ai_stream([]):
+            out.append(chunk)
+        return "".join(out)
+
+    assert asyncio.run(_collect()) == "Created the form with name and age."
+    urls = [url for url, _ in created["client"].posts]
+    assert len(urls) == 2
+    assert "generativelanguage" in urls[0]
+    assert "api.groq.com" in urls[1]
+
+
+def test_is_tpm_limit_distinguishes_tpm_saturation_from_generic_too_large():
+    """A 413 whose body names the tokens-per-minute ceiling is a TRANSIENT
+    condition (the bucket refills) and gets a backoff retry; a bare "Request
+    Entity Too Large" is structural and only worth a fail-over."""
+    tpm = _FakeResponse(413, text=(
+        '{"error": {"message": "Request too large for model `llama-3.3-70b-versatile` '
+        "in organization `org_x` on tokens per minute (TPM): Limit 12000\"}}"
+    ))
+    assert ai_module._is_tpm_limit(tpm)
+    assert not ai_module._is_tpm_limit(_FakeResponse(413, text="Request Entity Too Large"))
+    assert not ai_module._is_tpm_limit(_FakeResponse(429, text="generic rate limit"))
+
+
+def test_stream_retries_tpm_413_with_backoff_then_succeeds(monkeypatch):
+    """The exact reported failure: Gemini's quota is spent, Groq's shared TPM
+    pool is momentarily saturated (413 "on tokens per minute"), and the retry
+    after the provider's reset completes the turn — instead of hard-failing."""
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gem-key")
+    monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+
+    quota = _FakeStreamResponse(429, body=QUOTA_BODY)
+    tpm = _FakeStreamResponse(
+        413,
+        body=('{"error": {"message": "Request too large for model `llama-3.3-70b-versatile` '
+              "in organization `org_x` on tokens per minute (TPM): Limit 12000\"}}"),
+    )
+    tpm.headers = {"Retry-After": "0"}  # no real sleep in tests
+    groq_sse = [
+        'data: {"choices":[{"delta":{"content":"User name "},"finish_reason":null}]}',
+        'data: {"choices":[{"delta":{"content":"and age form ready."},"finish_reason":"stop"}]}',
+        "data: [DONE]",
+    ]
+    ok = _FakeStreamResponse(200, lines=groq_sse)
+    created: dict = {}
+
+    def _client(**kw):
+        created["client"] = _FakeStreamClient([quota, tpm, ok])
+        return created["client"]
+
+    monkeypatch.setattr(ai_module.httpx, "AsyncClient", _client)
+
+    async def _collect():
+        out = []
+        async for chunk, _reason in ai_module._call_ai_stream([]):
+            out.append(chunk)
+        return "".join(out)
+
+    assert asyncio.run(_collect()) == "User name and age form ready."
+    # Gemini (quota) then Groq twice: the TPM 413, then the retry that lands.
+    urls = [url for url, _ in created["client"].posts]
+    assert len(urls) == 3
+    assert "generativelanguage" in urls[0]
+    assert all("api.groq.com" in u for u in urls[1:])
+
+
+def test_complete_retries_tpm_413_then_succeeds(monkeypatch):
+    """The non-streaming transport (used by the corrective fixup retry) must
+    back off and retry a transient TPM 413 the same way the streaming path
+    does — a fixup on a saturated pool should not hard-fail."""
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gem-key")
+    monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+
+    quota = _FakeResponse(429, text=QUOTA_BODY)
+    tpm = _FakeResponse(413, text=(
+        '{"error": {"message": "Request too large for model `llama-3.3-70b-versatile` '
+        "in organization `org_x` on tokens per minute (TPM): Limit 12000\"}}"
+    ))
+    tpm.headers = {"Retry-After": "0"}
+    ok = _FakeResponse(200, json_data={"choices": [{"message": {"content": "fixed"}}]})
+    created: dict = {}
+
+    def _client(**kw):
+        created["client"] = _FakeCompleteClient([quota, tpm, ok])
+        return created["client"]
+
+    monkeypatch.setattr(ai_module.httpx, "AsyncClient", _client)
+    out = asyncio.run(ai_module._call_ai_complete([{"role": "user", "content": "hi"}]))
+    assert out == "fixed"
+    urls = [url for url, _ in created["client"].posts]
+    assert len(urls) == 3
+    assert "generativelanguage" in urls[0]
+    assert all("api.groq.com" in u for u in urls[1:])
 
 
 # ── Streaming chat turn ───────────────────────────────────────────────────────
