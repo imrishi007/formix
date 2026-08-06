@@ -305,6 +305,43 @@ def _oauth_callback_uri(request: Request, provider: str) -> str:
     return str(request.url_for("oauth_callback", provider=provider))
 
 
+def _oauth_error_reason(exc: Exception, provider: str, redirect_uri: str) -> str:
+    """Map a provider callback failure to a safe, actionable message.
+
+    We do NOT echo the raw exception text to the browser: it is provider
+    error payload, potentially verbose or (theoretically) injectable, and the
+    user's own words are never as useful as a fixed hint. Instead we pattern-
+    match on the well-known failure signatures — the things that actually go
+    wrong when someone stands up OAuth — and return a canned string for each.
+    The full exception still reaches the Render logs via the caller's log.
+
+    Special care goes to `redirect_uri_mismatch`, the overwhelmingly common
+    failure when credentials are refreshed (Google/GitHub reject the exchange
+    unless the app's console lists the exact callback URL). Surfacing the URI
+    the server used lets the author copy-paste it into the console and unblock
+    themselves without a code deploy. Unknown failures get a generic message.
+    """
+    name = type(exc).__name__.lower()
+    text = f"{exc}".lower()
+
+    if name == "mismatchingstateerror" or "mismatch" in text and "state" in text:
+        return "Your sign-in session expired. Please try again."
+    if "access_denied" in text or name == "accessdeniederror":
+        return "You cancelled the sign-in."
+    if "redirect_uri" in text and ("mismatch" in text or "does not match" in text):
+        return (
+            f"Sign-in is misconfigured: '{provider}' rejected the callback URL. "
+            f"Add exactly this value to the app's Authorized redirect URIs: {redirect_uri}"
+        )
+    if "invalid_client" in text or name == "invalidclienterror":
+        return "Sign-in is misconfigured: the provider rejected the client credentials."
+    if "invalid_grant" in text or name == "invalidgranterror":
+        return "That sign-in attempt has expired. Please try again."
+    if "server_error" in text:
+        return "The sign-in provider is having a temporary problem. Please try again in a moment."
+    return "Could not sign in. Please try again."
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.get("/{provider}")
@@ -349,7 +386,7 @@ async def oauth_callback(provider: str, request: Request):
             profile = await _fetch_github_profile(token["access_token"])
     except Exception as exc:  # noqa: BLE001
         log.error("OAuth %s exchange failed: %s", provider, exc, exc_info=True)
-        return _redirect(error="Could not sign in — please try again.")
+        return _redirect(error=_oauth_error_reason(exc, provider, redirect_uri))
 
     # Stage 2: find-or-create the account and mint the JWT.
     db = next(get_db())

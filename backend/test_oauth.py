@@ -34,6 +34,7 @@ from backend.auth import create_access_token, get_current_user  # noqa: E402
 from backend.database import Base, get_db  # noqa: E402
 from backend.main import app  # noqa: E402
 from backend.routers.oauth import _find_or_create_oauth_user  # noqa: E402
+from backend.routers.oauth import _oauth_error_reason  # noqa: E402
 
 
 _engine = create_engine(
@@ -172,6 +173,59 @@ def test_falls_back_to_synthetic_email_when_provider_withholds_it():
     user = _find_or_create_oauth_user(db, "github", {"subject": "no-email", "email": None, "name": None})
     assert user.email == "github+no-email@oauth.local"
     db.close()
+
+
+# ── callback error mapping ────────────────────────────────────────────────────
+
+def test_error_reason_redirect_uri_mismatch_surfaces_callback_url():
+    """The single most common OAuth failure (credentials refreshed, console
+    not updated) must tell the author EXACTLY which URL to register."""
+    reason = _oauth_error_reason(
+        RuntimeError("invalid_grant: redirect_uri_mismatch"),
+        "google",
+        "https://api.example.com/auth/oauth/google/callback",
+    )
+    assert "misconfigured" in reason
+    assert "https://api.example.com/auth/oauth/google/callback" in reason
+
+
+def test_error_reason_never_echoes_raw_exception_text():
+    """Provider error payloads are not safe to reflect into the page — always
+    a canned message, never the exception body itself."""
+    reason = _oauth_error_reason(
+        RuntimeError("invalid_grant:<script>alert(1)</script>"),
+        "google",
+        "https://api.example.com/auth/oauth/google/callback",
+    )
+    assert "<script>" not in reason
+    assert "expired" in reason
+
+
+def test_error_reason_cancelled_consent_is_user_friendly():
+    reason = _oauth_error_reason(
+        RuntimeError("access_denied"),
+        "github",
+        "https://api.example.com/auth/oauth/github/callback",
+    )
+    assert "cancelled" in reason
+
+
+def test_error_reason_mismatching_state_mentions_session():
+    reason = _oauth_error_reason(
+        RuntimeError("MismatchingStateError"),
+        "google",
+        "https://api.example.com/auth/oauth/google/callback",
+    )
+    assert "session" in reason
+
+
+def test_error_reason_unknown_failure_is_generic():
+    reason = _oauth_error_reason(
+        RuntimeError("some bizarre upstream thing"),
+        "github",
+        "https://api.example.com/auth/oauth/github/callback",
+    )
+    assert reason == "Could not sign in. Please try again."
 
 
 # ── GET /auth/me ─────────────────────────────────────────────────────────────

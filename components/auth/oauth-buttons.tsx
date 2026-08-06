@@ -33,11 +33,12 @@ function GitHubIcon({ className = "h-4 w-4" }: { className?: string }) {
 export function OAuthButtons() {
   const router = useRouter();
 
-  // Google sign-in is re-enabled — the OAuth credentials in backend/.env were
-  // refreshed (see backend/routers/oauth.py, which logs any callback failure to
-  // the Render logs). GitHub stays disabled until its credentials are sorted.
+  // Google and GitHub sign-in are both enabled. The OAuth credentials in
+  // backend/.env were refreshed (see backend/routers/oauth.py, which logs any
+  // callback failure and surfaces an actionable message, including the exact
+  // callback URL to register in each provider's console).
   const googleDisabled = false;
-  const githubDisabled = true;
+  const githubDisabled = false;
 
   const start = (provider: "google" | "github") => {
     if (provider === "google" && googleDisabled) return;
@@ -77,12 +78,6 @@ export function OAuthButtons() {
         <GitHubIcon />
         Continue with GitHub
       </button>
-
-      {githubDisabled && (
-        <p className="text-center font-mono text-[11px] text-muted-foreground/60">
-          GitHub sign-in is temporarily unavailable — sign in with your email instead.
-        </p>
-      )}
     </div>
   );
 }
