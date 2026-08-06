@@ -94,6 +94,8 @@ HISTORY_CAP = 20
 # chat turn that hits a spent Gemini quota transparently continues on Groq
 # instead of surfacing an error. The configs are read lazily at request time,
 # so swapping providers is an env change (restart the server), not a code change.
+# Optional AI_PROVIDER_PRIORITY reorders the chain (e.g. "groq,gemini" puts a
+# known-good Groq key first) — see _ordered_configs.
 DEFAULT_AI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 DEFAULT_AI_MODEL = "gemini-3.6-flash"
 DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
@@ -212,7 +214,43 @@ def _all_configs() -> list[dict]:
             int(os.environ.get("GROQ_MAX_TOKENS", "8192")),
         )
 
-    return configs
+    return _ordered_configs(configs)
+
+
+def _ordered_configs(configs: list[dict]) -> list[dict]:
+    """Apply the optional AI_PROVIDER_PRIORITY env var, if set.
+
+    By default the chain is fixed: AI_API_KEY, then GEMINI_API_KEY, then
+    GROQ_API_KEY (see _all_configs). That order is a good default but it can
+    put a dead/exhausted key in front of a working one, forcing the transport
+    to burn a round-trip (and the user's time) failing over on every turn.
+    AI_PROVIDER_PRIORITY reorders the chain by provider name — e.g.
+    `AI_PROVIDER_PRIORITY=groq,gemini` makes a known-good Groq key primary and
+    keeps Gemini as the fallback. Names are matched by base URL:
+    "gemini" (generativelanguage.googleapis.com) and "groq" (api.groq.com);
+    any configured provider not named keeps its natural position after the
+    named ones. Unset → the natural order, unchanged.
+    """
+    order = [
+        s.strip().lower()
+        for s in os.environ.get("AI_PROVIDER_PRIORITY", "").split(",")
+        if s.strip()
+    ]
+    if not order:
+        return configs
+
+    def _provider_name(cfg: dict) -> str:
+        if "generativelanguage" in cfg["base_url"]:
+            return "gemini"
+        if "groq" in cfg["base_url"]:
+            return "groq"
+        return ""
+
+    def _rank(cfg: dict) -> int:
+        name = _provider_name(cfg)
+        return order.index(name) if name in order else len(order)
+
+    return sorted(configs, key=_rank)
 
 
 def _active_config() -> dict | None:
@@ -240,6 +278,54 @@ def _load_grammar() -> str:
     return _GRAMMAR_PATH.read_text(encoding="utf-8")
 
 
+# A complete, compiler-verified Forml form. Shown to the model on every request
+# (see _system_prompt) because abstract EBNF alone invites wrong guesses about
+# block structure — llama-class models keep emitting `field name : text { ... }`
+# until they see the real shape: bare fields take NO brace after the type, and
+# ui/validate follow as separate indented blocks. Verified against the WASM
+# compiler (public/wasm/forml.js) so it is guaranteed to parse.
+_REFERENCE_FORM = """form "Contact Form" {
+
+  field name : text
+    ui {
+      label: "Full Name"
+    }
+    validate {
+      required
+    }
+
+  field email : email
+    ui {
+      label: "Email Address"
+    }
+    validate {
+      required
+    }
+
+  field reason : select {
+    option "Question"
+    option "Feedback"
+    option "Support"
+  }
+  ui {
+    label: "Reason"
+  }
+
+  field resume : upload {
+    accept: pdf,document
+    maxSize: "10MB"
+  }
+  ui {
+    label: "Resume"
+  }
+
+  action submit {
+    endpoint: "https://api.formix.dev/submit"
+    method: POST
+  }
+}"""
+
+
 def _system_prompt() -> str:
     """Build the system prompt for one LLM request.
 
@@ -254,6 +340,7 @@ def _system_prompt() -> str:
       - EDITING: producing a full revised `.forml` source in `revisedSource`.
     """
     grammar = _load_grammar()
+    reference_form = _REFERENCE_FORM
     return f"""You are Formix AI, a friendly and knowledgeable assistant for Forml — the Forms-as-Code DSL the Formix product is built on. You do two things:
 
 1. CONVERSATION: users ask questions, doubts, and for help learning. They may ask about Forml syntax, the EBNF grammar below, how the compiler works, form design and validation, or forms in general. Answer warmly and as thoroughly as the question deserves. You may use markdown in your reply — lists, **bold**, `inline code`, and fenced code blocks for short examples.
@@ -261,6 +348,12 @@ def _system_prompt() -> str:
 2. EDITING: when the user asks you to create, change, or fix the form in the editor, you write valid Forml. When editing, preserve every untouched part of the current source EXACTLY — same lines, same indentation, same comments — and keep the explanation brief (2-5 sentences), because the user sees a line diff of exactly what changed.
 
 The ONLY valid Forml syntax is defined by the EBNF grammar below. It is the sole syntax authority. NEVER invent fields, keys, blocks, or constructs that are not present in it. The current source, any selected code, and the latest compiler diagnostics are given as context — use them.
+
+A complete, compiler-verified reference form follows. Study its STRUCTURE precisely: a bare text/email field is written on one line with NO opening brace after the type — its `ui { ... }` and `validate { ... }` blocks come AFTER it as separate indented blocks. Braces after a type appear ONLY for `select`/`radio`/`checkbox` (to list options) and `upload` (for accept/maxSize rules). `form` names and all option/label/endpoint values are double-quoted STRINGS; `method` is the bare keyword POST/PUT/PATCH with no quotes. Every generated or edited form must follow this exact shape.
+
+<REFERENCE_FORM>
+{reference_form}
+</REFERENCE_FORM>
 
 You are also given the author's account context (their profile, form catalog with submission counts, and totals) on every turn. Users may ask account questions from it — "how many forms do I have?", "find my contact form", "what are the stats of form X?" — and you answer from that data. NEVER invent or describe forms, numbers, or stats that are not listed there; if the catalog is empty or a form is not listed, say so truthfully.
 
@@ -731,25 +824,48 @@ def _request_body(cfg: dict, messages: list[dict], *, stream: bool) -> dict:
     return body
 
 
+# Ceiling on a single retry wait. Providers advertise honest reset windows —
+# Groq's `x-ratelimit-reset-tokens` can say 2m5.5s for a saturated 12K-TPM
+# pool — but honouring that verbatim means the chat panel sits on
+# "generating…" for minutes before either succeeding or failing over. Capping
+# the wait bounds a turn's worst case to ~20s (2 capped retries), after which
+# the transport fails over to the next provider or surfaces a clear error. A
+# retry that would need a 2-minute reset simply won't clear in that window
+# anyway, so failing over fast is the honest outcome.
+MAX_RETRY_WAIT = 10.0
+
+# HTTP timeouts for the provider calls. The overall ceiling is generous (a
+# full 8192-token form generation can take ~45s), but `read` bounds how long a
+# stalled connection can sit silent before we treat it as dead — previously a
+# single blanket 120s timeout meant a hung provider left the chat panel on
+# "generating…" for up to two minutes with no error event.
+HTTP_TIMEOUT = httpx.Timeout(60.0, connect=15.0)
+
+
 def _retry_after(resp) -> float:
     """Seconds to wait before retrying after a 429, honouring Retry-After.
 
     Falls back to the provider's reset headers (e.g. Groq's
     `x-ratelimit-reset-tokens: 2m5.5s`) and then a conservative default.
+    Capped at MAX_RETRY_WAIT so a long advertised reset can't leave the UI
+    frozen on "generating" for minutes (see MAX_RETRY_WAIT).
     """
+    wait = 5.0
     header = resp.headers.get("Retry-After")
     if header:
         try:
-            return max(0.0, float(header))
+            wait = max(0.0, float(header))
         except ValueError:
-            return 5.0  # HTTP-date form; not worth parsing here
-    for key in ("x-ratelimit-reset-tokens", "x-ratelimit-reset-tokens-minute"):
-        value = resp.headers.get(key)
-        if value:
-            match = re.match(r"(?:(\d+)m)?([\d.]+)s", value)
-            if match:
-                return int(match.group(1) or 0) * 60 + float(match.group(2))
-    return 5.0
+            wait = 5.0  # HTTP-date form; not worth parsing here
+    else:
+        for key in ("x-ratelimit-reset-tokens", "x-ratelimit-reset-tokens-minute"):
+            value = resp.headers.get(key)
+            if value:
+                match = re.match(r"(?:(\d+)m)?([\d.]+)s", value)
+                if match:
+                    wait = int(match.group(1) or 0) * 60 + float(match.group(2))
+                    break
+    return min(wait, MAX_RETRY_WAIT)
 
 
 def _missing_key_message() -> str:
@@ -823,7 +939,7 @@ async def _call_ai_complete(messages: list[dict]) -> str:
         raise RuntimeError(_missing_key_message())
 
     last_error = "no provider attempted"
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         for cfg in configs:
             url = f"{cfg['base_url']}/chat/completions"
             body = _request_body(cfg, messages, stream=False)
@@ -887,7 +1003,7 @@ async def _call_ai_stream(messages: list[dict]):
         raise RuntimeError(_missing_key_message())
 
     last_error = "no provider attempted"
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         for cfg in configs:
             url = f"{cfg['base_url']}/chat/completions"
             body = _request_body(cfg, messages, stream=True)
@@ -957,17 +1073,31 @@ async def _call_ai_stream(messages: list[dict]):
 
 # Cap on how many of the user's forms are listed verbatim in the author
 # context block; beyond this they're summarized so the prompt stays small.
-AUTHOR_CONTEXT_FORM_CAP = 50
+# Each row is ~100 chars, so 50 rows cost ~1.3K tokens on EVERY turn (even a
+# bare "create this form"); 20 covers realistic catalog sizes while capping
+# that block at ~2K chars.
+AUTHOR_CONTEXT_FORM_CAP = 20
 
 # Caps on how much of the conversation history is embedded VERBATIM in the
 # prompt. History exists so follow-ups stay grounded in what was said, but the
 # raw text (a form source can be many KB and every assistant turn re-attaches
 # it) inflates the request until free-tier TPM ceilings reject it outright —
 # Groq's llama-3.3-70b-versatile limits at 12K tokens/minute, and a single
-# turn plus its fixup retry can blow that in one request. Long text is clipped
-# to a bounded prefix with an explicit note so the model knows it's partial.
-HISTORY_MESSAGE_CLIP = 2000
-HISTORY_FORM_CODE_CLIP = 2000
+# turn plus its fixup retry can blow that in one request. These caps are the
+# single biggest lever on total request size: at the old 2000/2000 they let a
+# 6-message window carry ~24K chars (~6-7K tokens) of history alone, which is
+# why even a tiny "create this form" prompt was burning ~14K tokens and
+# getting rejected. Long text is clipped to a bounded prefix with an explicit
+# note so the model knows it's partial.
+HISTORY_MESSAGE_CLIP = 400
+HISTORY_FORM_CODE_CLIP = 700
+
+# Cap on how much of the CURRENT editor source is embedded. This is the model's
+# diff baseline, so it must be generous — but a large sample form can reach
+# several KB, and it was previously embedded UNCLIPPED, adding a thousand-plus
+# tokens to every request regardless of what the user asked. 3000 chars covers
+# every realistic form whole while bounding the worst case.
+SOURCE_CLIP = 3000
 
 
 def _clip(text: str, limit: int) -> str:
@@ -1025,9 +1155,15 @@ def _user_context(db: Session, user: User) -> str:
 
 def _build_context(req: AiChatRequest) -> str:
     """Assemble the structural context block: current source, selected code
-    (if any), and the latest compiler diagnostics."""
+    (if any), and the latest compiler diagnostics.
+
+    The source is CLIPPED to SOURCE_CLIP so a large editor buffer can't inflate
+    every request (it was previously embedded whole — a several-KB sample form
+    added a thousand-plus tokens to even a pure conversational turn). The clip
+    marker tells the model the text is partial; on repair turns the exact
+    error locations still arrive in <compiler_diagnostics>."""
     parts = []
-    parts.append("<current_source>\n" + (req.source or "") + "\n</current_source>")
+    parts.append("<current_source>\n" + _clip(req.source or "", SOURCE_CLIP) + "\n</current_source>")
     if req.selection:
         parts.append("<selected_code>\n" + req.selection + "\n</selected_code>")
     diag_block = "<compiler_diagnostics>\n"
@@ -1156,8 +1292,14 @@ async def _chat_stream(req: AiChatRequest, user_context: str = ""):
                 if text:
                     streamed_explanation += text
                     yield _sse({"type": "delta", "text": text})
-    except RuntimeError as exc:
-        logger.error("AI streaming failed: %s", exc)
+    except Exception as exc:  # noqa: BLE001 — NOT just RuntimeError
+        # A provider transport failure (httpx.ReadTimeout / ConnectError from
+        # the bounded HTTP_TIMEOUT, or any unexpected exception in the stream
+        # generator) must surface as a clean SSE error event. Catching only
+        # RuntimeError here left these as unhandled exceptions that silently
+        # killed the stream with no event at all — the client's fetch never
+        # resolved and the panel froze on "generating…" forever.
+        logger.error("AI streaming failed: %s", exc, exc_info=True)
         yield _sse({"type": "error", "message": f"Could not reach the AI model: {exc}"})
         return
 
@@ -1174,8 +1316,8 @@ async def _chat_stream(req: AiChatRequest, user_context: str = ""):
                 {"role": "user", "content": fixup},
             ])
             parsed = _parse_strict(retry_content)
-        except RuntimeError as exc:
-            logger.error("AI retry failed: %s", exc)
+        except Exception as exc:  # noqa: BLE001 — same rationale as the stream path
+            logger.error("AI retry failed: %s", exc, exc_info=True)
             yield _sse({"type": "error", "message": f"Could not reach the AI model: {exc}"})
             return
     if parsed is None:

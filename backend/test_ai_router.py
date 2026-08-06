@@ -70,6 +70,11 @@ def _reset_overrides(monkeypatch):
     Base.metadata.drop_all(_engine)
     Base.metadata.create_all(_engine)
     monkeypatch.setattr(ai_module, "_ENV_FILE", Path("__no_env_file__"))
+    # main.py calls load_dotenv once at import, which leaks the REAL backend/.env
+    # into os.environ (including the AI_PROVIDER_PRIORITY ordering override).
+    # Drop it here so ordering tests see exactly what they set, not the dev
+    # machine's chain.
+    monkeypatch.delenv("AI_PROVIDER_PRIORITY", raising=False)
 
     db = _TestingSessionLocal()
     user_a = models.User(id="user_a", email="a@test.com", hashed_password="x")
@@ -310,9 +315,25 @@ def test_retry_after_parsing():
             self.headers = headers
 
     assert ai_module._retry_after(FakeResp({"Retry-After": "3"})) == 3.0
-    assert ai_module._retry_after(FakeResp({"x-ratelimit-reset-tokens": "2m5.5s"})) == 125.5
-    assert ai_module._retry_after(FakeResp({"x-ratelimit-reset-tokens-minute": "7.66s"})) == 7.66
+    assert ai_module._retry_after(FakeResp({"x-ratelimit-reset-tokens": "7.66s"})) == 7.66
     assert ai_module._retry_after(FakeResp({})) == 5.0  # conservative default
+
+
+def test_retry_after_is_capped(monkeypatch):
+    """A provider-advertised multi-minute reset (Groq's 2m5.5s on a saturated
+    TPM pool) must NOT freeze the chat panel on "generating…" for that long.
+    Cap everything at MAX_RETRY_WAIT so a turn bounds to ~2 capped retries
+    before failing over."""
+    monkeypatch.setattr(ai_module, "MAX_RETRY_WAIT", 10.0)
+
+    class FakeResp:
+        def __init__(self, headers):
+            self.headers = headers
+
+    # 2m5.5s parses to 125.5 but is clamped to the ceiling.
+    assert ai_module._retry_after(FakeResp({"x-ratelimit-reset-tokens": "2m5.5s"})) == 10.0
+    assert ai_module._retry_after(FakeResp({"x-ratelimit-reset-tokens-minute": "2m5.5s"})) == 10.0
+    assert ai_module._retry_after(FakeResp({"Retry-After": "125.5"})) == 10.0
 
 
 def test_default_groq_model_is_the_stable_12k_tpm_workhorse(monkeypatch):
@@ -396,6 +417,42 @@ def test_all_configs_dedupes_identical_base_and_key(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "same-key")
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     assert len(ai_module._all_configs()) == 1
+
+
+def test_provider_priority_override_reorders_the_chain(monkeypatch):
+    """AI_PROVIDER_PRIORITY reorders the failover chain — e.g. 'groq,gemini'
+    makes a known-good Groq key primary while keeping Gemini as fallback
+    (useful when the Gemini key is exhausted/invalid and every turn would
+    otherwise burn a failed round-trip first). Unset keeps Gemini first."""
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gem-key")
+    monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+
+    # Default: Gemini first (the natural priority order).
+    monkeypatch.delenv("AI_PROVIDER_PRIORITY", raising=False)
+    assert [c["api_key"] for c in ai_module._all_configs()] == ["gem-key", "groq-key"]
+
+    # 'groq,gemini': Groq primary, Gemini fallback.
+    monkeypatch.setenv("AI_PROVIDER_PRIORITY", "groq,gemini")
+    assert [c["api_key"] for c in ai_module._all_configs()] == ["groq-key", "gem-key"]
+
+    # 'gemini': explicit Gemini-first, unchanged from default.
+    monkeypatch.setenv("AI_PROVIDER_PRIORITY", "gemini")
+    assert [c["api_key"] for c in ai_module._all_configs()] == ["gem-key", "groq-key"]
+
+    # Unknown names are ignored; unlisted providers keep their natural order.
+    monkeypatch.setenv("AI_PROVIDER_PRIORITY", "ollama")
+    assert [c["api_key"] for c in ai_module._all_configs()] == ["gem-key", "groq-key"]
+
+
+def test_provider_priority_applies_to_the_active_config(monkeypatch):
+    """The primary pick (what _chat_stream checks first) follows the override
+    too — with 'groq,gemini' the Groq config must be _active_config()."""
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gem-key")
+    monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+    monkeypatch.setenv("AI_PROVIDER_PRIORITY", "groq,gemini")
+    assert ai_module._active_config()["api_key"] == "groq-key"
 
 
 def test_refresh_env_picks_up_a_key_swap_without_a_restart(tmp_path, monkeypatch):
