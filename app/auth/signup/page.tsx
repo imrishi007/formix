@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, Check, Loader2 } from "lucide-react";
 import { AuthLayout } from "@/components/auth/auth-layout";
-import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { useAuth, ApiError } from "@/lib/auth-context";
 
 export default function SignUpPage() {
@@ -165,8 +164,6 @@ function SignUpForm() {
           )}
         </button>
       </form>
-
-      <OAuthButtons />
 
       <p className="mt-9 text-center text-sm text-muted-foreground">
         Already have an account?{" "}
