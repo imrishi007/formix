@@ -15,6 +15,7 @@ Run from the repo root:
     python -m pytest backend/test_ai_router.py -q
 """
 
+import asyncio
 import json
 import os
 import sys
@@ -140,6 +141,94 @@ def _raises(text: str) -> bool:
         return True
 
 
+# ── Fake httpx transports (exercise the real provider-failover chain) ─────────
+# The module reads the provider chain from the environment and drives it through
+# httpx.AsyncClient, so the failover tests substitute a scripted fake client:
+# each POST consumes the next pre-baked response, and every request URL is
+# recorded so a test can assert "Gemini was tried first, then Groq".
+
+class _FakeResponse:
+    def __init__(self, status_code, text="", json_data=None):
+        self.status_code = status_code
+        self.text = text
+        self.headers = {}
+        self._json_data = json_data
+
+    def json(self):
+        return self._json_data
+
+
+class _FakeCompleteClient:
+    """Non-streaming transport fake: `async with client` + `await client.post`."""
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.posts = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self.posts.append((url, json))
+        return self.responses.pop(0)
+
+
+class _FakeStreamResponse:
+    """Streaming HTTP response fake: status + SSE lines (or an error body)."""
+    def __init__(self, status_code, lines=None, body=""):
+        self.status_code = status_code
+        self.text = body
+        self._lines = lines or []
+        self._body = body
+
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
+
+    async def aread(self):
+        return self._body.encode("utf-8")
+
+
+class _StreamCtx:
+    def __init__(self, resp):
+        self._resp = resp
+
+    async def __aenter__(self):
+        return self._resp
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _FakeStreamClient:
+    """Streaming transport fake: `async with client` + `client.stream(...)`."""
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.posts = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def stream(self, method, url, headers=None, json=None):
+        self.posts.append((url, json))
+        return _StreamCtx(self.responses.pop(0))
+
+
+# A faithful copy of Google's spent-free-tier-quota 429 body (the exact error
+# that was surfacing in the app when Gemini's ~20 req/day model cap ran out).
+QUOTA_BODY = (
+    '[{"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": '
+    '"You exceeded your current quota, please check your plan and billing details. '
+    'Quota exceeded for metric: generativelanguage.googleapis.com/'
+    'generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash"}}]'
+)
+
+
 VALID_REPLY = (
     '{"explanation": "Added a required email field with validation.\\n\\n'
     'It is now the first field.", '
@@ -222,6 +311,123 @@ def test_retry_after_parsing():
     assert ai_module._retry_after(FakeResp({"x-ratelimit-reset-tokens": "2m5.5s"})) == 125.5
     assert ai_module._retry_after(FakeResp({"x-ratelimit-reset-tokens-minute": "7.66s"})) == 7.66
     assert ai_module._retry_after(FakeResp({})) == 5.0  # conservative default
+
+
+# ── Provider failover (the fix for the persistent Gemini 429) ─────────────────
+
+def test_all_configs_enumerates_the_failover_chain(monkeypatch):
+    """Both a Gemini key and a Groq key produce a two-entry chain, Gemini
+    first — the ordering the transports rely on to fail over."""
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gem-key")
+    monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+    configs = ai_module._all_configs()
+    assert [c["api_key"] for c in configs] == ["gem-key", "groq-key"]
+    assert "generativelanguage" in configs[0]["base_url"]
+    assert "api.groq.com" in configs[1]["base_url"]
+
+
+def test_all_configs_dedupes_identical_base_and_key(monkeypatch):
+    """AI_API_KEY and GEMINI_API_KEY pointing at the same Gemini account must
+    not create two entries — the transport would otherwise burn the retry
+    budget on the same exhausted quota twice."""
+    monkeypatch.setenv("AI_API_KEY", "same-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "same-key")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    assert len(ai_module._all_configs()) == 1
+
+
+def test_is_quota_exhausted_distinguishes_quota_from_rate_limit():
+    """Google's spent-daily-quota 429 (RESOURCE_EXHAUSTED + 'exceeded your
+    current quota') must be treated as a fail-over trigger; a plain per-minute
+    rate-limit message must be left to the retry-with-backoff path."""
+    quota = _FakeResponse(429, text=QUOTA_BODY)
+    assert ai_module._is_quota_exhausted(quota)
+    rate_limit = _FakeResponse(429, text='{"error": {"message": "Rate limit reached, retry later"}}')
+    assert not ai_module._is_quota_exhausted(rate_limit)
+    assert ai_module._is_quota_exhausted(_FakeResponse(429, text="RESOURCE_EXHAUSTED"))
+    assert ai_module._is_quota_exhausted(_FakeResponse(429, text="Quota exceeded for metric X"))
+
+
+def test_complete_fails_over_to_groq_when_gemini_quota_exhausted(monkeypatch):
+    """The exact production scenario: Gemini's free-tier daily quota is spent
+    (429 RESOURCE_EXHAUSTED), but a Groq key is configured. The non-streaming
+    transport must skip the (futile) retries and complete the turn on Groq."""
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gem-key")
+    monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+
+    ok_body = {"choices": [{"message": {"content": "hi from groq"}}]}
+    created: dict = {}
+
+    def _client(**kw):
+        created["client"] = _FakeCompleteClient(
+            [_FakeResponse(429, text=QUOTA_BODY), _FakeResponse(200, json_data=ok_body)]
+        )
+        return created["client"]
+
+    monkeypatch.setattr(ai_module.httpx, "AsyncClient", _client)
+    out = asyncio.run(ai_module._call_ai_complete([{"role": "user", "content": "hi"}]))
+    assert out == "hi from groq"
+
+    # Gemini was asked first, then the same turn was retried on Groq.
+    urls = [url for url, _ in created["client"].posts]
+    assert len(urls) == 2
+    assert "generativelanguage" in urls[0]
+    assert "api.groq.com" in urls[1]
+
+
+def test_complete_raises_quota_error_when_no_fallback_provider(monkeypatch):
+    """With only Gemini configured, a spent quota must still surface the real
+    429 message (the pre-failover behaviour), not a generic failure."""
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gem-key")
+
+    def _client(**kw):
+        return _FakeCompleteClient([_FakeResponse(429, text=QUOTA_BODY)])
+
+    monkeypatch.setattr(ai_module.httpx, "AsyncClient", _client)
+    with pytest.raises(RuntimeError, match="AI API error 429"):
+        asyncio.run(ai_module._call_ai_complete([{"role": "user", "content": "hi"}]))
+
+
+def test_stream_fails_over_to_groq_when_gemini_quota_exhausted(monkeypatch):
+    """The streaming transport — the one the chat endpoint actually uses —
+    must fail over the same way: a quota-exhausted 429 on the initial POST is
+    retried on the next provider, and the streamed tokens arrive from there."""
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gem-key")
+    monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+
+    quota = _FakeStreamResponse(429, body=QUOTA_BODY)
+    groq_sse = [
+        'data: {"choices":[{"delta":{"content":"Hi "},"finish_reason":null}]}',
+        'data: {"choices":[{"delta":{"content":"there"},"finish_reason":"stop"}]}',
+        "data: [DONE]",
+    ]
+    ok = _FakeStreamResponse(200, lines=groq_sse)
+    created: dict = {}
+
+    def _client(**kw):
+        created["client"] = _FakeStreamClient([quota, ok])
+        return created["client"]
+
+    monkeypatch.setattr(ai_module.httpx, "AsyncClient", _client)
+
+    async def _collect():
+        chunks = []
+        async for delta, reason in ai_module._call_ai_stream([{"role": "user", "content": "hi"}]):
+            chunks.append((delta, reason))
+        return chunks
+
+    chunks = asyncio.run(_collect())
+    assert "".join(d for d, _ in chunks) == "Hi there"
+    urls = [url for url, _ in created["client"].posts]
+    assert len(urls) == 2
+    assert "generativelanguage" in urls[0]
+    assert "api.groq.com" in urls[1]
 
 
 # ── Streaming chat turn ───────────────────────────────────────────────────────

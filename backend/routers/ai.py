@@ -9,7 +9,14 @@ LLM call. This router:
     into the system prompt on EVERY request, so the model never invents syntax
   - is a two-mode assistant: CONVERSATION (`{"explanation": ...}` — questions,
     doubts, teaching) and EDITING (`{"explanation", "revisedSource"}`), with the
-    model choosing the shape per turn (see _parse_strict)
+    model choosing the shape per turn (see _parse_strict). An edit request is
+    expected to return BOTH in one reply (the model talks AND does the work);
+    the system prompt biases hard against reply-with-question-only turns
+  - treats every configured provider as an ordered failover chain
+    (_all_configs): if the primary provider's free-tier quota is spent for the
+    day (Gemini caps ~20 req/day/model — see _is_quota_exhausted), the same
+    turn is retried on the next provider (e.g. a configured Groq key) instead
+    of erroring out, so the AI keeps creating/editing forms when a quota resets
   - streams the explanation to the client token-by-token (SSE) while the
     full reply is still being generated
   - validates the complete reply (tolerating fences, surrounding prose, and
@@ -73,11 +80,20 @@ HISTORY_CAP = 20
 #
 #   AI_API_KEY  (+ AI_BASE_URL / AI_MODEL / AI_TEMPERATURE / AI_MAX_TOKENS)
 #                 -> Gemini by default (generous, no-card free tier)
+#   GEMINI_API_KEY -> Gemini, Google AI Studio's preferred spelling (same
+#                     defaults as AI_API_KEY, so either works)
 #   GROQ_API_KEY (+ GROQ_* variables, legacy)
-#                 -> Groq, used only when AI_API_KEY is not set
+#                 -> Groq
 #
-# _active_config() reads these lazily at request time, so swapping providers is
-# an env change (restart the server), not a code change.
+# The providers are treated as an ordered FAILOVER CHAIN, not a single pick:
+# _all_configs() enumerates every configured provider high-priority-first, and
+# the transport retries the same turn on the next provider when the current one
+# is unavailable. This matters because Gemini's free tier caps a model at ~20
+# requests/day (see _is_quota_exhausted) — once that quota is spent, retrying
+# can never clear it, but the configured Groq key usually still works. So a
+# chat turn that hits a spent Gemini quota transparently continues on Groq
+# instead of surfacing an error. The configs are read lazily at request time,
+# so swapping providers is an env change (restart the server), not a code change.
 DEFAULT_AI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 DEFAULT_AI_MODEL = "gemini-3.6-flash"
 DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
@@ -100,47 +116,73 @@ MAX_AI_RETRIES = 3
 _GRAMMAR_PATH = Path(__file__).resolve().parents[2] / "forml-compiler" / "EBNF_grammar.md"
 
 
-def _active_config() -> dict | None:
-    """Resolve the active provider config from the environment.
+def _all_configs() -> list[dict]:
+    """Every configured provider, highest priority first.
 
-    Priority:
+    This is the whole failover chain, not just the top pick:
+
       1. AI_API_KEY set     -> AI_* variables (Gemini defaults)
       2. GEMINI_API_KEY set -> Gemini defaults (shortcut for Google AI Studio)
       3. GROQ_API_KEY set   -> GROQ_* variables (legacy Groq)
-      4. none set           -> None (the endpoint reports a friendly error)
 
-    Returns {"base_url", "model", "api_key", "temperature", "max_tokens"}.
+    Duplicates (same base URL + key) are collapsed so the transport never
+    retries the same quota twice. Each entry is
+    {"base_url", "model", "api_key", "temperature", "max_tokens"}. Empty when
+    no key is configured at all (callers surface a friendly error).
     """
+    configs: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    def _add(base_url: str, model: str, api_key: str, temperature: float, max_tokens: int) -> None:
+        key = (base_url, api_key)
+        if key in seen:
+            return
+        seen.add(key)
+        configs.append(
+            {
+                "base_url": base_url,
+                "model": model,
+                "api_key": api_key,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+        )
+
+    # The GEMINI_API_KEY entry shares the AI_* overrides (a custom AI_BASE_URL /
+    # AI_MODEL applies to whichever Gemini-flavoured key is in play).
+    ai_base = os.environ.get("AI_BASE_URL", "").strip() or DEFAULT_AI_BASE_URL
+    ai_model = os.environ.get("AI_MODEL", "").strip() or DEFAULT_AI_MODEL
+    ai_temp = float(os.environ.get("AI_TEMPERATURE", "0.3"))
+    ai_max = int(os.environ.get("AI_MAX_TOKENS", "8192"))
+
     ai_key = os.environ.get("AI_API_KEY", "").strip()
     if ai_key:
-        return {
-            "base_url": os.environ.get("AI_BASE_URL", "").strip() or DEFAULT_AI_BASE_URL,
-            "model": os.environ.get("AI_MODEL", "").strip() or DEFAULT_AI_MODEL,
-            "api_key": ai_key,
-            "temperature": float(os.environ.get("AI_TEMPERATURE", "0.3")),
-            "max_tokens": int(os.environ.get("AI_MAX_TOKENS", "8192")),
-        }
-    # Google AI Studio's preferred env var name; maps to the same Gemini
-    # defaults as AI_API_KEY so either spelling works.
+        _add(ai_base, ai_model, ai_key, ai_temp, ai_max)
+
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if gemini_key:
-        return {
-            "base_url": os.environ.get("AI_BASE_URL", "").strip() or DEFAULT_AI_BASE_URL,
-            "model": os.environ.get("AI_MODEL", "").strip() or DEFAULT_AI_MODEL,
-            "api_key": gemini_key,
-            "temperature": float(os.environ.get("AI_TEMPERATURE", "0.3")),
-            "max_tokens": int(os.environ.get("AI_MAX_TOKENS", "8192")),
-        }
+        _add(ai_base, ai_model, gemini_key, ai_temp, ai_max)
+
     groq_key = os.environ.get("GROQ_API_KEY", "").strip()
     if groq_key:
-        return {
-            "base_url": os.environ.get("GROQ_BASE_URL", "").strip() or DEFAULT_GROQ_BASE_URL,
-            "model": os.environ.get("GROQ_MODEL", "").strip() or DEFAULT_GROQ_MODEL,
-            "api_key": groq_key,
-            "temperature": float(os.environ.get("GROQ_TEMPERATURE", "0.3")),
-            "max_tokens": int(os.environ.get("GROQ_MAX_TOKENS", "8192")),
-        }
-    return None
+        _add(
+            os.environ.get("GROQ_BASE_URL", "").strip() or DEFAULT_GROQ_BASE_URL,
+            os.environ.get("GROQ_MODEL", "").strip() or DEFAULT_GROQ_MODEL,
+            groq_key,
+            float(os.environ.get("GROQ_TEMPERATURE", "0.3")),
+            int(os.environ.get("GROQ_MAX_TOKENS", "8192")),
+        )
+
+    return configs
+
+
+def _active_config() -> dict | None:
+    """The single highest-priority provider config, or None.
+
+    Kept for callers that only want the primary pick; the transports use
+    _all_configs() so they can fail over to a secondary provider."""
+    configs = _all_configs()
+    return configs[0] if configs else None
 
 
 # ── Grammar + system prompt ────────────────────────────────────────────────────
@@ -188,7 +230,7 @@ You are also given the author's account context (their profile, form catalog wit
 </EBNF_GRAMMAR>
 
 Rules:
-1. If an edit request is ambiguous, ask exactly ONE concise clarifying question instead of guessing.
+1. When the user asks you to create, change, or fix a form, ALWAYS produce the complete revised .forml source in the SAME turn — never reply with a clarifying question alone, and never answer with explanation only. If the request leaves details unspecified, make reasonable choices (sensible field types, labels, validation, and a submit action) and briefly note your assumptions in the explanation, inviting the user to refine. The explanation and the code are ONE reply: you both talk and do the work, like a pair-programmer.
 2. When editing, ALWAYS return the FULL revised .forml source — never a diff, never a partial patch, never ellipses, never a description of the change instead of the source itself.
 3. Only include revisedSource when the source actually changed. For pure conversation (a question, a doubt, an explanation request), do NOT echo the source back.
 
@@ -675,77 +717,158 @@ def _missing_key_message() -> str:
     return "server is missing AI_API_KEY, GEMINI_API_KEY, or GROQ_API_KEY"
 
 
+# HTTP statuses that mean "this provider is having a moment" and it is worth
+# trying the next provider in the chain. 4xx client errors (400 malformed
+# request, 404 bad route) mean OUR request is wrong and would fail identically
+# on every provider, so they raise without burning the fallback. 401/403 are
+# included because a bad/revoked key on one provider is a common real-world
+# state that a valid key on another provider will happily serve through.
+_PROVIDER_TRANSIENT_STATUSES = {401, 403, 429, 500, 502, 503, 504}
+
+
+def _should_fail_over(status_code: int) -> bool:
+    """True when a provider error is worth retrying on the next provider."""
+    return status_code in _PROVIDER_TRANSIENT_STATUSES
+
+
+def _is_quota_exhausted(resp) -> bool:
+    """True when a 429 body is a HARD quota exhaustion, not a per-minute rate
+    limit.
+
+    Google's spent-quota replies carry status `RESOURCE_EXHAUSTED` and a
+    "You exceeded your current quota" message — the free tier caps a model at
+    ~20 requests/day, and once spent, no number of retries within a sane
+    window will clear it. That is a fail-over trigger, not a retry trigger.
+    A plain per-minute rate limit, by contrast, clears after Retry-After.
+    """
+    text = (resp.text or "").lower()
+    return (
+        "resource_exhausted" in text
+        or "exceeded your current quota" in text
+        or "quota exceeded" in text
+        or "quota was exceeded" in text
+    )
+
+
 async def _call_ai_complete(messages: list[dict]) -> str:
     """One non-streaming chat completion; returns the assistant content string.
 
-    Retries on HTTP 429 (rate limit) honouring Retry-After, then raises
-    RuntimeError on any remaining transport/HTTP error so callers can surface a
+    Walks the whole provider chain (_all_configs), highest priority first.
+    Within a provider, retries HTTP 429 rate limits honouring Retry-After; a
+    hard quota exhaustion (spent daily free-tier cap) or a provider outage
+    fails over to the next configured provider instead. Raises RuntimeError
+    only once every configured provider has failed, so callers surface a
     friendly SSE error event.
     """
-    cfg = _active_config()
-    if cfg is None:
+    configs = _all_configs()
+    if not configs:
         raise RuntimeError(_missing_key_message())
-    url = f"{cfg['base_url']}/chat/completions"
-    body = _request_body(cfg, messages, stream=False)
+
+    last_error = "no provider attempted"
     async with httpx.AsyncClient(timeout=120.0) as client:
-        for attempt in range(1, MAX_AI_RETRIES + 1):
-            resp = await client.post(url, headers=_headers(cfg), json=body)
-            if resp.status_code == 200:
-                data = resp.json()
-                return data["choices"][0]["message"]["content"]
-            err_text = resp.text[:200]
-            if resp.status_code == 429 and attempt < MAX_AI_RETRIES:
-                wait = _retry_after(resp)
-                logger.info("AI rate limit (429); retrying in %.1fs", wait)
-                await asyncio.sleep(wait)
-                continue
-            raise RuntimeError(f"AI API error {resp.status_code}: {err_text}")
+        for cfg in configs:
+            url = f"{cfg['base_url']}/chat/completions"
+            body = _request_body(cfg, messages, stream=False)
+            for attempt in range(1, MAX_AI_RETRIES + 1):
+                resp = await client.post(url, headers=_headers(cfg), json=body)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data["choices"][0]["message"]["content"]
+                err_text = f"AI API error {resp.status_code}: {resp.text[:200]}"
+                last_error = err_text
+                if resp.status_code == 429:
+                    if _is_quota_exhausted(resp):
+                        # A spent daily cap will not clear inside the retry
+                        # window — skip the sleeps and move providers now.
+                        logger.warning(
+                            "AI quota exhausted on %s; failing over: %s",
+                            cfg["base_url"],
+                            err_text,
+                        )
+                        break
+                    if attempt < MAX_AI_RETRIES:
+                        wait = _retry_after(resp)
+                        logger.info("AI rate limit (429); retrying in %.1fs", wait)
+                        await asyncio.sleep(wait)
+                        continue
+                if _should_fail_over(resp.status_code) and cfg is not configs[-1]:
+                    logger.warning(
+                        "AI provider %s unavailable; failing over: %s",
+                        cfg["base_url"],
+                        err_text,
+                    )
+                    break
+                # Client error (our request is wrong everywhere) or this was
+                # the last provider — surface the real error.
+                raise RuntimeError(err_text)
+    raise RuntimeError(last_error)
 
 
 async def _call_ai_stream(messages: list[dict]):
-    """Stream a chat completion from the configured provider.
+    """Stream a chat completion from the configured providers.
 
-    Yields (content_delta, finish_reason) tuples as tokens arrive. Retries on
-    429 rate limits (honouring Retry-After), then raises RuntimeError on any
-    remaining transport/HTTP error.
+    Yields (content_delta, finish_reason) tuples as tokens arrive. Walks the
+    whole provider chain (_all_configs), highest priority first; within a
+    provider, retries 429 rate limits honouring Retry-After, and a hard quota
+    exhaustion or provider outage fails over to the next configured provider.
+    Raises RuntimeError only once every provider has failed. Note the failover
+    only ever happens BEFORE streaming starts (the 429 arrives on the initial
+    POST) — once a 200 stream is flowing, we are committed to it.
     """
-    cfg = _active_config()
-    if cfg is None:
+    configs = _all_configs()
+    if not configs:
         raise RuntimeError(_missing_key_message())
-    url = f"{cfg['base_url']}/chat/completions"
-    body = _request_body(cfg, messages, stream=True)
+
+    last_error = "no provider attempted"
     async with httpx.AsyncClient(timeout=120.0) as client:
-        attempt = 0
-        while True:
-            attempt += 1
-            async with client.stream(
-                "POST", url, headers=_headers(cfg), json=body
-            ) as resp:
-                if resp.status_code == 200:
-                    async for line in resp.aiter_lines():
-                        if not line.startswith("data:"):
-                            continue
-                        payload = line[len("data:"):].strip()
-                        if not payload:
-                            continue
-                        if payload == "[DONE]":
-                            return
-                        try:
-                            event = json.loads(payload)
-                        except json.JSONDecodeError:
-                            continue
-                        for choice in event.get("choices") or []:
-                            delta = (choice.get("delta") or {}).get("content") or ""
-                            if delta:
-                                yield delta, choice.get("finish_reason")
-                    return
-                err_body = (await resp.aread()).decode("utf-8", "replace")
-            if resp.status_code == 429 and attempt < MAX_AI_RETRIES:
-                wait = _retry_after(resp)
-                logger.info("AI rate limit (429); retrying in %.1fs", wait)
-                await asyncio.sleep(wait)
-                continue
-            raise RuntimeError(f"AI API error {resp.status_code}: {err_body[:200]}")
+        for cfg in configs:
+            url = f"{cfg['base_url']}/chat/completions"
+            body = _request_body(cfg, messages, stream=True)
+            attempt = 0
+            while True:
+                attempt += 1
+                async with client.stream(
+                    "POST", url, headers=_headers(cfg), json=body
+                ) as resp:
+                    if resp.status_code == 200:
+                        async for line in resp.aiter_lines():
+                            if not line.startswith("data:"):
+                                continue
+                            payload = line[len("data:"):].strip()
+                            if not payload:
+                                continue
+                            if payload == "[DONE]":
+                                return
+                            try:
+                                event = json.loads(payload)
+                            except json.JSONDecodeError:
+                                continue
+                            for choice in event.get("choices") or []:
+                                delta = (choice.get("delta") or {}).get("content") or ""
+                                if delta:
+                                    yield delta, choice.get("finish_reason")
+                        return
+                    err_body = (await resp.aread()).decode("utf-8", "replace")
+                err_text = f"AI API error {resp.status_code}: {err_body[:200]}"
+                last_error = err_text
+                if (
+                    resp.status_code == 429
+                    and not _is_quota_exhausted(resp)
+                    and attempt < MAX_AI_RETRIES
+                ):
+                    wait = _retry_after(resp)
+                    logger.info("AI rate limit (429); retrying in %.1fs", wait)
+                    await asyncio.sleep(wait)
+                    continue
+                if _should_fail_over(resp.status_code) and cfg is not configs[-1]:
+                    logger.warning(
+                        "AI provider %s unavailable; failing over: %s",
+                        cfg["base_url"],
+                        err_text,
+                    )
+                    break
+                raise RuntimeError(err_text)
+    raise RuntimeError(last_error)
 
 
 # ── LLM message construction ──────────────────────────────────────────────────
