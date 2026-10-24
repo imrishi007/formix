@@ -7,8 +7,10 @@ import argparse
 import gc
 import json
 import re
+import random
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import torch
@@ -65,7 +67,7 @@ def load_model(model_name: str, adapter: Path | None):
     return model, tokenizer
 
 
-def generate(model, tokenizer, prompt: str, max_new_tokens: int = 700) -> str:
+def generate(model, tokenizer, prompt: str, max_new_tokens: int) -> str:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": prompt},
@@ -97,11 +99,21 @@ def repair_prompt(source: str, diagnostics: list[dict], attempt: int) -> str:
     return "\n".join(lines)
 
 
-def run_suite(model_name: str, adapter: Path | None, rows: list[dict], compiler: Path, max_repairs: int) -> dict:
+def run_suite(
+    model_name: str,
+    adapter: Path | None,
+    rows: list[dict],
+    compiler: Path,
+    max_repairs: int,
+    max_new_tokens: int,
+    label: str,
+) -> dict:
     model, tokenizer = load_model(model_name, adapter)
     records = []
-    for row in rows:
-        source = generate(model, tokenizer, row["prompt"])
+    started = time.monotonic()
+    print(f"Evaluating {label}: {len(rows)} examples", flush=True)
+    for index, row in enumerate(rows, start=1):
+        source = generate(model, tokenizer, row["prompt"], max_new_tokens)
         initial = compile_source(compiler, source)
         initially_valid = bool(initial.get("success"))
         result = initial
@@ -109,7 +121,7 @@ def run_suite(model_name: str, adapter: Path | None, rows: list[dict], compiler:
         while not result.get("success") and attempts < max_repairs:
             attempts += 1
             errors = result.get("diagnostics", [])
-            source = generate(model, tokenizer, repair_prompt(source, errors, attempts))
+            source = generate(model, tokenizer, repair_prompt(source, errors, attempts), max_new_tokens)
             result = compile_source(compiler, source)
         present = set(re.findall(r"\bfield\s+([A-Za-z_]\w*)\s*:", source))
         expected = set(row.get("expected_fields", []))
@@ -125,6 +137,9 @@ def run_suite(model_name: str, adapter: Path | None, rows: list[dict], compiler:
             "final_diagnostics": result.get("diagnostics", []),
             "generated_source": source,
         })
+        if index % 5 == 0 or index == len(rows):
+            elapsed = time.monotonic() - started
+            print(f"{label}: {index}/{len(rows)} examples in {elapsed / 60:.1f} min", flush=True)
     del model, tokenizer
     gc.collect()
     torch.cuda.empty_cache()
@@ -150,16 +165,29 @@ def main() -> None:
     parser.add_argument("--model", default=BASE_MODEL)
     parser.add_argument("--output", type=Path, default=Path("ai-training/evaluation.json"))
     parser.add_argument("--max-repairs", type=int, default=2)
+    parser.add_argument("--limit", type=int, default=40, help="Examples per model; use 0 for the full test set")
+    parser.add_argument("--max-new-tokens", type=int, default=350)
     args = parser.parse_args()
     if not torch.cuda.is_available():
         raise SystemExit("A CUDA GPU is required for model evaluation.")
     rows = read_jsonl(args.data / "test.jsonl")
+    if args.limit < 0:
+        parser.error("--limit must be 0 (all examples) or a positive number")
+    if args.max_new_tokens < 1:
+        parser.error("--max-new-tokens must be positive")
+    if args.limit and len(rows) > args.limit:
+        # Keep the quick evaluation representative without depending on the
+        # shuffled JSONL order or taking only the first recipe family.
+        rows = random.Random(42).sample(rows, args.limit)
+    print(f"Evaluation set: {len(rows)} examples per model; max_new_tokens={args.max_new_tokens}", flush=True)
     report = {
         "compiler": str(args.compiler),
         "base_model": args.model,
         "max_repairs": args.max_repairs,
-        "base_model_results": run_suite(args.model, None, rows, args.compiler.resolve(), args.max_repairs),
-        "fine_tuned_results": run_suite(args.model, args.adapter.resolve(), rows, args.compiler.resolve(), args.max_repairs),
+        "evaluation_examples_per_model": len(rows),
+        "max_new_tokens": args.max_new_tokens,
+        "base_model_results": run_suite(args.model, None, rows, args.compiler.resolve(), args.max_repairs, args.max_new_tokens, "base model"),
+        "fine_tuned_results": run_suite(args.model, args.adapter.resolve(), rows, args.compiler.resolve(), args.max_repairs, args.max_new_tokens, "fine-tuned model"),
         "validation_authority": "native Formix Forml compiler; no hosted AI judge",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
