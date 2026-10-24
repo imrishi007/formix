@@ -223,6 +223,7 @@ def main() -> None:
     parser.add_argument("--adapter", type=Path, default=Path("ai-training/output/adapter"))
     parser.add_argument("--model", default=BASE_MODEL)
     parser.add_argument("--output", type=Path, default=Path("ai-training/evaluation.json"))
+    parser.add_argument("--base-report", type=Path, help="Reuse base_model_results from a compatible earlier evaluation report")
     parser.add_argument("--max-repairs", type=int, default=2)
     parser.add_argument("--limit", type=int, default=120, help="Examples per model; use 0 for the full test set")
     parser.add_argument("--max-new-tokens", type=int, default=350)
@@ -242,6 +243,23 @@ def main() -> None:
         # Keep the quick evaluation representative without depending on the
         # shuffled JSONL order or taking only the first recipe family.
         rows = random.Random(42).sample(rows, args.limit)
+    base_results = None
+    if args.base_report:
+        previous = json.loads(args.base_report.read_text(encoding="utf-8"))
+        checks = {
+            "base_model": args.model,
+            "max_repairs": args.max_repairs,
+            "evaluation_examples_per_model": len(rows),
+            "max_new_tokens": args.max_new_tokens,
+        }
+        mismatches = [key for key, expected in checks.items() if previous.get(key) != expected]
+        previous_records = previous.get("base_model_results", {}).get("records", [])
+        if [record.get("id") for record in previous_records] != [row["id"] for row in rows]:
+            mismatches.append("test example ids/order")
+        if mismatches:
+            parser.error(f"--base-report is incompatible ({', '.join(mismatches)}); omit it to run both models")
+        base_results = previous["base_model_results"]
+        print(f"Reusing saved base-model results from {args.base_report}", flush=True)
     print(f"Evaluation set: {len(rows)} examples per model; batch_size={args.batch_size}; max_new_tokens={args.max_new_tokens}; precision=fp16", flush=True)
     report = {
         "compiler": str(args.compiler),
@@ -254,7 +272,7 @@ def main() -> None:
         "validation_authority": "native Formix Forml compiler; no hosted AI judge",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    report["base_model_results"] = run_suite(
+    report["base_model_results"] = base_results or run_suite(
         args.model, None, rows, args.compiler.resolve(), args.max_repairs,
         args.max_new_tokens, args.batch_size, "base model",
     )
