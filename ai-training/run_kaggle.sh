@@ -11,6 +11,22 @@ DATA="ai-training/data"
 OUTPUT="ai-training/output"
 COUNT="${DATASET_COUNT:-1200}"
 
+# Fail before compiling or generating thousands of examples if Kaggle started
+# a CPU-only session. nvidia-smi is useful for display, but PyTorch's CUDA
+# check is the capability the training script itself relies on.
+python - <<'PY'
+import torch
+
+if not torch.cuda.is_available():
+    raise SystemExit(
+        "CUDA GPU is unavailable. In Kaggle open Notebook settings, set "
+        "Accelerator to GPU, save/restart the session, then rerun the notebook. "
+        f"Installed torch: {torch.__version__}; torch.version.cuda={torch.version.cuda}."
+    )
+
+print(f"Training GPU: {torch.cuda.get_device_name(0)}")
+PY
+
 mkdir -p forml-compiler/build
 g++ -std=c++17 -O2 -I forml-compiler/include -I forml-compiler/third_party \
   forml-compiler/src/token.cpp \

@@ -4,8 +4,8 @@ This folder contains a reproducible Kaggle workflow for fine-tuning a small code
 
 ## One flow of work
 
-1. Put a writable checkout of this repository under `/kaggle/working/formix` (copy an attached, read-only Kaggle input there if needed), enable a GPU accelerator, and check the actual GPU with `nvidia-smi`; Kaggle's available accelerator can vary.
-2. Install `ai-training/requirements.txt` and run `bash ai-training/run_kaggle.sh` from the repository root. The script compiles the native compiler, creates the dataset, fine-tunes the model, and runs the evaluation.
+1. Put a writable checkout of this repository under `/kaggle/working/formix` (copy an attached, read-only Kaggle input there if needed), enable a GPU accelerator, and restart the session. Check the GPU with `!nvidia-smi` and `!python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else torch.version.cuda)"`; Kaggle's available accelerator can vary. If `nvidia-smi` is missing or CUDA is false, do not install/train yet—select GPU under Notebook settings → Accelerator, save, and restart.
+2. Install `ai-training/requirements.txt` and run `bash ai-training/run_kaggle.sh` from the repository root. The script checks CUDA first, then compiles the native compiler, creates the dataset, fine-tunes the model, and runs the evaluation.
 3. The generated dataset contains request-to-Forml examples and compiler-diagnostic repair examples. Every target must pass the native compiler before it enters the dataset; each corrupted repair input must fail first.
 4. The training script QLoRA fine-tunes `Qwen/Qwen2.5-Coder-1.5B-Instruct`. It freezes the base model and saves the LoRA adapter.
 5. The evaluation script compares the base model and fine-tuned adapter before repair and after up to two compiler-feedback repair turns. The compiler decides validity; no external AI service is used for validation.
