@@ -15,7 +15,7 @@ from pathlib import Path
 
 import torch
 from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from train import BASE_MODEL, SYSTEM_PROMPT
 
@@ -49,17 +49,14 @@ def load_model(model_name: str, adapter: Path | None):
     tokenizer = AutoTokenizer.from_pretrained(str(adapter) if adapter else model_name, use_fast=True)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
-    quantization = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch.float16,
-    )
+    # Evaluation uses FP16 weights and batches prompts. The 1.5B base model
+    # fits comfortably on a T4, and this avoids the low-throughput, one-prompt
+    # at-a-time 4-bit path used during memory-constrained training.
+    tokenizer.padding_side = "left"
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        quantization_config=quantization,
         device_map="auto",
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
     )
     if adapter:
         model = PeftModel.from_pretrained(model, str(adapter))
@@ -67,21 +64,41 @@ def load_model(model_name: str, adapter: Path | None):
     return model, tokenizer
 
 
-def generate(model, tokenizer, prompt: str, max_new_tokens: int) -> str:
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
+def generate_batch(model, tokenizer, prompts: list[str], max_new_tokens: int) -> list[str]:
+    conversations = [
+        [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ]
+        for prompt in prompts
     ]
-    input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
+    rendered = tokenizer.apply_chat_template(
+        conversations,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+    inputs = tokenizer(
+        rendered,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=4096,
+    ).to(model.device)
     with torch.inference_mode():
         output = model.generate(
-            input_ids,
+            **inputs,
             max_new_tokens=max_new_tokens,
             do_sample=False,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=tokenizer.eos_token_id,
         )
-    return clean_output(tokenizer.decode(output[0][input_ids.shape[-1]:], skip_special_tokens=True))
+    # Left padding makes each generated continuation start after the shared
+    # padded input width; decode each row independently to strip special tokens.
+    prompt_width = inputs["input_ids"].shape[1]
+    return [
+        clean_output(tokenizer.decode(sequence[prompt_width:], skip_special_tokens=True))
+        for sequence in output
+    ]
 
 
 def repair_prompt(source: str, diagnostics: list[dict], attempt: int) -> str:
@@ -106,23 +123,48 @@ def run_suite(
     compiler: Path,
     max_repairs: int,
     max_new_tokens: int,
+    batch_size: int,
     label: str,
 ) -> dict:
     model, tokenizer = load_model(model_name, adapter)
     records = []
     started = time.monotonic()
-    print(f"Evaluating {label}: {len(rows)} examples", flush=True)
-    for index, row in enumerate(rows, start=1):
-        source = generate(model, tokenizer, row["prompt"], max_new_tokens)
-        initial = compile_source(compiler, source)
-        initially_valid = bool(initial.get("success"))
-        result = initial
-        attempts = 0
-        while not result.get("success") and attempts < max_repairs:
-            attempts += 1
-            errors = result.get("diagnostics", [])
-            source = generate(model, tokenizer, repair_prompt(source, errors, attempts), max_new_tokens)
+    print(f"Evaluating {label}: {len(rows)} examples in batches of {batch_size}", flush=True)
+    sources: list[str] = []
+    results: list[dict] = []
+    initially_valid: list[bool] = []
+    attempts: list[int] = [0] * len(rows)
+
+    for start in range(0, len(rows), batch_size):
+        batch_rows = rows[start:start + batch_size]
+        sources.extend(generate_batch(model, tokenizer, [row["prompt"] for row in batch_rows], max_new_tokens))
+        for source in sources[start:start + len(batch_rows)]:
             result = compile_source(compiler, source)
+            results.append(result)
+            initially_valid.append(bool(result.get("success")))
+        done = len(sources)
+        print(f"{label}: initial compile {done}/{len(rows)}", flush=True)
+
+    # Repair only failed examples, in batches too, so compiler feedback remains
+    # per-example while model inference keeps the T4 busy.
+    for attempt_no in range(1, max_repairs + 1):
+        failed = [i for i, result in enumerate(results) if not result.get("success")]
+        if not failed:
+            break
+        repaired_sources: dict[int, str] = {}
+        for start in range(0, len(failed), batch_size):
+            batch_indices = failed[start:start + batch_size]
+            repair_prompts = [repair_prompt(sources[i], results[i].get("diagnostics", []), attempt_no) for i in batch_indices]
+            candidates = generate_batch(model, tokenizer, repair_prompts, max_new_tokens)
+            for index, source in zip(batch_indices, candidates):
+                repaired_sources[index] = source
+        for index, source in repaired_sources.items():
+            sources[index] = source
+            results[index] = compile_source(compiler, source)
+            attempts[index] += 1
+        print(f"{label}: repair {attempt_no} checked {len(failed)} examples", flush=True)
+
+    for row, source, result, was_initially_valid, repair_turns in zip(rows, sources, results, initially_valid, attempts):
         present = set(re.findall(r"\bfield\s+([A-Za-z_]\w*)\s*:", source))
         expected = set(row.get("expected_fields", []))
         coverage = len(present & expected) / len(expected) if expected else 1.0
@@ -130,9 +172,9 @@ def run_suite(
             "id": row["id"],
             "task": row["task"],
             "scenario": row["scenario"],
-            "initial_valid": initially_valid,
+            "initial_valid": was_initially_valid,
             "valid_after_repair": bool(result.get("success")),
-            "repair_turns": attempts,
+            "repair_turns": repair_turns,
             "field_coverage": coverage,
             "final_diagnostics": result.get("diagnostics", []),
             "generated_source": source,
@@ -165,8 +207,9 @@ def main() -> None:
     parser.add_argument("--model", default=BASE_MODEL)
     parser.add_argument("--output", type=Path, default=Path("ai-training/evaluation.json"))
     parser.add_argument("--max-repairs", type=int, default=2)
-    parser.add_argument("--limit", type=int, default=40, help="Examples per model; use 0 for the full test set")
+    parser.add_argument("--limit", type=int, default=120, help="Examples per model; use 0 for the full test set")
     parser.add_argument("--max-new-tokens", type=int, default=350)
+    parser.add_argument("--batch-size", type=int, default=8)
     args = parser.parse_args()
     if not torch.cuda.is_available():
         raise SystemExit("A CUDA GPU is required for model evaluation.")
@@ -175,19 +218,23 @@ def main() -> None:
         parser.error("--limit must be 0 (all examples) or a positive number")
     if args.max_new_tokens < 1:
         parser.error("--max-new-tokens must be positive")
+    if args.batch_size < 1:
+        parser.error("--batch-size must be positive")
     if args.limit and len(rows) > args.limit:
         # Keep the quick evaluation representative without depending on the
         # shuffled JSONL order or taking only the first recipe family.
         rows = random.Random(42).sample(rows, args.limit)
-    print(f"Evaluation set: {len(rows)} examples per model; max_new_tokens={args.max_new_tokens}", flush=True)
+    print(f"Evaluation set: {len(rows)} examples per model; batch_size={args.batch_size}; max_new_tokens={args.max_new_tokens}; precision=fp16", flush=True)
     report = {
         "compiler": str(args.compiler),
         "base_model": args.model,
         "max_repairs": args.max_repairs,
         "evaluation_examples_per_model": len(rows),
         "max_new_tokens": args.max_new_tokens,
-        "base_model_results": run_suite(args.model, None, rows, args.compiler.resolve(), args.max_repairs, args.max_new_tokens, "base model"),
-        "fine_tuned_results": run_suite(args.model, args.adapter.resolve(), rows, args.compiler.resolve(), args.max_repairs, args.max_new_tokens, "fine-tuned model"),
+        "batch_size": args.batch_size,
+        "precision": "fp16",
+        "base_model_results": run_suite(args.model, None, rows, args.compiler.resolve(), args.max_repairs, args.max_new_tokens, args.batch_size, "base model"),
+        "fine_tuned_results": run_suite(args.model, args.adapter.resolve(), rows, args.compiler.resolve(), args.max_repairs, args.max_new_tokens, args.batch_size, "fine-tuned model"),
         "validation_authority": "native Formix Forml compiler; no hosted AI judge",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
