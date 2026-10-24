@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import gc
+import importlib.metadata
 import json
 import re
 import random
@@ -23,6 +24,22 @@ from train import BASE_MODEL, SYSTEM_PROMPT
 def read_jsonl(path: Path) -> list[dict]:
     with path.open(encoding="utf-8") as handle:
         return [json.loads(line) for line in handle if line.strip()]
+
+
+def check_optional_torchao() -> None:
+    """PEFT errors on an old optional Kaggle torchao instead of ignoring it."""
+    try:
+        installed = importlib.metadata.version("torchao")
+    except importlib.metadata.PackageNotFoundError:
+        return
+    match = re.match(r"^(\d+)\.(\d+)", installed)
+    version_pair = tuple(map(int, match.groups())) if match else (0, 0)
+    if version_pair < (0, 17):
+        raise SystemExit(
+            f"Incompatible optional torchao {installed} is preinstalled. "
+            "This FP16 evaluation does not use torchao; run `!pip uninstall -y torchao` "
+            "in a Kaggle cell, then rerun this evaluation."
+        )
 
 
 def compile_source(compiler: Path, source: str) -> dict:
@@ -213,6 +230,7 @@ def main() -> None:
     args = parser.parse_args()
     if not torch.cuda.is_available():
         raise SystemExit("A CUDA GPU is required for model evaluation.")
+    check_optional_torchao()
     rows = read_jsonl(args.data / "test.jsonl")
     if args.limit < 0:
         parser.error("--limit must be 0 (all examples) or a positive number")
@@ -233,11 +251,20 @@ def main() -> None:
         "max_new_tokens": args.max_new_tokens,
         "batch_size": args.batch_size,
         "precision": "fp16",
-        "base_model_results": run_suite(args.model, None, rows, args.compiler.resolve(), args.max_repairs, args.max_new_tokens, args.batch_size, "base model"),
-        "fine_tuned_results": run_suite(args.model, args.adapter.resolve(), rows, args.compiler.resolve(), args.max_repairs, args.max_new_tokens, args.batch_size, "fine-tuned model"),
         "validation_authority": "native Formix Forml compiler; no hosted AI judge",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    report["base_model_results"] = run_suite(
+        args.model, None, rows, args.compiler.resolve(), args.max_repairs,
+        args.max_new_tokens, args.batch_size, "base model",
+    )
+    # Persist the completed baseline before loading the adapter. If the second
+    # model fails to load or runs out of memory, the baseline is still useful.
+    args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    report["fine_tuned_results"] = run_suite(
+        args.model, args.adapter.resolve(), rows, args.compiler.resolve(), args.max_repairs,
+        args.max_new_tokens, args.batch_size, "fine-tuned model",
+    )
     args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
     for key in ("base_model_results", "fine_tuned_results"):
         result = report[key]

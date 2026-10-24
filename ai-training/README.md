@@ -25,3 +25,5 @@ Run from a Kaggle notebook with the repository uploaded and a GPU enabled:
 Set `DATASET_COUNT` before the script to adjust the number of generation examples (the same number of repair examples is added). For example, `!DATASET_COUNT=1200 bash /kaggle/working/formix/ai-training/run_kaggle.sh`.
 
 The scripts have no Groq/OpenAI dependency. Model downloads require internet access in the Kaggle notebook. Evaluation loads the 1.5B model in FP16 and batches prompts to use the T4 more effectively; it does not reserve unused VRAM. To run the complete held-out set after the 120-example evaluation, use `!python ai-training/evaluate.py --compiler forml-compiler/build/forml_compiler --data ai-training/data --adapter ai-training/output/adapter --limit 0 --batch-size 8 --output ai-training/output/evaluation-full.json`.
+
+If evaluation reports that preinstalled `torchao` is older than 0.17, remove that optional package with `!pip uninstall -y torchao` and rerun evaluation. This project uses ordinary FP16 inference and does not need TorchAO. The evaluator checks for this Kaggle conflict before starting and saves the base-model report before loading the fine-tuned adapter.
