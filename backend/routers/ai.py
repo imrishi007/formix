@@ -1252,6 +1252,87 @@ def _sse(event: dict) -> str:
     return "data: " + json.dumps(event) + "\n\n"
 
 
+def _finetuned_model_config() -> dict | None:
+    """Read the separately hosted Forml adapter endpoint, if configured."""
+    base_url = os.environ.get("FORMIX_MODEL_BASE_URL", "").strip().rstrip("/")
+    api_key = os.environ.get("FORMIX_MODEL_API_KEY", "").strip()
+    if not base_url and not api_key:
+        return None
+    if not base_url or not api_key:
+        raise RuntimeError("Set both FORMIX_MODEL_BASE_URL and FORMIX_MODEL_API_KEY on the backend.")
+    return {
+        "base_url": base_url,
+        "api_key": api_key,
+        "model": os.environ.get("FORMIX_MODEL_NAME", "Qwen/Qwen2.5-Coder-1.5B-Instruct").strip(),
+        "max_tokens": int(os.environ.get("FORMIX_MODEL_MAX_TOKENS", "1200")),
+    }
+
+
+def _finetuned_messages(req: AiChatRequest) -> list[dict]:
+    """Prompt the code-only adapter to generate or revise a complete form."""
+    system = (
+        "You generate complete Forml source code for the Formix forms DSL. "
+        "Return only Forml source, with no explanation or Markdown fences. "
+        "Follow the grammar exactly. When an existing form is supplied, preserve "
+        "its existing fields and make the requested changes.\n\n"
+        "Canonical EBNF grammar:\n" + _load_grammar() +
+        "\n\nCompiler-verified example structure:\n" + _REFERENCE_FORM
+    )
+    if req.repair_context is not None:
+        errors = "\n".join(
+            f"line {error.line}, column {error.col}: {error.message}"
+            for error in req.repair_context.errors
+        ) or "No specific diagnostics were returned."
+        task = (
+            "Repair the complete source below so it passes the Formix compiler. "
+            "Preserve the requested form and return the complete corrected Forml only.\n\n"
+            f"Compiler diagnostics:\n{errors}\n\nCurrent Forml source:\n{req.source}"
+        )
+    else:
+        task = "Create or revise the form requested below. Return the complete Forml source.\n\n"
+        if req.source.strip():
+            task += "Current Forml source (revise this source, preserving unrelated content):\n" + req.source + "\n\n"
+        if req.selection.strip():
+            task += "Selected source region:\n" + req.selection + "\n\n"
+        task += "User request:\n" + req.user_message
+    return [{"role": "system", "content": system}, {"role": "user", "content": task}]
+
+
+async def _call_finetuned_model(req: AiChatRequest) -> str:
+    """Call a hosted OpenAI-compatible endpoint for the Formix LoRA model."""
+    config = _finetuned_model_config()
+    if config is None:
+        raise RuntimeError(
+            "The fine-tuned model endpoint is not configured. Set FORMIX_MODEL_BASE_URL "
+            "and FORMIX_MODEL_API_KEY on the Render backend."
+        )
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        response = await client.post(
+            f"{config['base_url']}/chat/completions",
+            headers={"Authorization": f"Bearer {config['api_key']}", "Content-Type": "application/json"},
+            json={
+                "model": config["model"],
+                "messages": _finetuned_messages(req),
+                "temperature": 0.1,
+                "max_tokens": config["max_tokens"],
+                "stream": False,
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+    try:
+        content = payload["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError("The fine-tuned model endpoint returned an unexpected response.") from exc
+    if isinstance(content, list):
+        content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+    source = re.sub(r"^```(?:forml)?\s*", "", str(content).strip(), flags=re.IGNORECASE)
+    source = re.sub(r"\s*```$", "", source).strip()
+    if not source:
+        raise RuntimeError("The fine-tuned model returned an empty Forml response.")
+    return source
+
+
 async def _chat_stream(req: AiChatRequest, user_context: str = ""):
     """Async generator yielding SSE events for one chat turn.
 
@@ -1262,6 +1343,18 @@ async def _chat_stream(req: AiChatRequest, user_context: str = ""):
                                                conversational turn)
       {"type": "error",  "message": ...}     — unrecoverable failure
     """
+    if req.model_mode == "finetuned":
+        try:
+            source = await _call_finetuned_model(req)
+        except Exception as exc:  # Endpoint errors are streamed in the normal client contract.
+            logger.error("Fine-tuned Forml endpoint failed: %s", exc, exc_info=True)
+            yield _sse({"type": "error", "message": f"Fine-tuned Formix model unavailable: {exc}"})
+            return
+        explanation = "Generated with the fine-tuned Formix model. Checking the source with the Forml compiler."
+        yield _sse({"type": "delta", "text": explanation})
+        yield _sse({"type": "result", "explanation": explanation, "revised_source": source})
+        return
+
     if _active_config() is None:
         yield _sse({
             "type": "error",

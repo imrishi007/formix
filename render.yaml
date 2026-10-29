@@ -33,6 +33,16 @@ services:
       # then GROQ_API_KEY — set at least one.
       - key: GEMINI_API_KEY
         sync: false
+      # Optional OpenAI-compatible endpoint serving the fine-tuned Formix LoRA
+      # model. Keep the endpoint credential server-side; never put it in Vercel.
+      - key: FORMIX_MODEL_BASE_URL
+        sync: false
+      - key: FORMIX_MODEL_API_KEY
+        sync: false
+      - key: FORMIX_MODEL_NAME
+        value: "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+      - key: FORMIX_MODEL_MAX_TOKENS
+        value: "1200"
       - key: FORMIX_JWT_EXPIRE_MINUTES
         value: "43200"
       # FRONTEND_URL — your Vercel app, e.g. https://formix.vercel.app. Used for

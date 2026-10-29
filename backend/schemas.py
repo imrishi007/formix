@@ -272,6 +272,9 @@ class AiChatRequest(BaseModel):
     recent_messages: list[AiHistoryMessage] = []
     history_summary: str = ""
     repair_context: Optional[AiRepairContext] = None
+    # Selects the project's fine-tuned Forml generator instead of the general
+    # conversational provider chain. The client still runs compiler validation.
+    model_mode: Literal["assistant", "finetuned"] = "assistant"
 
 
 class AiChatMessageRecord(BaseModel):

@@ -639,6 +639,7 @@ export interface AiChatRequestPayload {
   recent_messages: AiHistoryMessageInput[];
   history_summary: string;
   repair_context?: { attempt: number; errors: AiDiagnosticInput[] } | null;
+  model_mode?: "assistant" | "finetuned";
 }
 
 /** SSE events streamed by the chat endpoint. `revised_source` is null on a

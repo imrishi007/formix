@@ -67,6 +67,7 @@ export function useAiChat(
   formId: string | null,
   getContext: () => AiContext,
   compile: (src: string) => FormlCompileResult,
+  modelMode: "assistant" | "finetuned" = "assistant",
 ) {
   const [messages, setMessages] = useState<AiChatMessage[]>(() => loadHistory(formId));
   const [isStreaming, setIsStreaming] = useState(false);
@@ -175,6 +176,7 @@ export function useAiChat(
         selection: context.selection ?? "",
         recentMessages,
         historySummary: "",
+        modelMode,
         compile: compileRef.current,
         streamTurn: (payload, onEvent, signal) => chatAiStream(formIdNow, payload, onEvent, signal),
         onDelta: (t) => {
@@ -186,6 +188,15 @@ export function useAiChat(
     } catch (err) {
       if (controller.signal.aborted) {
         finishMessage(id); // user pressed Stop — keep whatever streamed
+        return true;
+      }
+      if (modelMode === "finetuned") {
+        // Do not silently swap the selected trained model for the local
+        // template fallback; that would falsely look like model inference.
+        setMessages((prev) => prev.map((m) => m.id === id
+          ? { ...m, text: `Fine-tuned Formix model error: ${err instanceof Error ? err.message : "request failed"}` }
+          : m));
+        finishMessage(id);
         return true;
       }
       if (streamedText.length === 0) {
@@ -231,7 +242,7 @@ export function useAiChat(
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, text: outcome.explanation } : m)));
     finishMessage(id);
     return true;
-  }, [finishMessage, streamCode]);
+  }, [finishMessage, streamCode, modelMode]);
 
   const run = useCallback((intent: AiIntent, userText: string | null) => {
     if (userText !== null) {

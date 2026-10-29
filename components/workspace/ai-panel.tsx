@@ -196,10 +196,12 @@ export function AiPanel({
   onApplyToEditor: (code: string) => void;
   onClose: () => void;
 }) {
+  const [modelMode, setModelMode] = useState<"assistant" | "finetuned">("assistant");
   const { messages, isStreaming, send, runQuickAction, stop, clear } = useAiChat(
     formId,
     () => ({ source, diagnostics, selection }),
     compile,
+    modelMode,
   );
 
   const [input, setInput] = useState("");
@@ -236,6 +238,16 @@ export function AiPanel({
           <Sparkles className="h-3 w-3 text-white" />
         </div>
         <span className="font-inter text-xs font-semibold text-foreground">Formix AI</span>
+        <select
+          aria-label="AI model"
+          value={modelMode}
+          onChange={(event) => setModelMode(event.target.value as "assistant" | "finetuned")}
+          disabled={isStreaming}
+          className="ml-2 max-w-[150px] rounded-md border border-border bg-background px-1.5 py-1 font-mono text-[10px] text-foreground"
+        >
+          <option value="assistant">General assistant</option>
+          <option value="finetuned">Fine-tuned Formix</option>
+        </select>
         {isStreaming && <span className="font-mono text-[10px] text-muted-foreground">generating…</span>}
         <div className="ml-auto flex items-center gap-0.5">
           <button
@@ -271,6 +283,11 @@ export function AiPanel({
           onClick={() => runQuickAction("explain", selection.trim() ? "Explain the selected code" : "Explain this form")}
         />
       </div>
+      {modelMode === "finetuned" && (
+        <p className="border-b border-border px-3 py-1.5 font-mono text-[10px] text-muted-foreground">
+          Fine-tuned Forml generation · compiler-checked · code output only
+        </p>
+      )}
 
       {/* Messages */}
       <div ref={scrollRef} className="formix-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3">

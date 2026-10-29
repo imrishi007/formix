@@ -38,6 +38,8 @@ export interface RepairLoopInput {
   recentMessages: AiHistoryMessageInput[];
   /** One-line summary of anything older than recentMessages. */
   historySummary: string;
+  /** Which backend model should handle this turn and any compiler repairs. */
+  modelMode?: "assistant" | "finetuned";
   /** Synchronous WASM compiler (lib/use-forml-compiler.ts). */
   compile: (src: string) => FormlCompileResult;
   /** Streams one LLM turn via chatAiStream, forwarding parsed SSE events. */
@@ -136,6 +138,7 @@ export async function runRepairLoop(input: RepairLoopInput): Promise<RepairOutco
       selection: input.selection,
       recent_messages: input.recentMessages,
       history_summary: input.historySummary,
+      model_mode: input.modelMode ?? "assistant",
     },
     input,
     onDelta,
@@ -188,6 +191,7 @@ export async function runRepairLoop(input: RepairLoopInput): Promise<RepairOutco
         recent_messages: [],
         history_summary: "",
         repair_context: { attempt: repairs, errors: finalErrors },
+        model_mode: input.modelMode ?? "assistant",
       },
       input,
       onDelta,
