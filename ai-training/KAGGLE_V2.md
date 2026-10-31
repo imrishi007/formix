@@ -17,13 +17,12 @@ schedules that accelerator, but the run does not depend on it.
 
 ## 2. Get the code
 
-After the v2 branch has been pushed to GitHub, run these cells. Replace
-`<v2-branch>` with the branch name supplied with the push.
+Run these cells to use the dedicated v2 branch.
 
 ```bash
 !git clone https://github.com/imrishi007/formix.git /kaggle/working/formix
 %cd /kaggle/working/formix
-!git checkout <v2-branch>
+!git checkout codex/formix-model-v2
 ```
 
 If the repository is private, attach a repository ZIP as a Kaggle Dataset,
