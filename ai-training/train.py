@@ -23,8 +23,8 @@ SYSTEM_PROMPT = (
     "You write Forml, the Formix form DSL. Return only complete Forml source code. "
     "Follow the request and compiler diagnostics. Use only syntax in the Forml grammar."
 )
-BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
-MAX_LENGTH = 2048
+BASE_MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct"
+MAX_LENGTH = 3072
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -33,9 +33,10 @@ def read_jsonl(path: Path) -> list[dict]:
 
 
 class FormlDataset(Dataset):
-    def __init__(self, rows: list[dict], tokenizer):
+    def __init__(self, rows: list[dict], tokenizer, max_length: int = MAX_LENGTH):
         self.rows = rows
         self.tokenizer = tokenizer
+        self.max_length = max_length
 
     def __len__(self):
         return len(self.rows)
@@ -63,8 +64,13 @@ class FormlDataset(Dataset):
         # to copy the system/request text back to the user.
         prefix_length = min(len(prompt_ids), len(full_ids))
         labels = [-100] * prefix_length + full_ids[prefix_length:]
-        input_ids = full_ids[:MAX_LENGTH]
-        labels = labels[:MAX_LENGTH]
+        input_ids = full_ids[:self.max_length]
+        labels = labels[:self.max_length]
+        if not any(label != -100 for label in labels):
+            raise ValueError(
+                f"Training row {row.get('id', index)} has no target tokens inside "
+                f"--max-length {self.max_length}; raise the limit or shorten the prompt."
+            )
         return {"input_ids": input_ids, "attention_mask": [1] * len(input_ids), "labels": labels}
 
 
@@ -93,15 +99,19 @@ def main() -> None:
     parser.add_argument("--data", type=Path, default=Path("ai-training/data"))
     parser.add_argument("--output", type=Path, default=Path("ai-training/output"))
     parser.add_argument("--model", default=BASE_MODEL)
-    parser.add_argument("--epochs", type=float, default=3)
+    parser.add_argument("--epochs", type=float, default=2)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--grad-accum", type=int, default=8)
-    parser.add_argument("--learning-rate", type=float, default=2e-4)
+    parser.add_argument("--learning-rate", type=float, default=1e-4)
+    parser.add_argument("--max-length", type=int, default=MAX_LENGTH)
+    parser.add_argument("--lora-rank", type=int, default=32)
     args = parser.parse_args()
     if not torch.cuda.is_available():
         raise SystemExit("A CUDA GPU is required. In Kaggle, enable a GPU accelerator and restart the session.")
     args.output.mkdir(parents=True, exist_ok=True)
 
+    if args.max_length < 512:
+        parser.error("--max-length must be at least 512")
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -123,18 +133,20 @@ def main() -> None:
     model = get_peft_model(
         model,
         LoraConfig(
-            r=16,
-            lora_alpha=32,
+            r=args.lora_rank,
+            lora_alpha=args.lora_rank * 2,
             lora_dropout=0.05,
             bias="none",
             task_type="CAUSAL_LM",
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+            # PEFT's documented QLoRA setting adapts every linear layer and
+            # avoids architecture-specific module lists.
+            target_modules="all-linear",
         ),
     )
     model.print_trainable_parameters()
 
-    train_dataset = FormlDataset(read_jsonl(args.data / "train.jsonl"), tokenizer)
-    validation_dataset = FormlDataset(read_jsonl(args.data / "validation.jsonl"), tokenizer)
+    train_dataset = FormlDataset(read_jsonl(args.data / "train.jsonl"), tokenizer, args.max_length)
+    validation_dataset = FormlDataset(read_jsonl(args.data / "validation.jsonl"), tokenizer, args.max_length)
     training_args = TrainingArguments(
         output_dir=str(args.output / "checkpoints"),
         num_train_epochs=args.epochs,
@@ -175,6 +187,8 @@ def main() -> None:
         "validation_examples": len(validation_dataset),
         "epochs": args.epochs,
         "learning_rate": args.learning_rate,
+        "max_length": args.max_length,
+        "lora_rank": args.lora_rank,
         "gpu": torch.cuda.get_device_name(0),
         "train_metrics": result.metrics,
     }

@@ -29,10 +29,19 @@ FIELD_LIBRARY = [
     {"name": "department", "label": "Department", "type": "select", "options": ["Engineering", "Design", "Operations"]},
     {"name": "contact_method", "label": "Preferred contact method", "type": "radio", "options": ["Email", "Phone", "Text message"]},
     {"name": "interests", "label": "Topics of interest", "type": "checkbox", "options": ["Product news", "Events", "Research"]},
+    {"name": "dietary_preferences", "label": "Dietary preferences", "type": "checkbox", "options": ["Vegetarian", "Vegan", "Gluten-free", "No restrictions"]},
+    {"name": "message", "label": "Message", "type": "text", "rule": "required"},
+    {"name": "comments", "label": "Comments", "type": "text", "rule": "optional"},
+    {"name": "rating", "label": "Rating", "type": "select", "options": ["1", "2", "3", "4", "5"]},
+    {"name": "organization", "label": "Organization", "type": "text", "rule": "optional"},
+    {"name": "job_title", "label": "Job title", "type": "text", "rule": "optional"},
+    {"name": "attendance_mode", "label": "Attendance mode", "type": "radio", "options": ["In person", "Online"]},
+    {"name": "city", "label": "City", "type": "text", "rule": "optional"},
+    {"name": "country", "label": "Country", "type": "text", "rule": "optional"},
 ]
 
 RECIPES = [
-    ("event registration", "event", ["full_name", "email", "start_date", "interests"]),
+    ("event registration", "event", ["full_name", "email", "start_date", "interests", "dietary_preferences", "attendance_mode"]),
     ("job application", "job", ["full_name", "email", "phone", "age", "website"]),
     ("customer feedback", "feedback", ["full_name", "email", "department", "interests"]),
     ("appointment request", "appointment", ["full_name", "email", "phone", "start_date", "contact_method"]),
@@ -42,6 +51,10 @@ RECIPES = [
     ("contact request", "contact", ["full_name", "email", "contact_method"]),
     ("product order", "order", ["full_name", "email", "department", "consent"]),
     ("health intake", "health", ["full_name", "email", "age", "start_date", "consent"]),
+    ("support request", "support", ["full_name", "email", "department", "message"]),
+    ("product survey", "survey", ["email", "rating", "interests", "comments"]),
+    ("speaker proposal", "speaker", ["full_name", "email", "job_title", "organization", "website"]),
+    ("travel inquiry", "travel", ["full_name", "email", "city", "country", "start_date"]),
 ]
 
 PROMPT_FORMS = [
@@ -49,6 +62,15 @@ PROMPT_FORMS = [
     "I need a {kind} form that collects {fields} from {audience}.",
     "Build a Forml form for {audience}: {fields}. Make it a {kind} form.",
     "Generate a {kind} form. Ask {audience} for {fields}.",
+    "Make a {kind} for {audience} with {fields}.",
+    "{kind}: collect {fields}. This is for {audience}.",
+    "I want a {kind}. The form needs {fields} for {audience}.",
+]
+
+EDIT_PROMPT_FORMS = [
+    "Revise the Forml source below by adding {field}. Preserve every existing field and return the complete source.\n\nCurrent Forml source:\n{source}",
+    "Add {field} to this existing form. Keep the unrelated fields unchanged and return complete Forml only.\n\nCurrent Forml source:\n{source}",
+    "Update this form so it also collects {field}. Return the full revised source, not a patch.\n\nCurrent Forml source:\n{source}",
 ]
 
 AUDIENCES = ["new participants", "people applying online", "our customers", "event attendees", "students", "prospective volunteers", "visitors"]
@@ -91,6 +113,25 @@ COMPLEX_RECIPES = [
   }
 }''',
         "fields": ["dependent_count", "dependent_name"],
+        "features": ["form", "field", "type", "ui_block", "validation_block", "repeat_group", "IDENTIFIER", "NUMBER"],
+    },
+    {
+        "scenario": "book_repeat",
+        "prompts": [
+            "Create a dynamic book log. Ask how many books were read, then repeat fields for each book's name, release date, and author.",
+            "Build a form where the number of books controls repeated questions for title, publication date, and author.",
+            "Make a reading form that expands to the entered book count and collects each book's name, release date, and author.",
+            "Generate a book tracker with a count field and one repeated set of book name, release date, and author fields per book.",
+        ],
+        "source": '''form "Book Log" {
+  field book_count: integer ui { label: "Number of books read" } validate { required min: 1 max: 20 }
+  repeat count = book_count {
+    field book_name: text ui { label: "Book name" } validate { required }
+    field release_date: date ui { label: "Release date" }
+    field author: text ui { label: "Author" } validate { required }
+  }
+}''',
+        "fields": ["book_count", "book_name", "release_date", "author"],
         "features": ["form", "field", "type", "ui_block", "validation_block", "repeat_group", "IDENTIFIER", "NUMBER"],
     },
     {
@@ -270,7 +311,16 @@ def make_source(kind: str, fields: list[dict]) -> str:
 
 
 def clean_field_phrase(field: dict) -> str:
-    labels = {"email": "an email address", "age": "their age", "consent": "consent", "interests": "their topics of interest", "start_date": "a preferred date", "contact_method": "a preferred contact method", "full_name": "their full name", "phone": "a phone number", "website": "a website", "department": "a department"}
+    labels = {
+        "email": "an email address", "age": "their age", "consent": "consent",
+        "interests": "their topics of interest", "dietary_preferences": "their dietary preferences",
+        "message": "a required message", "comments": "comments", "rating": "a 1-to-5 rating",
+        "organization": "their organization", "job_title": "their job title",
+        "attendance_mode": "an attendance mode", "city": "a city", "country": "a country",
+        "start_date": "a preferred date", "contact_method": "a preferred contact method",
+        "full_name": "their full name", "phone": "a phone number", "website": "a website",
+        "department": "a department",
+    }
     return labels[field["name"]]
 
 
@@ -297,6 +347,7 @@ def request_example(rng: random.Random, index: int, forced_recipe: dict | None =
             "id": f"gen-{index:05d}", "task": "generate", "prompt": rng.choice(recipe["prompts"]),
             "completion": recipe["source"], "expected_fields": recipe["fields"],
             "scenario": recipe["scenario"], "grammar_features": recipe["features"],
+            "required_patterns": recipe.get("required_patterns", []),
         }
     kind, key, required_names = rng.choice(RECIPES)
     field_count = rng.randint(max(2, len(required_names) - 1), min(len(required_names) + 2, 6))
@@ -317,11 +368,47 @@ def request_example(rng: random.Random, index: int, forced_recipe: dict | None =
     return {"id": f"gen-{index:05d}", "task": "generate", "prompt": prompt, "completion": source, "expected_fields": selected_names, "scenario": key, "grammar_features": features}
 
 
+def edit_example(rng: random.Random, index: int) -> dict:
+    """Teach the adapter that an existing valid form is an edit baseline, not the answer."""
+    kind, key, required_names = rng.choice(RECIPES)
+    # Cycle through the whole field vocabulary so less common edits (such as
+    # dietary preferences) cannot disappear because of a lucky random seed.
+    target_name = FIELD_LIBRARY[index % len(FIELD_LIBRARY)]["name"]
+    remaining = [name for name in required_names if name != target_name]
+    # Include at least two existing fields so copying the baseline is an
+    # attractive failure mode the training target explicitly corrects.
+    existing_names = remaining[:rng.randint(2, len(remaining))]
+    existing_fields = [next(field for field in FIELD_LIBRARY if field["name"] == name) for name in existing_names]
+    target_field = next(field for field in FIELD_LIBRARY if field["name"] == target_name)
+    before = make_source(kind, existing_fields)
+    after = make_source(kind, existing_fields + [target_field])
+    prompt = rng.choice(EDIT_PROMPT_FORMS).format(field=clean_field_phrase(target_field), source=before)
+    features = ["form", "field", "type", "ui_block", "validation_block", "STRING", "IDENTIFIER"]
+    if "options" in target_field:
+        features.extend(["select_type", "option"])
+    return {
+        "id": f"edit-{index:05d}", "task": "edit", "prompt": prompt,
+        "completion": after, "expected_fields": existing_names + [target_name],
+        "scenario": key, "grammar_features": features,
+    }
+
+
 def repair_example(compiler: Path, rng: random.Random, index: int, clean: dict) -> dict | None:
     source = clean["completion"]
-    # A missing field colon is a small, reproducible syntax error. The compiler
-    # supplies the real diagnostic text used in the repair instruction.
-    broken = re.sub(r"(field\s+[A-Za-z_]\w*)\s*:", r"\1 ", source, count=1)
+    # Rotate through common model failures instead of teaching one memorized
+    # missing-colon repair. Every corrupted candidate is still accepted only
+    # when the real compiler rejects it and supplies diagnostics.
+    corruptions = [
+        lambda text: re.sub(r"(field\s+[A-Za-z_]\w*)\s*:", r"\1 ", text, count=1),
+        lambda text: re.sub(
+            r"(field\s+[A-Za-z_]\w*\s*:\s*)(text|integer|float|email|date|boolean|url|select|radio|checkbox|upload)",
+            r"\1string",
+            text,
+            count=1,
+        ),
+        lambda text: text.rsplit("}", 1)[0] if "}" in text else text,
+    ]
+    broken = corruptions[index % len(corruptions)](source)
     result = compiler_result(compiler, broken)
     if result.get("success"):
         return None
@@ -336,7 +423,7 @@ def repair_example(compiler: Path, rng: random.Random, index: int, clean: dict) 
         "Repair this Forml source so it passes the Formix compiler. Preserve the intended form and fields.\n\n"
         f"Compiler diagnostics:\n{diagnostic_text}\n\nForml source:\n{broken}"
     )
-    return {"id": f"repair-{index:05d}", "task": "repair", "prompt": prompt, "completion": source, "expected_fields": clean["expected_fields"], "scenario": clean["scenario"], "grammar_features": clean.get("grammar_features", [])}
+    return {"id": f"repair-{index:05d}", "task": "repair", "prompt": prompt, "completion": source, "expected_fields": clean["expected_fields"], "scenario": clean["scenario"], "grammar_features": clean.get("grammar_features", []), "required_patterns": clean.get("required_patterns", [])}
 
 
 def main() -> None:
@@ -387,6 +474,13 @@ def main() -> None:
         if repair and compiler_result(compiler, repair["completion"]).get("success"):
             repairs.append(repair)
 
+    edits = []
+    for idx in range(args.count):
+        edit = edit_example(rng, idx)
+        if not compiler_result(compiler, edit["completion"]).get("success"):
+            raise RuntimeError(f"Edit target is not accepted by the compiler: {edit['id']}")
+        edits.append(edit)
+
     # Split by scenario family to make the test set include unseen form types.
     scenario_names = sorted({item["scenario"] for item in examples})
     # Hold out whole recipe families, not random near-duplicate examples.
@@ -398,6 +492,8 @@ def main() -> None:
     # Repairs stay with their source scenario; no near-identical source leaks
     # from a generation train item into the held-out evaluation split.
     for item in repairs:
+        (test if item["scenario"] in heldout else train).append(item)
+    for item in edits:
         (test if item["scenario"] in heldout else train).append(item)
     rng.shuffle(train)
     rng.shuffle(test)
@@ -413,7 +509,7 @@ def main() -> None:
     undefined_features = sorted(set(grammar_coverage) - grammar_rules)
     if undefined_features:
         raise RuntimeError(f"Dataset features are not productions in the canonical EBNF: {undefined_features}")
-    summary = {"grammar_file": str(grammar), "grammar_sha256": hashlib.sha256(grammar_text.encode("utf-8")).hexdigest(), "generation_examples": len(examples), "repair_examples": len(repairs), "train": len(train), "validation": len(validation), "test": len(test), "heldout_scenarios": sorted(heldout), "grammar_features_in_dataset": grammar_coverage, "seed": args.seed}
+    summary = {"grammar_file": str(grammar), "grammar_sha256": hashlib.sha256(grammar_text.encode("utf-8")).hexdigest(), "generation_examples": len(examples), "repair_examples": len(repairs), "edit_examples": len(edits), "train": len(train), "validation": len(validation), "test": len(test), "heldout_scenarios": sorted(heldout), "grammar_features_in_dataset": grammar_coverage, "seed": args.seed}
     (args.output / "dataset_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))
 

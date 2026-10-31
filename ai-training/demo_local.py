@@ -16,7 +16,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+FALLBACK_BASE_MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct"
 SYSTEM_PROMPT = (
     "You write Forml, the Formix form DSL. Return only complete Forml source code. "
     "Use the supplied request and, when present, compiler diagnostics. "
@@ -62,7 +62,9 @@ def load_model(adapter_dir: Path):
     if not torch.cuda.is_available():
         raise SystemExit("CUDA is unavailable. Install a CUDA-enabled PyTorch build and check `nvidia-smi`.")
 
-    print(f"Loading {BASE_MODEL} in 4-bit on {torch.cuda.get_device_name(0)} …", flush=True)
+    adapter_config = json.loads((adapter_dir / "adapter_config.json").read_text(encoding="utf-8"))
+    base_model = adapter_config.get("base_model_name_or_path") or FALLBACK_BASE_MODEL
+    print(f"Loading {base_model} in 4-bit on {torch.cuda.get_device_name(0)} …", flush=True)
     tokenizer = AutoTokenizer.from_pretrained(adapter_dir, use_fast=True)
     tokenizer.padding_side = "left"
     if tokenizer.pad_token_id is None:
@@ -75,7 +77,7 @@ def load_model(adapter_dir: Path):
         bnb_4bit_compute_dtype=torch.float16,
     )
     model = AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL,
+        base_model,
         quantization_config=quantization,
         device_map="auto",
         dtype=torch.float16,
@@ -92,9 +94,9 @@ def load_model(adapter_dir: Path):
     return model, tokenizer
 
 
-def generate(model, tokenizer, user_prompt: str, max_new_tokens: int) -> str:
+def generate(model, tokenizer, user_prompt: str, max_new_tokens: int, system_prompt: str = SYSTEM_PROMPT) -> str:
     conversation = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
     inputs = tokenizer.apply_chat_template(

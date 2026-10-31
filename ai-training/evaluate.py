@@ -62,6 +62,17 @@ def clean_output(text: str) -> str:
     return text.strip()
 
 
+def normalized_source(source: str) -> str:
+    return re.sub(r"\s+", "", source)
+
+
+def edit_baseline(prompt: str) -> str | None:
+    marker = "Current Forml source:"
+    if marker not in prompt:
+        return None
+    return prompt.rsplit(marker, 1)[1].strip()
+
+
 def load_model(model_name: str, adapter: Path | None):
     tokenizer = AutoTokenizer.from_pretrained(str(adapter) if adapter else model_name, use_fast=True)
     if tokenizer.pad_token_id is None:
@@ -181,10 +192,19 @@ def run_suite(
             attempts[index] += 1
         print(f"{label}: repair {attempt_no} checked {len(failed)} examples", flush=True)
 
-    for row, source, result, was_initially_valid, repair_turns in zip(rows, sources, results, initially_valid, attempts):
+    for record_index, (row, source, result, was_initially_valid, repair_turns) in enumerate(
+        zip(rows, sources, results, initially_valid, attempts),
+        start=1,
+    ):
         present = set(re.findall(r"\bfield\s+([A-Za-z_]\w*)\s*:", source))
         expected = set(row.get("expected_fields", []))
         coverage = len(present & expected) / len(expected) if expected else 1.0
+        patterns = row.get("required_patterns", [])
+        matched_patterns = sum(bool(re.search(pattern, source, flags=re.MULTILINE)) for pattern in patterns)
+        pattern_coverage = matched_patterns / len(patterns) if patterns else 1.0
+        baseline = edit_baseline(row["prompt"]) if row.get("task") == "edit" else None
+        unchanged_edit = baseline is not None and normalized_source(source) == normalized_source(baseline)
+        intent_success = bool(result.get("success")) and coverage == 1.0 and pattern_coverage == 1.0 and not unchanged_edit
         records.append({
             "id": row["id"],
             "task": row["task"],
@@ -193,12 +213,15 @@ def run_suite(
             "valid_after_repair": bool(result.get("success")),
             "repair_turns": repair_turns,
             "field_coverage": coverage,
+            "required_pattern_coverage": pattern_coverage,
+            "unchanged_edit": unchanged_edit,
+            "intent_success": intent_success,
             "final_diagnostics": result.get("diagnostics", []),
             "generated_source": source,
         })
-        if index % 5 == 0 or index == len(rows):
+        if record_index % 5 == 0 or record_index == len(rows):
             elapsed = time.monotonic() - started
-            print(f"{label}: {index}/{len(rows)} examples in {elapsed / 60:.1f} min", flush=True)
+            print(f"{label}: {record_index}/{len(rows)} examples in {elapsed / 60:.1f} min", flush=True)
     del model, tokenizer
     gc.collect()
     torch.cuda.empty_cache()
@@ -208,6 +231,12 @@ def run_suite(
         "first_pass_compile_rate": sum(r["initial_valid"] for r in records) / count,
         "compile_rate_after_repairs": sum(r["valid_after_repair"] for r in records) / count,
         "mean_field_coverage": sum(r["field_coverage"] for r in records) / count,
+        "mean_required_pattern_coverage": sum(r["required_pattern_coverage"] for r in records) / count,
+        "intent_success_rate": sum(r["intent_success"] for r in records) / count,
+        "unchanged_edit_rate": (
+            sum(r["unchanged_edit"] for r in records if r["task"] == "edit")
+            / max(1, sum(r["task"] == "edit" for r in records))
+        ),
         "repair_success_rate_on_invalid": (
             sum(r["valid_after_repair"] and not r["initial_valid"] for r in records)
             / max(1, sum(not r["initial_valid"] for r in records))
@@ -224,10 +253,11 @@ def main() -> None:
     parser.add_argument("--model", default=BASE_MODEL)
     parser.add_argument("--output", type=Path, default=Path("ai-training/evaluation.json"))
     parser.add_argument("--base-report", type=Path, help="Reuse base_model_results from a compatible earlier evaluation report")
+    parser.add_argument("--challenge", type=Path, default=Path("ai-training/challenge.jsonl"), help="Independent human-written prompts appended to the sampled held-out set")
     parser.add_argument("--max-repairs", type=int, default=2)
     parser.add_argument("--limit", type=int, default=120, help="Examples per model; use 0 for the full test set")
-    parser.add_argument("--max-new-tokens", type=int, default=350)
-    parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--max-new-tokens", type=int, default=700)
+    parser.add_argument("--batch-size", type=int, default=4)
     args = parser.parse_args()
     if not torch.cuda.is_available():
         raise SystemExit("A CUDA GPU is required for model evaluation.")
@@ -243,6 +273,17 @@ def main() -> None:
         # Keep the quick evaluation representative without depending on the
         # shuffled JSONL order or taking only the first recipe family.
         rows = random.Random(42).sample(rows, args.limit)
+    challenge_count = 0
+    if args.challenge and args.challenge.is_file():
+        challenges = read_jsonl(args.challenge)
+        for row in challenges:
+            reference = row.get("completion")
+            if reference and not compile_source(args.compiler.resolve(), reference).get("success"):
+                raise SystemExit(f"Challenge reference does not compile: {row.get('id', '<unknown>')}")
+        known_ids = {row["id"] for row in rows}
+        challenges = [row for row in challenges if row["id"] not in known_ids]
+        rows.extend(challenges)
+        challenge_count = len(challenges)
     base_results = None
     if args.base_report:
         previous = json.loads(args.base_report.read_text(encoding="utf-8"))
@@ -270,6 +311,7 @@ def main() -> None:
         "batch_size": args.batch_size,
         "precision": "fp16",
         "validation_authority": "native Formix Forml compiler; no hosted AI judge",
+        "independent_challenge_examples": challenge_count,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     report["base_model_results"] = base_results or run_suite(
