@@ -1428,18 +1428,79 @@ def _compile_with_native_forml(source: str, compiler: Path) -> dict:
             source_path.unlink(missing_ok=True)
 
 
+def _flatten_ast_fields(node) -> list[dict]:
+    """Collect fields from every statement container in a compiled Forml AST."""
+    if isinstance(node, list):
+        return [field for item in node for field in _flatten_ast_fields(item)]
+    if not isinstance(node, dict):
+        return []
+    fields = [node] if node.get("type") == "Field" else []
+    for key in ("statements", "pages", "then", "else", "fields"):
+        fields.extend(_flatten_ast_fields(node.get(key, [])))
+    return fields
+
+
+def _required_concepts(request: str) -> list[str]:
+    """Extract only explicit `required <name> field` instructions.
+
+    ponytail: this intentionally handles literal required-field wording, not
+    arbitrary natural-language intent. Broaden it with a structured intent
+    model if prompts outside this shape become common.
+    """
+    concepts: list[str] = []
+    for match in re.finditer(
+        r"\brequired\s+(.+?)(?=\s+fields?\b|[,.;]|$)",
+        request.lower(),
+    ):
+        phrase = re.sub(r"\b(?:a|an|the)\b", " ", match.group(1))
+        concepts.extend(part.strip(" -") for part in re.split(r"\s+and\s+", phrase) if part.strip(" -"))
+    return list(dict.fromkeys(concepts))
+
+
+def _intent_diagnostics(request: str, ast: dict | None) -> list[dict]:
+    """Check high-confidence prompt requirements against the compiled AST."""
+    fields = _flatten_ast_fields(ast or {})
+    normalized = []
+    for field in fields:
+        label = str((field.get("ui") or {}).get("label", ""))
+        names = " ".join((str(field.get("name", "")).replace("_", " "), label)).lower()
+        normalized.append((field, set(re.findall(r"[a-z0-9]+", names))))
+
+    diagnostics: list[dict] = []
+    for concept in _required_concepts(request):
+        words = set(re.findall(r"[a-z0-9]+", concept))
+        match = next((field for field, field_words in normalized if words and words <= field_words), None)
+        if match is None:
+            continue  # Field coverage remains the model evaluator's responsibility.
+        validation = match.get("validation") or {}
+        upload = match.get("upload") or {}
+        if validation.get("required") is True or upload.get("required") is True:
+            continue
+        diagnostics.append({
+            "line": int((match.get("location") or {}).get("line", 0)),
+            "column": int((match.get("location") or {}).get("column", 0)),
+            "severity": "error",
+            "message": (
+                f"Intent mismatch: requested field '{concept}' exists but is not required. "
+                "Add validate { required } without changing the requested fields."
+            ),
+        })
+    return diagnostics
+
+
 async def _verify_and_repair_local_source(req: AiChatRequest, source: str, compiler: Path) -> str:
     """Return only native-compiler-accepted model output, repairing at most twice."""
     for attempt in range(3):
         result = await asyncio.to_thread(_compile_with_native_forml, source, compiler)
-        if result.get("success"):
+        intent_errors = _intent_diagnostics(req.user_message, result.get("ast")) if result.get("success") else []
+        if result.get("success") and not intent_errors:
             return source
         if attempt == 2:
             messages = "; ".join(
                 str(item.get("message", "compiler error"))
-                for item in result.get("diagnostics", [])[:3]
+                for item in [*result.get("diagnostics", []), *intent_errors][:3]
             )
-            raise RuntimeError(f"The generated Forml still failed native compiler verification: {messages}")
+            raise RuntimeError(f"The generated Forml still failed verification: {messages}")
         errors = [
             AiDiagnostic(
                 line=int(item.get("line", 0)),
@@ -1447,7 +1508,7 @@ async def _verify_and_repair_local_source(req: AiChatRequest, source: str, compi
                 severity="error",
                 message=str(item.get("message", "compiler error")),
             )
-            for item in result.get("diagnostics", [])
+            for item in [*result.get("diagnostics", []), *intent_errors]
             if item.get("severity", "error") == "error"
         ]
         repair_req = req.model_copy(update={

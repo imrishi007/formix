@@ -449,6 +449,51 @@ def test_finetuned_edit_retry_detects_a_reformatted_echo():
     )
 
 
+def test_intent_guard_detects_an_explicit_required_field_omission():
+    ast = {
+        "type": "Form",
+        "statements": [{
+            "type": "RepeatGroup",
+            "fields": [
+                {
+                    "type": "Field",
+                    "name": "dependent_name",
+                    "ui": {"label": "Dependent name"},
+                    "validation": {"required": True},
+                },
+                {
+                    "type": "Field",
+                    "name": "dependent_age",
+                    "ui": {"label": "Age"},
+                    "validation": {"min": 0},
+                    "location": {"line": 8, "column": 5},
+                },
+            ],
+        }],
+    }
+    errors = ai_module._intent_diagnostics(
+        "Repeat a required dependent name and age field for each dependent.",
+        ast,
+    )
+    assert len(errors) == 1
+    assert "age" in errors[0]["message"]
+    assert errors[0]["line"] == 8
+
+
+def test_intent_guard_accepts_explicitly_required_fields():
+    ast = {
+        "type": "Form",
+        "statements": [
+            {"type": "Field", "name": "quantity", "validation": {"required": True}},
+            {"type": "Field", "name": "unit_price", "validation": {"required": True}},
+        ],
+    }
+    assert ai_module._intent_diagnostics(
+        "Create a required quantity field and a required unit price field.",
+        ast,
+    ) == []
+
+
 # ── Provider failover (the fix for the persistent Gemini 429) ─────────────────
 
 def test_all_configs_enumerates_the_failover_chain(monkeypatch):
