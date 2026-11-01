@@ -288,7 +288,7 @@ const FIELD_LIBRARY: Record<string, FieldSpec> = {
   address: { name: "address", type: "text", label: "Address" },
   city: { name: "city", type: "text", label: "City" },
   country: { name: "country", type: "text", label: "Country" },
-  website: { name: "website", type: "url", label: "Website", placeholder: "https://" },
+  website: { name: "website", type: "url", label: "Website", placeholder: "example.com" },
   jobTitle: { name: "jobTitle", type: "text", label: "Job Title" },
   department: { name: "department", type: "select", label: "Department", options: ["Engineering", "Design", "Sales", "Support", "Other"] },
   attendees: { name: "attendees", type: "integer", label: "Number of Attendees" },

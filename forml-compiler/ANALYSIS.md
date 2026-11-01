@@ -10,7 +10,7 @@
   - Compile from `forml-compiler/` with:
 
 ```bash
-g++ -std=c++17 -Wall -Wextra -Wshadow -Wpedantic -I include -I third_party src/token.cpp src/diagnostics.cpp src/lexer.cpp src/ast.cpp src/parser.cpp tests/test_parser.cpp -o build/test_parser.exe
+g++ -std=c++20 -Wall -Wextra -Wshadow -Wpedantic -I include -I third_party src/token.cpp src/diagnostics.cpp src/lexer.cpp src/ast.cpp src/parser.cpp tests/test_parser.cpp -o build/test_parser.exe
 ```
 
   - Run from `forml-compiler/build/`:
@@ -38,7 +38,7 @@ test_parser.exe
   - Compile from `forml-compiler/` with:
 
 ```bash
-g++ -std=c++17 -Wall -Wextra -Wshadow -Wpedantic -I include -I third_party src/token.cpp src/diagnostics.cpp src/lexer.cpp src/ast.cpp src/parser.cpp src/semantic_analyzer.cpp tests/test_semantic.cpp -o build/test_semantic.exe
+g++ -std=c++20 -Wall -Wextra -Wshadow -Wpedantic -I include -I third_party src/token.cpp src/diagnostics.cpp src/lexer.cpp src/ast.cpp src/parser.cpp src/semantic_analyzer.cpp tests/test_semantic.cpp -o build/test_semantic.exe
 ```
 
   - Run from `forml-compiler/build/`:

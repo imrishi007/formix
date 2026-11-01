@@ -206,7 +206,7 @@ The compiler is hand-written C++20 (lexer + recursive-descent parser + semantic 
 
 ```bash
 # From forml-compiler/
-g++ -std=c++17 -I include -I third_party \
+g++ -std=c++20 -I include -I third_party \
   src/token.cpp src/diagnostics.cpp src/lexer.cpp src/ast.cpp \
   src/parser.cpp src/semantic_analyzer.cpp \
   tests/test_parser.cpp -o build/test_parser.exe

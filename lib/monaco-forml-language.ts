@@ -31,17 +31,17 @@ type IModel = {
 
 // ── Hover docs ───────────────────────────────────────────────────────────────
 
-const HOVER_DOCS: Record<string, string> = {
+export const HOVER_DOCS: Record<string, string> = {
   // ── Structure ─────────────────────────────────────────────────────────────
   form:    "**`form`** `\"<name>\" { … }`\n\nRoot declaration. Every FormL file must start with exactly one `form` block.",
   field:   "**`field`** `<name> : <type> { … }`\n\nDeclares a single form input. Attach `ui { }`, `validate { }`, and `on <event> { }` sub-blocks.",
   page:    "**`page`** `\"<name>\" { … }`\n\nGroups fields into a logical page. Rendered as a separate step in multi-page flows.",
   section: "**`section`** `\"<name>\" { … }`\n\nVisual grouping inside a page — renders a titled divider above its fields.",
-  group:   "**`group`** `<name> { … }`\n\nDefines a named group of fields that can be `use`d or `repeat`ed.",
+  group:   "**`group`** `<name> { … }`\n\nDefines a named group of fields that can be inserted with `use`.",
   use:     "**`use`** `<groupName>`\n\nInlines the fields from a `group` definition at this point.",
-  var:     "**`var`** `<name> = <literal>`\n\nDeclares a form-scope constant. Currently limited to number / string literals.",
-  repeat:  "**`repeat`** `<groupName> count: <fieldRef>`\n\nDynamically renders copies of a group based on the value of a numeric field.",
-  count:   "**`count`**: `<fieldRef>`\n\nInside `repeat` — names the numeric field whose value controls how many copies appear.",
+  var:     "**`var`** `<name> = <literal> ;`\n\nDeclares a form-scope constant. The terminating semicolon is required.",
+  repeat:  "**`repeat count =`** `<fieldRef> { field … }`\n\nRepeats its direct field declarations using an integer field as the item count.",
+  count:   "**`count =`** `<fieldRef>`\n\nInside `repeat` — names the integer field whose value controls how many copies appear.",
   if:      "**`if`** `(<condition>) { … } else { … }`\n\nConditionally shows or hides a block of fields.",
   else:    "**`else`** `{ … }`\n\nThe branch taken when the `if` condition is false.",
   on:      "**`on`** `<event> { … }`\n\nAttaches a trigger to a field. Supported events: `load`, `change`, `blur`.",
@@ -53,7 +53,7 @@ const HOVER_DOCS: Record<string, string> = {
   email:    "**`email`** — Text input with built-in e-mail format validation (`type=\"email\"`).",
   date:     "**`date`** — Date picker rendered as `<input type=\"date\">`.",
   boolean:  "**`boolean`** — Single checkbox, value is `\"true\"` or `\"false\"`.",
-  url:      "**`url`** — URL input with built-in format validation.",
+  url:      "**`url`** — Website input. Accepts `example.com` or a full `https://example.com` address.",
   select:   "**`select`** `{ option \"…\" … }`\n\nDropdown selection. List options inside the field block.",
   radio:    "**`radio`** `{ option \"…\" … }`\n\nRadio-button group. List options inside the field block.",
   checkbox: "**`checkbox`** `{ option \"…\" … }`\n\nMulti-select checkboxes. List options inside the field block.",
@@ -84,15 +84,15 @@ const HOVER_DOCS: Record<string, string> = {
   maxFiles:  "**`maxFiles`**: `<n>`\n\nMaximum number of files that may be selected. Upload fields only, used with `multiple`.",
 
   // ── Actions ───────────────────────────────────────────────────────────────
-  action:   "**`action`** `{ endpoint: \"…\" method: POST }`\n\nForm-level action block — defines where the form data is submitted.",
+  action:   "**`action submit`** `{ endpoint: \"…\" method: POST }`\n\nForm-level action block — defines where the form data is submitted.",
   submit:   "**`submit`**\n\nTrigger action: submits the form immediately.",
   endpoint: "**`endpoint`**: `\"<url>\"`\n\nThe URL the form `action` POSTs to.",
   method:   "**`method`**: `POST | PUT | PATCH`\n\nHTTP verb for the form action.",
   option:   "**`option`** `\"<value>\"`\n\nAdds a choice to a `select`, `radio`, or `checkbox` field.",
 
   // ── Compute ───────────────────────────────────────────────────────────────
-  compute: "**`compute`** `<name> from <expr>`\n\nDerives a read-only field value from an arithmetic expression over other fields.",
-  from:    "**`from`** `<expr>`\n\nThe arithmetic expression that produces the computed value.",
+  compute: "**`compute =`** `<expr>`\n\nPlaced after a numeric field declaration to derive its read-only value, e.g. `field total: float compute = quantity * price`.",
+  from:    "**`from url`** `\"<endpoint>\" map { … }`\n\nLoads options for a choice field from a dynamic source.",
 
   // ── Layout ───────────────────────────────────────────────────────────────
   row:    "**`row`** `{ … }`\n\nArranges its child fields in a horizontal two-column grid.",
@@ -104,11 +104,11 @@ const HOVER_DOCS: Record<string, string> = {
   blur:   "**`blur`**\n\nFires when the user leaves the field (focus-out).",
 
   // ── Trigger actions ───────────────────────────────────────────────────────
-  hide:     "**`hide`** `<fieldName>`\n\nHides a field (sets it invisible and clears its value).",
-  show:     "**`show`** `<fieldName>`\n\nMakes a previously hidden field visible.",
-  clear:    "**`clear`** `<fieldName>`\n\nResets the value of a field to empty.",
-  set:      "**`set`** `<fieldName> = <value>`\n\nProgrammatically sets a field's value.",
-  navigate: "**`navigate`** `<pageName>`\n\nJumps to a named page in a multi-page form.",
+  hide:     "**`hide(<fieldName>)`**\n\nHides a field (sets it invisible and clears its value).",
+  show:     "**`show(<fieldName>)`**\n\nMakes a previously hidden field visible.",
+  clear:    "**`clear(<fieldName>)`**\n\nResets the value of a field to empty.",
+  set:      "**`set(<fieldName>, <value>)`**\n\nProgrammatically sets a field's value.",
+  navigate: "**`navigate(\"<url>\")`**\n\nNavigates to a URL.",
 
   // ── Misc ─────────────────────────────────────────────────────────────────
   default: "**`default`**: `<value>`\n\nInitial value for the field.",
@@ -117,7 +117,7 @@ const HOVER_DOCS: Record<string, string> = {
 
 // ── Snippet bodies (with tab-stops $1, $2, …) ───────────────────────────────
 
-const SNIPPETS: Record<string, { insert: string; doc: string }> = {
+export const SNIPPETS: Record<string, { insert: string; doc: string }> = {
   "form":   {
     insert: 'form "${1:FormName}" {\n  $0\n}',
     doc:    "Scaffold a new form block",
@@ -183,8 +183,8 @@ const SNIPPETS: Record<string, { insert: string; doc: string }> = {
     doc:    "Group definition",
   },
   "repeat": {
-    insert: 'repeat ${1:groupName} count: ${2:countField}',
-    doc:    "Repeat a group N times",
+    insert: 'repeat count = ${1:countField} {\n  field ${2:item} : text\n    ui { label: "${3:Item}" }\n}',
+    doc:    "Repeat direct fields N times",
   },
   "if": {
     insert: 'if (${1:fieldName} == "${2:value}") {\n  $0\n}',
@@ -195,19 +195,19 @@ const SNIPPETS: Record<string, { insert: string; doc: string }> = {
     doc:    "Conditional with else branch",
   },
   "on change": {
-    insert: 'on change {\n  ${1:hide} ${2:fieldName}\n}',
+    insert: 'on change {\n  ${1:hide}(${2:fieldName})\n}',
     doc:    "onChange trigger",
   },
   "on blur": {
-    insert: 'on blur {\n  ${1:set} ${2:fieldName} = "${3:value}"\n}',
+    insert: 'on blur {\n  ${1:set}(${2:fieldName}, "${3:value}")\n}',
     doc:    "onBlur trigger",
   },
   "on load": {
-    insert: 'on load {\n  ${1:show} ${2:fieldName}\n}',
+    insert: 'on load {\n  ${1:show}(${2:fieldName})\n}',
     doc:    "onLoad trigger",
   },
   "action submit": {
-    insert: 'action {\n  endpoint: "${1:/api/submit}"\n  method: ${2:POST}\n}',
+    insert: 'action submit {\n  endpoint: "${1:/api/submit}"\n  method: ${2:POST}\n}',
     doc:    "Form submit action",
   },
   "validate": {
@@ -223,8 +223,8 @@ const SNIPPETS: Record<string, { insert: string; doc: string }> = {
     doc:    "Horizontal two-column layout",
   },
   "compute": {
-    insert: 'compute ${1:total} from ${2:a + b}',
-    doc:    "Computed field",
+    insert: 'field ${1:total} : float compute = ${2:a + b}',
+    doc:    "Read-only computed numeric field",
   },
 };
 
