@@ -58,3 +58,10 @@ def test_dynamic_repeat_normalizes_a_fixed_count_var():
     assert 'field book_count: integer ui { label: "Number of books" }' in normalized
     assert "validate { required min: 1 max: 20 }" in normalized
     assert "var book_count" not in normalized
+
+
+def test_conditional_normalizer_removes_foreign_then_keyword():
+    source = 'if age >= 18 then { field occupation: text } else { field guardian: text }'
+    normalized = normalize_known_dialects("Create an age conditional", source)
+    assert "if age >= 18 {" in normalized
+    assert " then " not in normalized

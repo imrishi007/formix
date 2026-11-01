@@ -5,6 +5,14 @@ import re
 
 def normalize_known_dialects(request: str, source: str) -> str:
     """Normalize a narrow compiler-valid shape that cannot satisfy the request."""
+    # General code models may borrow "then" from other DSLs. Forml opens the
+    # conditional body immediately after the condition.
+    source = re.sub(
+        r"(\bif\s+[^{}\n]+?)\s+then\s*\{",
+        r"\1 {",
+        source,
+        flags=re.IGNORECASE,
+    )
     if not re.search(
         r"\b(how many|number|count|entered|ask(?:ing)?|input)\b",
         request,
@@ -92,5 +100,10 @@ def grammar_hints(diagnostics: list[dict]) -> list[str]:
         hints.extend([
             'Canonical user-controlled count: field book_count: integer ui { label: "Number of books" } validate { required min: 1 max: 20 }',
             "Use that integer field in repeat count = book_count; never use a fixed var for a count the respondent enters.",
+        ])
+    if "unexpected token 'then'" in messages or "expected '{' after condition" in messages:
+        hints.extend([
+            "Canonical conditional: if age >= 18 { field occupation: text } else { field guardian_name: text }",
+            "Forml has no then keyword; open the block directly after the condition.",
         ])
     return hints
