@@ -18,6 +18,7 @@ import { AlertCircle, Zap } from "lucide-react";
 import { RenderStatements, type ASTNode } from "@/components/form-renderer";
 import { useFormValidation } from "@/hooks/use-form-validation";
 import type { CompilePhase } from "@/components/workspace/top-bar";
+import { numericVariables } from "@/lib/forml-runtime";
 
 export function PreviewPane({
   ast,
@@ -71,6 +72,7 @@ export function PreviewPane({
   );
   const formTitle = (ast?.name as string) ?? fallbackTitle;
   const action = ast?.action as ASTNode | undefined;
+  const variables = useMemo(() => numericVariables(ast), [ast]);
 
   return (
     <div className="flex h-full min-h-0 flex-col border-l border-(--border-hairline) bg-(--bg-base)">
@@ -138,6 +140,7 @@ export function PreviewPane({
                       touched={touched}
                       files={files}
                       onFileChange={handleFileChange}
+                      variables={variables}
                     />
                   ) : (
                     <p className="text-sm text-muted-foreground">Parsing form…</p>

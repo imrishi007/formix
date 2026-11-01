@@ -12,6 +12,7 @@ import {
 import { getForm, submitForm, submitFormWithFiles, type PublicFormResponse } from "@/lib/api";
 import { useFormValidation } from "@/hooks/use-form-validation";
 import { formHasFileFields } from "@/lib/forml-validate";
+import { deriveComputedValues, numericVariables } from "@/lib/forml-runtime";
 
 type SubmitState = "idle" | "submitting" | "success" | "redirecting" | "error";
 
@@ -73,11 +74,20 @@ export function FormRenderer({ formId }: { formId: string }) {
     return [...pageStmts, ...stmts];
   }, [schema]);
 
+  const variables = useMemo(
+    () => numericVariables(schema?.compiled_schema ?? null),
+    [schema],
+  );
+  const effectiveValues = useMemo(() => ({
+    ...formValues,
+    ...deriveComputedValues(allStatements, formValues, variables),
+  }), [allStatements, formValues, variables]);
+
   // ── Validation ────────────────────────────────────────────────────────────
   // Starts clean — nothing is pre-touched, so a freshly opened (or reopened)
   // form never shows errors until the respondent actually interacts with it.
   const { errors, touched, markTouched, validateAll, resetValidation } =
-    useFormValidation(allStatements, formValues, files);
+    useFormValidation(allStatements, effectiveValues, files);
 
   // Chained multi-form flows (Form.next_form_id) reuse this same component
   // instance across navigations — reset all per-form state so the next form
@@ -110,8 +120,8 @@ export function FormRenderer({ formId }: { formId: string }) {
     setSubmitError(null);
     try {
       const result = hasFileFields
-        ? await submitFormWithFiles(formId, formValues, files, sessionId ?? undefined)
-        : await submitForm(formId, formValues, sessionId ?? undefined);
+        ? await submitFormWithFiles(formId, effectiveValues, files, sessionId ?? undefined)
+        : await submitForm(formId, effectiveValues, sessionId ?? undefined);
       setSubmissionId(result.submission_id);
 
       if (result.next_form_id) {
@@ -129,7 +139,7 @@ export function FormRenderer({ formId }: { formId: string }) {
           : "Submission failed — please try again.",
       );
     }
-  }, [schema, formId, formValues, files, hasFileFields, sessionId, submitState, validateAll, router]);
+  }, [schema, formId, effectiveValues, files, hasFileFields, sessionId, submitState, validateAll, router]);
 
   const formTitle = schema?.compiled_schema
     ? ((schema.compiled_schema.name as string) ?? schema.title)
@@ -279,13 +289,14 @@ export function FormRenderer({ formId }: { formId: string }) {
               {allStatements.length > 0 ? (
                 <RenderStatements
                   stmts={allStatements}
-                  values={formValues}
+                  values={effectiveValues}
                   onChange={handleChange}
                   onBlur={markTouched}
                   errors={hasTouched ? errors : {}}
                   touched={touched}
                   files={files}
                   onFileChange={handleFileChange}
+                  variables={variables}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">

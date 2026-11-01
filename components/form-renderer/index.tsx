@@ -18,6 +18,7 @@ import { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, Paperclip, X } from "lucide-react";
 import { acceptToHtmlAttr, formatBytes } from "@/lib/forml-validate";
+import { deriveComputedValues } from "@/lib/forml-runtime";
 
 // ── Shared type ───────────────────────────────────────────────────────────────
 
@@ -201,16 +202,19 @@ export function DynamicField({
   const options   = (field.options as string[]) ?? [];
   const ui        = field.ui as ASTNode | undefined;
   const upload    = field.upload as ASTNode | undefined;
+  const validation = field.validation as ASTNode | undefined;
   const label     = (ui?.label as string) ?? (field.name as string);
   const placeholder = (ui?.placeholder as string) ?? "";
   const helpText  = (ui?.helpText as string) ?? "";
   const value     = values[nameKey] ?? "";
   const isFileField = fieldType === "upload";
+  const isComputed = !!field.compute;
 
   return (
     <div className="space-y-1.5">
       <label className="flex items-baseline gap-1.5 text-sm font-semibold text-foreground">
         {label}
+        {validation?.required === true && <span className="text-destructive" aria-hidden="true">*</span>}
         {repeatIndex !== undefined && (
           <span className="text-xs font-normal text-muted-foreground">
             item {repeatIndex + 1}
@@ -304,11 +308,13 @@ export function DynamicField({
         <input
           type="number"
           value={value}
-          onChange={(e) => onChange(nameKey, e.target.value)}
+          onChange={(e) => !isComputed && onChange(nameKey, e.target.value)}
           onBlur={() => onBlur?.(nameKey)}
           placeholder={placeholder || "0"}
+          readOnly={isComputed}
+          aria-readonly={isComputed}
           aria-invalid={showError}
-          className={inputCls}
+          className={`${inputCls} ${isComputed ? "cursor-default bg-muted/60 font-mono" : ""}`}
         />
       )}
 
@@ -360,6 +366,7 @@ export function RenderStatements({
   depth = 0,
   files,
   onFileChange,
+  variables = {},
 }: {
   stmts: ASTNode[];
   values: Record<string, string>;
@@ -371,7 +378,12 @@ export function RenderStatements({
   /** Selected files for upload fields, keyed the same way as `values`. */
   files?: Record<string, File[]>;
   onFileChange?: (key: string, files: File[]) => void;
+  variables?: Record<string, number>;
 }) {
+  const computedValues = deriveComputedValues(stmts, values, variables);
+  const runtimeValues = Object.keys(computedValues).length > 0
+    ? { ...values, ...computedValues }
+    : values;
   return (
     <>
       {stmts.map((stmt, i) => {
@@ -385,7 +397,7 @@ export function RenderStatements({
               key={key}
               field={stmt}
               nameKey={fieldName}
-              values={values}
+              values={runtimeValues}
               onChange={onChange}
               onBlur={onBlur}
               error={errors?.[fieldName]}
@@ -398,7 +410,7 @@ export function RenderStatements({
 
         if (type === "RepeatGroup") {
           const countRef = stmt.countRef as string;
-          const rawCount = parseInt(values[countRef] ?? "0", 10);
+          const rawCount = parseInt(runtimeValues[countRef] ?? "0", 10);
           const count    = Math.min(Math.max(isNaN(rawCount) ? 0 : rawCount, 0), 20);
           const fields   = (stmt.fields as ASTNode[]) ?? [];
 
@@ -443,7 +455,7 @@ export function RenderStatements({
                             key={`${key}-${idx}-f${fi}`}
                             field={f}
                             nameKey={nk}
-                            values={values}
+                            values={runtimeValues}
                             onChange={onChange}
                             onBlur={onBlur}
                             repeatIndex={idx}
@@ -468,7 +480,7 @@ export function RenderStatements({
           const elseStmts  = (stmt.else as ASTNode[])  ?? [];
 
           let condMet = false;
-          try { condMet = evalCondition(condition, values); } catch { /* ignore */ }
+          try { condMet = evalCondition(condition, runtimeValues); } catch { /* ignore */ }
 
           const branch = condMet ? thenStmts : elseStmts;
           if (branch.length === 0) return null;
@@ -489,7 +501,7 @@ export function RenderStatements({
                   </p>
                   <RenderStatements
                     stmts={branch}
-                    values={values}
+                    values={runtimeValues}
                     onChange={onChange}
                     onBlur={onBlur}
                     errors={errors}
@@ -497,6 +509,7 @@ export function RenderStatements({
                     depth={depth + 1}
                     files={files}
                     onFileChange={onFileChange}
+                    variables={variables}
                   />
                 </div>
               </motion.div>
@@ -517,7 +530,7 @@ export function RenderStatements({
               </div>
               <RenderStatements
                 stmts={sectionStmts}
-                values={values}
+                values={runtimeValues}
                 onChange={onChange}
                 onBlur={onBlur}
                 errors={errors}
@@ -525,6 +538,7 @@ export function RenderStatements({
                 depth={depth + 1}
                 files={files}
                 onFileChange={onFileChange}
+                variables={variables}
               />
             </div>
           );
@@ -542,7 +556,7 @@ export function RenderStatements({
                 <RenderStatements
                   key={`${key}-l${li}`}
                   stmts={[ls]}
-                  values={values}
+                  values={runtimeValues}
                   onChange={onChange}
                   onBlur={onBlur}
                   errors={errors}
@@ -550,6 +564,7 @@ export function RenderStatements({
                   depth={depth + 1}
                   files={files}
                   onFileChange={onFileChange}
+                  variables={variables}
                 />
               ))}
             </div>

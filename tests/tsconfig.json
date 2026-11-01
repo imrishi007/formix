@@ -36,5 +36,5 @@
     },
     "types": ["node"]
   },
-  "include": ["*.test.ts", "../lib/ai-loop.ts", "../lib/forml-diff.ts", "../lib/forml-validate.ts"]
+  "include": ["*.test.ts", "../lib/ai-loop.ts", "../lib/forml-diff.ts", "../lib/forml-runtime.ts", "../lib/forml-validate.ts"]
 }
