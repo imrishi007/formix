@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from repair_guidance import grammar_hints, intent_diagnostics  # noqa: E402
+from repair_guidance import grammar_hints, intent_diagnostics, normalize_known_dialects  # noqa: E402
 
 
 def diagnostic(message: str) -> dict:
@@ -42,3 +42,19 @@ def test_dynamic_repeat_requires_a_respondent_integer_field():
         "Ask for number of books and repeat the book inputs",
         'form "Books" { field book_count: integer repeat count = book_count { field title: text } }',
     ) == []
+
+
+def test_dynamic_repeat_normalizes_a_fixed_count_var():
+    source = '''form "Books" {
+  var book_count = 0
+  repeat count = book_count {
+    field title: text
+  }
+}'''
+    normalized = normalize_known_dialects(
+        "Ask for number of books and repeat the book inputs",
+        source,
+    )
+    assert 'field book_count: integer ui { label: "Number of books" }' in normalized
+    assert "validate { required min: 1 max: 20 }" in normalized
+    assert "var book_count" not in normalized

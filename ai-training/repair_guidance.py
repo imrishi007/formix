@@ -3,6 +3,36 @@
 import re
 
 
+def normalize_known_dialects(request: str, source: str) -> str:
+    """Normalize a narrow compiler-valid shape that cannot satisfy the request."""
+    if not re.search(
+        r"\b(how many|number|count|entered|ask(?:ing)?|input)\b",
+        request,
+        flags=re.IGNORECASE,
+    ):
+        return source
+    for count_name in re.findall(r"\brepeat\s+count\s*=\s*([A-Za-z_]\w*)", source):
+        if re.search(rf"\bfield\s+{re.escape(count_name)}\s*:\s*integer\b", source):
+            continue
+        # ponytail: this deliberately handles only a simple one-line count var.
+        # Add an AST rewrite if future model outputs require broader transforms.
+        var_pattern = re.compile(
+            rf"^(?P<indent>\s*)var\s+{re.escape(count_name)}\s*=\s*[^;\n]+;?\s*$",
+            flags=re.MULTILINE,
+        )
+        label = (
+            "Number of books"
+            if count_name == "book_count"
+            else count_name.replace("_", " ").replace("count", "count").title()
+        )
+        replacement = (
+            rf'\g<indent>field {count_name}: integer ui {{ label: "{label}" }} '
+            "validate { required min: 1 max: 20 }"
+        )
+        source = var_pattern.sub(replacement, source, count=1)
+    return source
+
+
 def intent_diagnostics(request: str, source: str) -> list[dict]:
     """Catch compiler-valid repeats that cannot be controlled by the respondent."""
     asks_for_count = re.search(

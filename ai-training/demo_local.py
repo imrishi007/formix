@@ -15,7 +15,7 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-from repair_guidance import grammar_hints, intent_diagnostics
+from repair_guidance import grammar_hints, intent_diagnostics, normalize_known_dialects
 from train import SYSTEM_PROMPT
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -154,6 +154,7 @@ def repair_prompt(source: str, diagnostics: list[dict], attempt: int) -> str:
 
 def answer(model, tokenizer, compiler: Path, request: str, max_repairs: int, max_new_tokens: int) -> None:
     source = generate(model, tokenizer, request, max_new_tokens)
+    source = normalize_known_dialects(request, source)
     result = compile_source(compiler, source)
     intent_errors = intent_diagnostics(request, source)
     for attempt in range(1, max_repairs + 1):
@@ -162,6 +163,7 @@ def answer(model, tokenizer, compiler: Path, request: str, max_repairs: int, max
         errors = [*result.get("diagnostics", []), *intent_errors]
         print(f"Compiler rejected output; requesting repair {attempt}/{max_repairs} …", flush=True)
         source = generate(model, tokenizer, repair_prompt(source, errors, attempt), max_new_tokens)
+        source = normalize_known_dialects(request, source)
         result = compile_source(compiler, source)
         intent_errors = intent_diagnostics(request, source)
 
