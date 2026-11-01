@@ -107,6 +107,27 @@ describe("runRepairLoop", () => {
     assert.deepEqual(deltas, ["Adding a field. "]); // deltas forwarded live
   });
 
+  it("trusts backend native verification without invoking the crash-prone WASM compiler", async () => {
+    const revised = "form BookLog { field book_count : integer }";
+    const streamTurn = makeStreamTurn([
+      {
+        events: [{
+          type: "result",
+          explanation: "Native compiler verification passed.",
+          revised_source: revised,
+          compiler_verified: true,
+        }],
+      },
+    ]);
+    const compile = () => { throw new Error("WASM compiler must not run"); };
+
+    const outcome = await runRepairLoop(baseInput({ streamTurn, compile, modelMode: "finetuned" }));
+
+    assert.equal(outcome.ok, true);
+    assert.equal(outcome.appliedSource, revised);
+    assert.equal(outcome.attempts, 1);
+  });
+
   it("returns fast when the model made no edit (compile never runs)", async () => {
     const src = "form Contact {}";
     const streamTurn = makeStreamTurn([
@@ -191,6 +212,28 @@ describe("runRepairLoop", () => {
     assert.deepEqual(repairs[0].repair_context?.errors, [err("unexpected token")]);
   });
 
+  it("does not append duplicate status prose during compiler repair turns", async () => {
+    const broken = "form Contact { BROKEN }";
+    const fixed = "form Contact { field email : email }";
+    const deltas: string[] = [];
+    const streamTurn = makeStreamTurn([
+      { events: [
+        { type: "delta", text: "Checking the source." },
+        { type: "result", explanation: "Checking the source.", revised_source: broken },
+      ] },
+      { events: [
+        { type: "delta", text: "Checking the source." },
+        { type: "result", explanation: "Checking the source.", revised_source: fixed },
+      ] },
+    ]);
+    const { fn: compile } = makeCompile((src) => (src === broken ? [err()] : []));
+
+    const outcome = await runRepairLoop(baseInput({ streamTurn, compile, onDelta: (text) => deltas.push(text) }));
+
+    assert.equal(outcome.ok, true);
+    assert.deepEqual(deltas, ["Checking the source."]);
+  });
+
   it("stops after MAX_REPAIR_ATTEMPTS and never applies broken source", async () => {
     const broken = "form Contact { BROKEN }";
     const stillBroken = "form Contact { STILL BROKEN }";
@@ -221,6 +264,19 @@ describe("runRepairLoop", () => {
     // Attempt numbering is 1-based and strictly sequential.
     assert.equal(repairContexts[0]?.attempt, 1);
     assert.equal(repairContexts[1]?.attempt, 2);
+  });
+
+  it("does not accept a missing AST even when the compiler has no diagnostic", async () => {
+    const streamTurn = makeStreamTurn([
+      { events: [{ type: "result", explanation: "candidate", revised_source: "form A {}" }] },
+      { events: [{ type: "result", explanation: "repair 1", revised_source: "form B {}" }] },
+      { events: [{ type: "result", explanation: "repair 2", revised_source: "form C {}" }] },
+    ]);
+    const compile = (): FormlCompileResult => ({ ast: null, diagnostics: [], ok: false, durationMs: 1 });
+    const outcome = await runRepairLoop(baseInput({ streamTurn, compile }));
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.appliedSource, null);
+    assert.equal(outcome.attempts, MAX_REPAIR_ATTEMPTS + 1);
   });
 
   it("keeps the broken source when a repair reply is itself unparseable", async () => {

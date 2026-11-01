@@ -646,7 +646,7 @@ export interface AiChatRequestPayload {
  *  conversational turn (no form edit); a string on an edit turn. */
 export type AiChatEvent =
   | { type: "delta"; text: string }
-  | { type: "result"; explanation: string; revised_source: string | null }
+  | { type: "result"; explanation: string; revised_source: string | null; compiler_verified?: boolean }
   | { type: "error"; message: string };
 
 export interface AiHistoryRecord {

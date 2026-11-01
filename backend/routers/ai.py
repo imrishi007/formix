@@ -45,6 +45,8 @@ import json
 import logging
 import os
 import re
+import subprocess
+import tempfile
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -59,7 +61,14 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..deps import get_form_or_403
 from ..models import AiChatMessage, Form, Project, Submission, User
-from ..schemas import AiAppendRequest, AiAppendResponse, AiChatHistoryResponse, AiChatRequest
+from ..schemas import (
+    AiAppendRequest,
+    AiAppendResponse,
+    AiChatHistoryResponse,
+    AiChatRequest,
+    AiDiagnostic,
+    AiRepairContext,
+)
 
 logger = logging.getLogger("formix.ai")
 
@@ -322,6 +331,18 @@ _REFERENCE_FORM = """form "Contact Form" {
   action submit {
     endpoint: "https://api.formix.dev/submit"
     method: POST
+  }
+}"""
+
+_REPEAT_REFERENCE_FORM = """form "Book Log" {
+  field book_count : integer
+    ui { label: "Number of books" }
+    validate { required min: 1 max: 10 }
+
+  repeat count = book_count {
+    field book_name : text ui { label: "Book name" } validate { required }
+    field release_date : date ui { label: "Release date" }
+    field author : text ui { label: "Author" } validate { required }
   }
 }"""
 
@@ -1268,15 +1289,26 @@ def _finetuned_model_config() -> dict | None:
     }
 
 
-def _finetuned_messages(req: AiChatRequest) -> list[dict]:
+def _finetuned_messages(req: AiChatRequest, retry_instruction: str = "") -> list[dict]:
     """Prompt the code-only adapter to generate or revise a complete form."""
+    needs_repeat_example = bool(re.search(
+        r"\b(dynamic|repeat|each|number of|based on|how many)\b",
+        req.user_message,
+        flags=re.IGNORECASE,
+    ))
+    reference_forms = _REFERENCE_FORM
+    if needs_repeat_example:
+        reference_forms += "\n\nCompiler-verified repeat example:\n" + _REPEAT_REFERENCE_FORM
     system = (
         "You generate complete Forml source code for the Formix forms DSL. "
         "Return only Forml source, with no explanation or Markdown fences. "
         "Follow the grammar exactly. When an existing form is supplied, preserve "
-        "its existing fields and make the requested changes.\n\n"
+        "its existing fields and make the requested changes. A valid form that "
+        "ignores the request is incorrect. Make every requested field or behavior "
+        "visible in the returned source, using the user's wording in its identifier "
+        "or label.\n\n"
         "Canonical EBNF grammar:\n" + _load_grammar() +
-        "\n\nCompiler-verified example structure:\n" + _REFERENCE_FORM
+        "\n\nCompiler-verified example structure:\n" + reference_forms
     )
     if req.repair_context is not None:
         errors = "\n".join(
@@ -1286,6 +1318,7 @@ def _finetuned_messages(req: AiChatRequest) -> list[dict]:
         task = (
             "Repair the complete source below so it passes the Formix compiler. "
             "Preserve the requested form and return the complete corrected Forml only.\n\n"
+            f"Original user request:\n{req.user_message}\n\n"
             f"Compiler diagnostics:\n{errors}\n\nCurrent Forml source:\n{req.source}"
         )
     else:
@@ -1295,10 +1328,12 @@ def _finetuned_messages(req: AiChatRequest) -> list[dict]:
         if req.selection.strip():
             task += "Selected source region:\n" + req.selection + "\n\n"
         task += "User request:\n" + req.user_message
+        if retry_instruction:
+            task += "\n\nCorrection required:\n" + retry_instruction
     return [{"role": "system", "content": system}, {"role": "user", "content": task}]
 
 
-async def _call_finetuned_model(req: AiChatRequest) -> str:
+async def _call_finetuned_model(req: AiChatRequest, retry_instruction: str = "") -> str:
     """Call a hosted OpenAI-compatible endpoint for the Formix LoRA model."""
     config = _finetuned_model_config()
     if config is None:
@@ -1306,13 +1341,17 @@ async def _call_finetuned_model(req: AiChatRequest) -> str:
             "The fine-tuned model endpoint is not configured. Set FORMIX_MODEL_BASE_URL "
             "and FORMIX_MODEL_API_KEY on the Render backend."
         )
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+    # A 4 GB laptop GPU can take longer than a hosted endpoint to finish a
+    # full form. Give the loopback demo time without changing hosted timeouts.
+    local_demo = config["base_url"].startswith(("http://127.0.0.1:", "http://localhost:"))
+    timeout = httpx.Timeout(300.0, connect=15.0) if local_demo else HTTP_TIMEOUT
+    async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
             f"{config['base_url']}/chat/completions",
             headers={"Authorization": f"Bearer {config['api_key']}", "Content-Type": "application/json"},
             json={
                 "model": config["model"],
-                "messages": _finetuned_messages(req),
+                "messages": _finetuned_messages(req, retry_instruction),
                 "temperature": 0.1,
                 "max_tokens": config["max_tokens"],
                 "stream": False,
@@ -1333,6 +1372,92 @@ async def _call_finetuned_model(req: AiChatRequest) -> str:
     return source
 
 
+def _same_forml(left: str, right: str) -> bool:
+    """Ignore formatting when checking whether an edit model only echoed input."""
+    return re.sub(r"\s+", "", left) == re.sub(r"\s+", "", right)
+
+
+def _needs_finetuned_edit_retry(req: AiChatRequest, candidate: str) -> bool:
+    return bool(
+        req.repair_context is None
+        and req.source.strip()
+        and req.user_message.strip()
+        and _same_forml(candidate, req.source)
+    )
+
+
+def _local_compiler_path() -> Path | None:
+    configured = os.environ.get("FORMIX_COMPILER_PATH", "").strip()
+    path = Path(configured) if configured else Path(__file__).resolve().parents[2] / "forml-compiler" / "build" / "forml_compiler.exe"
+    return path if path.is_file() else None
+
+
+def _compile_with_native_forml(source: str, compiler: Path) -> dict:
+    """Compile untrusted model output out-of-process so a compiler abort stays contained."""
+    source_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".forml", encoding="utf-8", delete=False) as handle:
+            handle.write(source)
+            source_path = Path(handle.name)
+        run = subprocess.run(
+            [str(compiler), str(source_path)],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+        if run.returncode != 0:
+            return {
+                "success": False,
+                "diagnostics": [{
+                    "line": 0, "column": 0, "severity": "error",
+                    "message": run.stderr.strip() or "The native Forml compiler terminated unexpectedly.",
+                }],
+            }
+        return json.loads(run.stdout)
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+        return {
+            "success": False,
+            "diagnostics": [{
+                "line": 0, "column": 0, "severity": "error",
+                "message": f"Native compiler verification failed: {exc}",
+            }],
+        }
+    finally:
+        if source_path is not None:
+            source_path.unlink(missing_ok=True)
+
+
+async def _verify_and_repair_local_source(req: AiChatRequest, source: str, compiler: Path) -> str:
+    """Return only native-compiler-accepted model output, repairing at most twice."""
+    for attempt in range(3):
+        result = await asyncio.to_thread(_compile_with_native_forml, source, compiler)
+        if result.get("success"):
+            return source
+        if attempt == 2:
+            messages = "; ".join(
+                str(item.get("message", "compiler error"))
+                for item in result.get("diagnostics", [])[:3]
+            )
+            raise RuntimeError(f"The generated Forml still failed native compiler verification: {messages}")
+        errors = [
+            AiDiagnostic(
+                line=int(item.get("line", 0)),
+                col=int(item.get("column", item.get("col", 0))),
+                severity="error",
+                message=str(item.get("message", "compiler error")),
+            )
+            for item in result.get("diagnostics", [])
+            if item.get("severity", "error") == "error"
+        ]
+        repair_req = req.model_copy(update={
+            "source": source,
+            "repair_context": AiRepairContext(attempt=attempt + 1, errors=errors),
+        })
+        source = await _call_finetuned_model(repair_req)
+    raise RuntimeError("Native compiler verification exhausted its repair attempts.")
+
+
 async def _chat_stream(req: AiChatRequest, user_context: str = ""):
     """Async generator yielding SSE events for one chat turn.
 
@@ -1344,15 +1469,41 @@ async def _chat_stream(req: AiChatRequest, user_context: str = ""):
       {"type": "error",  "message": ...}     — unrecoverable failure
     """
     if req.model_mode == "finetuned":
+        compiler_verified = False
         try:
             source = await _call_finetuned_model(req)
+            if _needs_finetuned_edit_retry(req, source):
+                source = await _call_finetuned_model(
+                    req,
+                    "Your previous answer copied the current source without performing the "
+                    f"request: {req.user_message!r}. Return the complete form with that request "
+                    "visibly implemented. Do not return the unchanged source.",
+                )
+                if _same_forml(source, req.source):
+                    raise RuntimeError(
+                        "The model returned the existing form unchanged twice, so the requested "
+                        "edit was not accepted as a successful result."
+                    )
+            compiler = _local_compiler_path()
+            if compiler is not None:
+                source = await _verify_and_repair_local_source(req, source, compiler)
+                compiler_verified = True
         except Exception as exc:  # Endpoint errors are streamed in the normal client contract.
             logger.error("Fine-tuned Forml endpoint failed: %s", exc, exc_info=True)
             yield _sse({"type": "error", "message": f"Fine-tuned Formix model unavailable: {exc}"})
             return
-        explanation = "Generated with the fine-tuned Formix model. Checking the source with the Forml compiler."
+        explanation = (
+            "Generated with the fine-tuned Formix model. Native Forml compiler verification passed."
+            if compiler_verified
+            else "Generated with the fine-tuned Formix model. Checking the source with the Forml compiler."
+        )
         yield _sse({"type": "delta", "text": explanation})
-        yield _sse({"type": "result", "explanation": explanation, "revised_source": source})
+        yield _sse({
+            "type": "result",
+            "explanation": explanation,
+            "revised_source": source,
+            "compiler_verified": compiler_verified,
+        })
         return
 
     if _active_config() is None:

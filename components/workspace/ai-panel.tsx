@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Bug, Check, Lightbulb, Sparkles, Square, Trash2, Wand2, X } from "lucide-react";
+import { ArrowUp, Bug, Check, CircleAlert, Lightbulb, Sparkles, Square, Trash2, Wand2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/docs/code-block";
@@ -82,7 +82,7 @@ function ChatBubble({
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-accent/15 px-3.5 py-2.5 font-inter text-sm text-foreground">
+        <div className="max-w-[85%] rounded-2xl rounded-tr-sm border border-accent/10 bg-accent/10 px-3.5 py-2.5 font-inter text-sm leading-relaxed text-foreground">
           {msg.text}
         </div>
       </div>
@@ -94,7 +94,7 @@ function ChatBubble({
   // as the reply text above it, instead of popping in fully formed. The line
   // count + apply button only show once the code has finished streaming.
   const hasCode = msg.formlCode !== undefined;
-  const codeComplete = hasCode && !msg.streaming;
+  const codeComplete = hasCode && !msg.streaming && msg.codeReady !== false;
   const textDone = msg.text.length > 0 || !msg.streaming;
 
   return (
@@ -117,14 +117,18 @@ function ChatBubble({
         </div>
 
         {hasCode && textDone && (
-          <div className="overflow-hidden rounded-xl border border-accent/20">
+          <div className="overflow-hidden rounded-xl border border-accent/20 shadow-sm">
             <CodeBlock code={msg.formlCode!} language="forml" filename="generated.forml" showLineNumbers={false} />
             {codeComplete ? (
-              <div className="flex items-center justify-between border-t border-accent/20 bg-accent/[0.06] px-3.5 py-2">
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  {msg.formlCode!.split("\n").length} lines
-                </span>
-                <Button size="sm" variant={applied ? "outline" : "default"} onClick={() => onApply(msg.id, msg.formlCode!)}>
+              <div className="border-t border-accent/20 bg-accent/[0.04] px-3.5 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                    {msg.compilerCheck ? (msg.compilerCheck.passed ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <CircleAlert className="h-3.5 w-3.5 text-destructive" />) : null}
+                    {msg.compilerCheck
+                      ? `${msg.compilerCheck.passed ? "Syntax verified" : "Compiler failed"} · ${msg.compilerCheck.attempts - 1} repairs`
+                      : `${msg.formlCode!.split("\n").length} lines`}
+                  </span>
+                  <Button size="sm" variant={applied ? "outline" : "default"} disabled={msg.compilerCheck?.passed === false} onClick={() => onApply(msg.id, msg.formlCode!)}>
                   {applied ? (
                     <>
                       <Check className="h-3.5 w-3.5" /> Applied
@@ -132,12 +136,18 @@ function ChatBubble({
                   ) : (
                     msg.applyLabel ?? "Insert into Editor"
                   )}
-                </Button>
+                  </Button>
+                </div>
+                {msg.compilerCheck && !msg.compilerCheck.passed && (
+                  <div role="alert" className="mt-2 space-y-1 border-t border-border/70 pt-2 font-mono text-[11px] text-destructive">
+                    {msg.compilerCheck.errors.slice(0, 3).map((error, index) => <p key={index}>{error}</p>)}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex items-center gap-1.5 border-t border-accent/20 bg-accent/[0.06] px-3.5 py-2 font-mono text-[11px] text-muted-foreground">
                 <span className="h-1 w-1 animate-pulse rounded-full bg-accent/70" />
-                writing…
+                {msg.streaming ? "writing…" : "Generation stopped · partial code cannot be inserted"}
               </div>
             )}
           </div>
@@ -165,7 +175,7 @@ function QuickAction({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 font-inter text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1.5 font-inter text-xs font-medium transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-40 ${
         highlight
           ? "border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10"
           : "border-border bg-transparent text-muted-foreground hover:border-accent/30 hover:text-foreground"
@@ -233,8 +243,8 @@ export function AiPanel({
   return (
     <div className="flex h-full min-h-0 flex-col border-l border-border bg-card">
       {/* Header */}
-      <div className="flex h-9 flex-none items-center gap-2 border-b border-border px-3">
-        <div className="gradient-accent flex h-5 w-5 items-center justify-center rounded-md">
+      <div className="flex h-11 flex-none items-center gap-2 border-b border-border/70 px-4">
+        <div className="gradient-accent flex h-6 w-6 items-center justify-center rounded-lg shadow-sm">
           <Sparkles className="h-3 w-3 text-white" />
         </div>
         <span className="font-inter text-xs font-semibold text-foreground">Formix AI</span>
@@ -243,10 +253,10 @@ export function AiPanel({
           value={modelMode}
           onChange={(event) => setModelMode(event.target.value as "assistant" | "finetuned")}
           disabled={isStreaming}
-          className="ml-2 max-w-[150px] rounded-md border border-border bg-background px-1.5 py-1 font-mono text-[10px] text-foreground"
+          className="ml-2 max-w-[155px] rounded-lg border border-border/80 bg-background px-2 py-1.5 font-mono text-[11px] text-foreground outline-none transition-colors hover:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent/40"
         >
           <option value="assistant">General assistant</option>
-          <option value="finetuned">Fine-tuned Formix</option>
+          <option value="finetuned">{process.env.NEXT_PUBLIC_FORMIX_LOCAL_DEMO === "1" ? "Local Formix model" : "Fine-tuned Formix"}</option>
         </select>
         {isStreaming && <span className="font-mono text-[10px] text-muted-foreground">generating…</span>}
         <div className="ml-auto flex items-center gap-0.5">
@@ -273,7 +283,7 @@ export function AiPanel({
       </div>
 
       {/* Quick actions */}
-      <div className="flex flex-none items-center gap-1.5 overflow-x-auto border-b border-border px-3 py-2">
+      <div className="flex flex-none items-center gap-1.5 overflow-x-auto border-b border-border/70 px-4 py-2.5">
         <QuickAction icon={Wand2} label="Improve Form" disabled={!formId || isStreaming} onClick={() => runQuickAction("improve", "Improve this form")} />
         <QuickAction icon={Bug} label="Fix Errors" highlight={hasErrors} disabled={!formId || isStreaming} onClick={() => runQuickAction("fix", "Fix the compiler errors in my form")} />
         <QuickAction
@@ -285,7 +295,7 @@ export function AiPanel({
       </div>
       {modelMode === "finetuned" && (
         <p className="border-b border-border px-3 py-1.5 font-mono text-[10px] text-muted-foreground">
-          Fine-tuned Forml generation · compiler-checked · code output only
+          {process.env.NEXT_PUBLIC_FORMIX_LOCAL_DEMO === "1" ? "Local model" : "Fine-tuned model"} · compiler checked · code output only
         </p>
       )}
 
@@ -338,7 +348,7 @@ export function AiPanel({
           e.preventDefault();
           submit(input);
         }}
-        className="flex flex-none flex-col gap-1.5 border-t border-border p-3"
+        className="flex flex-none flex-col gap-1.5 border-t border-border/70 bg-background/40 p-3.5"
       >
         <div className="flex items-end gap-2">
           <textarea

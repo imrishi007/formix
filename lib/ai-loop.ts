@@ -95,10 +95,11 @@ async function sendTurn(
   payload: AiChatRequestPayload,
   input: RepairLoopInput,
   onDeltaText: (t: string) => void,
-): Promise<{ explanation: string; revisedSource: string | null } | null> {
+): Promise<{ explanation: string; revisedSource: string | null; compilerVerified: boolean } | null> {
   let explanation = "";
   let revised: string | null = null;
   let gotResult = false;
+  let compilerVerified = false;
   let errorMessage: string | null = null;
 
   await input.streamTurn(
@@ -110,6 +111,7 @@ async function sendTurn(
       } else if (evt.type === "result") {
         explanation = evt.explanation;
         revised = evt.revised_source; // null = conversational turn
+        compilerVerified = evt.compiler_verified === true;
         gotResult = true;
       } else if (evt.type === "error") {
         errorMessage = evt.message;
@@ -121,7 +123,7 @@ async function sendTurn(
   if (errorMessage) throw new AiTurnError("http", errorMessage);
   // No result event at all → the reply never satisfied the response contract.
   if (!gotResult) return null;
-  return { explanation, revisedSource: revised };
+  return { explanation, revisedSource: revised, compilerVerified };
 }
 
 export async function runRepairLoop(input: RepairLoopInput): Promise<RepairOutcome> {
@@ -172,12 +174,15 @@ export async function runRepairLoop(input: RepairLoopInput): Promise<RepairOutco
   }
 
   let currentSource = turn.revisedSource;
-  const result = input.compile(currentSource);
+  const result = turn.compilerVerified
+    ? { ok: true, diagnostics: [] }
+    : input.compile(currentSource);
+  let compiled = result.ok;
   let finalErrors = result.diagnostics.filter((d) => d.severity === "error");
 
   // ── Repair loop ─────────────────────────────────────────────────────────────
   let repairs = 0;
-  while (finalErrors.length > 0 && repairs < MAX_REPAIR_ATTEMPTS) {
+  while (!compiled && repairs < MAX_REPAIR_ATTEMPTS) {
     repairs++;
     attempts++;
 
@@ -194,7 +199,7 @@ export async function runRepairLoop(input: RepairLoopInput): Promise<RepairOutco
         model_mode: input.modelMode ?? "assistant",
       },
       input,
-      onDelta,
+      () => {}, // Repair status replaces the initial status; do not duplicate prose in the panel.
     );
 
     if (repair === null || repair.revisedSource === null) {
@@ -210,11 +215,13 @@ export async function runRepairLoop(input: RepairLoopInput): Promise<RepairOutco
     turn.explanation = repair.explanation;
     currentSource = repair.revisedSource;
 
-    const check = input.compile(currentSource);
+    const check = repair.compilerVerified
+      ? { ok: true, diagnostics: [] }
+      : input.compile(currentSource);
+    compiled = check.ok;
     finalErrors = check.diagnostics.filter((d) => d.severity === "error");
   }
 
-  const compiled = finalErrors.length === 0;
   return {
     ok: compiled,
     changed: true,

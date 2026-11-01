@@ -395,6 +395,60 @@ def test_build_messages_clips_oversized_history(monkeypatch):
     assert assistant_content.rstrip().endswith("```")
 
 
+def test_finetuned_prompt_requires_requested_edit_to_be_visible():
+    from backend.schemas import AiChatRequest
+
+    req = AiChatRequest(
+        form_id="form_1",
+        user_message="Event registration with dietary preferences",
+        source='form "Event Registration" { field email: email }',
+    )
+    messages = ai_module._finetuned_messages(req)
+    assert "ignores the request is incorrect" in messages[0]["content"]
+    assert "dietary preferences" in messages[1]["content"]
+
+
+def test_finetuned_dynamic_prompt_includes_compiler_verified_repeat_example():
+    from backend.schemas import AiChatRequest
+
+    req = AiChatRequest(
+        form_id="form_1",
+        user_message="Dynamic form based on number of books read",
+        source="",
+    )
+    messages = ai_module._finetuned_messages(req)
+    assert "repeat count = book_count" in messages[0]["content"]
+    assert "field release_date" in messages[0]["content"]
+
+
+def test_native_compiler_guard_accepts_repeat_form():
+    compiler = ai_module._local_compiler_path()
+    assert compiler is not None
+    result = ai_module._compile_with_native_forml(ai_module._REPEAT_REFERENCE_FORM, compiler)
+    assert result["success"] is True
+    assert result["diagnostics"] == []
+
+
+def test_finetuned_edit_retry_detects_a_reformatted_echo():
+    from backend.schemas import AiChatRequest
+
+    original = 'form "Event Registration" { field email: email }'
+    req = AiChatRequest(
+        form_id="form_1",
+        user_message="Event registration with dietary preferences",
+        source=original,
+        model_mode="finetuned",
+    )
+    assert ai_module._needs_finetuned_edit_retry(
+        req,
+        'form "Event Registration" {\n  field email: email\n}',
+    )
+    assert not ai_module._needs_finetuned_edit_retry(
+        req,
+        original[:-1] + ' field dietary_preferences: checkbox { option "Vegetarian" } }',
+    )
+
+
 # ── Provider failover (the fix for the persistent Gemini 429) ─────────────────
 
 def test_all_configs_enumerates_the_failover_chain(monkeypatch):

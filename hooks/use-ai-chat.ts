@@ -37,7 +37,9 @@ export interface AiChatMessage {
   role: "user" | "assistant";
   text: string;
   formlCode?: string;
+  codeReady?: boolean;
   applyLabel?: string;
+  compilerCheck?: { passed: boolean; attempts: number; errors: string[] };
   streaming?: boolean;
   createdAt: number;
 }
@@ -116,11 +118,14 @@ export function useAiChat(
    *  text streaming — the code panel appears as soon as formlCode becomes ""
    *  and fills in token by token (lib/ai-engine.ts `streamReply`). */
   const streamCode = useCallback((id: string, code: string, applyLabel: string, onDone: () => void) => {
-    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, formlCode: "", applyLabel } : m)));
+    setMessages((prev) => prev.map((m) => m.id === id ? { ...m, formlCode: "", codeReady: false, applyLabel } : m));
     cancelRef.current = streamReply(
       code,
       (soFar) => setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, formlCode: soFar } : m))),
-      onDone,
+      () => {
+        setMessages((prev) => prev.map((m) => m.id === id ? { ...m, formlCode: code, codeReady: true } : m));
+        onDone();
+      },
     );
   }, []);
 
@@ -217,17 +222,22 @@ export function useAiChat(
       return false;
     }
 
-    // The model produced (or edited) source — reveal it. This covers clean
-    // edits AND the "repaired until it still won't compile" case: the user
-    // sees the best attempt with a note, and the diagnostics panel shows the
-    // exact errors. Text is whatever already streamed — the loop's explanation
-    // on a repaired turn is just the LAST attempt's prose, so don't clobber.
+    // Keep the model output inspectable even when repair fails, but label the
+    // compiler result here so an invalid candidate cannot look ready to use.
     if (outcome.revisedSource !== null && outcome.changed) {
+      setMessages((prev) => prev.map((m) => m.id === id ? {
+        ...m,
+        compilerCheck: {
+          passed: outcome.ok,
+          attempts: outcome.attempts,
+          errors: outcome.finalErrors.map((error) => `${error.line}:${error.col} ${error.message}`),
+        },
+      } : m));
       if (!outcome.ok) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === id
-              ? { ...m, text: m.text + "\n\n_⚠ The generated code did not compile cleanly. Review it below — the diagnostics panel lists the errors._" }
+              ? { ...m, text: m.text + "\n\n_The generated code still has compiler errors. Review the diagnostics below._" }
               : m,
           ),
         );
