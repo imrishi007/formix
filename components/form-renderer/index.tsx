@@ -18,7 +18,7 @@ import { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, Minus, Paperclip, Plus, X } from "lucide-react";
 import { acceptToHtmlAttr, formatBytes } from "@/lib/forml-validate";
-import { deriveComputedValues } from "@/lib/forml-runtime";
+import { deriveComputedValues, evaluateCondition } from "@/lib/forml-runtime";
 
 // ── Shared type ───────────────────────────────────────────────────────────────
 
@@ -33,53 +33,7 @@ export const INPUT_CLS =
 export const INPUT_CLS_ERROR =
   "w-full rounded-lg border border-destructive bg-destructive/5 px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 transition-all duration-150 focus:border-destructive focus:ring-2 focus:ring-destructive/15";
 
-// ── Condition evaluator ───────────────────────────────────────────────────────
-
-/**
- * Evaluate a compiled `when` / conditional AST node against the current
- * form values.  Pure function — no side effects.
- *
- * Handles:
- *   BinaryCond  — { type, operator: "&&"|"||", left, right }
- *   SimpleCond  — { type, field, comparator, value: { valueKind, ... } }
- */
-export function evalCondition(
-  cond: ASTNode,
-  values: Record<string, string>,
-): boolean {
-  const type = cond.type as string;
-
-  if (type === "BinaryCond") {
-    const op = cond.operator as string;
-    const l = evalCondition(cond.left as ASTNode, values);
-    const r = evalCondition(cond.right as ASTNode, values);
-    return op === "&&" ? l && r : l || r;
-  }
-
-  if (type === "SimpleCond") {
-    const fieldName  = cond.field      as string;
-    const comparator = cond.comparator as string;
-    const valueNode  = cond.value      as ASTNode;
-    const currentVal = values[fieldName] ?? "";
-    const vk = valueNode?.valueKind as string;
-
-    let rhs: string;
-    if (vk === "number")       rhs = String(valueNode.numberValue  as number);
-    else if (vk === "boolean") rhs = String(valueNode.booleanValue as boolean);
-    else                       rhs = (valueNode?.text as string) ?? "";
-
-    switch (comparator) {
-      case "==": return currentVal === rhs;
-      case "!=": return currentVal !== rhs;
-      case ">":  return Number(currentVal) >  Number(rhs);
-      case "<":  return Number(currentVal) <  Number(rhs);
-      case ">=": return Number(currentVal) >= Number(rhs);
-      case "<=": return Number(currentVal) <= Number(rhs);
-    }
-  }
-
-  return false;
-}
+export { evaluateCondition as evalCondition } from "@/lib/forml-runtime";
 
 // ── FileUploadInput ───────────────────────────────────────────────────────────
 
@@ -505,7 +459,7 @@ export function RenderStatements({
           const elseStmts  = (stmt.else as ASTNode[])  ?? [];
 
           let condMet = false;
-          try { condMet = evalCondition(condition, runtimeValues); } catch { /* ignore */ }
+          try { condMet = evaluateCondition(condition, runtimeValues); } catch { /* ignore */ }
 
           const branch = condMet ? thenStmts : elseStmts;
           if (branch.length === 0) return null;

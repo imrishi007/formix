@@ -1,5 +1,36 @@
 export type FormlRuntimeNode = Record<string, unknown>;
 
+/** Evaluate the compiler's condition AST against current respondent values. */
+export function evaluateCondition(
+  condition: FormlRuntimeNode,
+  values: Record<string, string>,
+): boolean {
+  if (condition.type === "BinaryCond") {
+    const left = evaluateCondition(condition.left as FormlRuntimeNode, values);
+    const right = evaluateCondition(condition.right as FormlRuntimeNode, values);
+    return condition.operator === "&&" ? left && right : left || right;
+  }
+  if (condition.type !== "SimpleCond") return false;
+
+  const current = values[condition.field as string] ?? "";
+  const value = condition.value as FormlRuntimeNode;
+  const expected = value?.valueKind === "number"
+    ? String(value.numberValue)
+    : value?.valueKind === "boolean"
+      ? String(value.booleanValue)
+      : String(value?.text ?? "");
+
+  switch (condition.comparator) {
+    case "==": return current === expected;
+    case "!=": return current !== expected;
+    case ">": return Number(current) > Number(expected);
+    case "<": return Number(current) < Number(expected);
+    case ">=": return Number(current) >= Number(expected);
+    case "<=": return Number(current) <= Number(expected);
+    default: return false;
+  }
+}
+
 /** Read numeric Forml constants from the compiler's root AST. */
 export function numericVariables(ast: FormlRuntimeNode | null): Record<string, number> {
   const variables: Record<string, number> = {};

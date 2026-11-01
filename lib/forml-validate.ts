@@ -7,6 +7,7 @@
 //   - components/workspace/preview-pane.tsx  (author preview)
 
 import type { ASTNode } from "@/components/form-renderer";
+import { evaluateCondition } from "./forml-runtime";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -151,10 +152,12 @@ function collectFieldKeys(stmts: ASTNode[], values: Record<string, string>): str
         }
       }
     } else if (type === "Conditional") {
-      // Validate branches regardless of condition visibility
       const thenStmts = (stmt.then as ASTNode[]) ?? [];
       const elseStmts = (stmt.else as ASTNode[]) ?? [];
-      keys.push(...collectFieldKeys([...thenStmts, ...elseStmts], values));
+      const branch = evaluateCondition(stmt.condition as ASTNode, values)
+        ? thenStmts
+        : elseStmts;
+      keys.push(...collectFieldKeys(branch, values));
     } else if (type === "Section" || type === "Layout") {
       const subStmts = (stmt.statements as ASTNode[]) ?? [];
       keys.push(...collectFieldKeys(subStmts, values));
