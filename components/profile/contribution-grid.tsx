@@ -11,11 +11,13 @@ import type { ProfileDayCount } from "@/lib/api";
 
 // Cell fill levels, darkest = most forms created that day. `bg-(--accent-primary)/NN`
 // uses the same CSS-variable opacity pattern as the rest of the app (e.g.
-// dashboard-shell's border-(--accent-danger)/30).
+// dashboard-shell's border-(--accent-danger)/30). Level 0 (zero forms that day)
+// is still a faint accent tint rather than plain grey so the grid reads as
+// populated even before the user has created any forms.
 const LEVELS = [
-  "bg-(--bg-subtle)",          // 0
-  "bg-(--accent-primary)/25",  // 1
-  "bg-(--accent-primary)/50",  // 2–3
+  "bg-(--accent-primary)/15",  // 0
+  "bg-(--accent-primary)/35",  // 1
+  "bg-(--accent-primary)/55",  // 2–3
   "bg-(--accent-primary)/75",  // 4–6
   "bg-(--accent-primary)",     // 7+
 ];
@@ -79,7 +81,6 @@ function monthLabels(weeks: WeekCell[][]): Array<{ index: number; label: string 
 }
 
 export function ContributionGrid({ data }: { data: ProfileDayCount[] }) {
-  if (!data.length) return null;
   const weeks = buildWeeks(data);
   const total = data.reduce((sum, d) => sum + d.count, 0);
   const labels = monthLabels(weeks);

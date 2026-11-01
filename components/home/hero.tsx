@@ -1,51 +1,12 @@
 ﻿"use client";
 
-import { useRef, useCallback } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-
-// ─── Pointer parallax hook ────────────────────────────────────────────────────
-// Tracks pointer position relative to the element's own center, translates
-// it into a small X/Y offset that makes the copy block feel like it has depth.
-// Applied ONLY on hover — pointer-driven, never scroll-driven. (design.md §Depth)
-function usePointerParallax(strength = 8) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  const onMouseMove = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const el = ref.current;
-      if (!el) return;
-      const { left, top, width, height } = el.getBoundingClientRect();
-      // Normalised pointer position in [-0.5, 0.5]
-      const nx = (e.clientX - left - width / 2) / width;
-      const ny = (e.clientY - top - height / 2) / height;
-      // Apply as a subtle translate — not a rotate, not a 3D scene
-      el.style.transform = `translate(${nx * strength}px, ${ny * strength}px)`;
-    },
-    [strength],
-  );
-
-  const onMouseLeave = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    // Settle smoothly back to center (150ms ease-out per design.md Motion)
-    el.style.transition = "transform 200ms ease-out";
-    el.style.transform = "translate(0px, 0px)";
-    // Clear inline transition so normal CSS picks up after
-    setTimeout(() => {
-      if (el) el.style.transition = "";
-    }, 200);
-  }, []);
-
-  return { ref, onMouseMove, onMouseLeave };
-}
 
 export function Hero() {
   // Content is visible immediately on load — no mount fade, no translate-in.
   // design.md Motion: "No scroll-triggered animations of any kind. Content is
   // visible immediately on load/navigation."
-  const parallax = usePointerParallax(6);
-
   return (
     <section
       className="relative flex min-h-[100svh] items-center justify-center overflow-hidden bg-(--bg-base) px-8 pt-36 pb-28"
@@ -67,14 +28,8 @@ export function Hero() {
           </span>
         </div>
 
-        {/* ── Headline — pointer-parallax on the copy block ─────────────── */}
-        {/* The outer div is the parallax receiver; the inner content has
-            pointer events so it doesn't eat child interactions. */}
-        <div
-          {...parallax}
-          style={{ willChange: "transform" }}
-          className="flex flex-col items-center"
-        >
+        {/* Stable copy keeps the main action spatially predictable. */}
+        <div className="flex flex-col items-center">
           <h1 className="text-[clamp(2.75rem,8vw,5.5rem)] leading-[1.05] tracking-[-0.02em] text-(--ink-primary)">
             <span className="block font-[550]">From a sentence</span>
             <span className="block font-[550]">
@@ -103,7 +58,7 @@ export function Hero() {
             <Link
               href="/editor/demo?ai=1"
               id="hero-cta-primary"
-              className="group inline-flex items-center gap-3 rounded-(--radius-md) px-8 py-4 text-lg font-semibold btn-primary-gradient"
+              className="group inline-flex items-center gap-3 rounded-(--radius-md) px-8 py-4 text-lg font-semibold btn-primary-gradient focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-primary)/45 focus-visible:ring-offset-4"
             >
               Talk to Formix AI
               <ArrowRight className="size-5 transition-transform duration-150 group-hover:translate-x-1" />
@@ -113,7 +68,7 @@ export function Hero() {
             <Link
               href="/editor/demo"
               id="hero-cta-secondary"
-              className="inline-flex items-center rounded-(--radius-md) border border-(--border-hairline-strong) bg-transparent px-8 py-4 text-lg font-semibold text-(--ink-primary) transition-all duration-150 hover:bg-(--bg-subtle) active:scale-[0.98]"
+              className="inline-flex items-center rounded-(--radius-md) border border-(--border-hairline-strong) bg-(--bg-surface)/70 px-8 py-4 text-lg font-semibold text-(--ink-primary) shadow-(--shadow-sm) transition-[background-color,transform] duration-150 hover:bg-(--bg-subtle) active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-primary)/45 focus-visible:ring-offset-4"
             >
               Open the Editor
             </Link>

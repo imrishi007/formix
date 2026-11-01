@@ -69,9 +69,9 @@ export function TopBar({
   const status = phase[compilePhase];
 
   return (
-    <header className="flex h-14 flex-none items-center justify-between border-b border-border bg-card px-4">
+    <header className="flex h-14 flex-none items-center justify-between border-b border-border/70 bg-card/90 px-4 backdrop-blur-xl">
       <div className="flex min-w-0 items-center gap-3">
-        <Link href="/" className="flex flex-none items-center gap-2 rounded-md px-1 py-1 transition-opacity hover:opacity-80">
+        <Link href="/" className="flex flex-none items-center gap-2 rounded-md px-1 py-1 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
           {/* Shared brand mark — single component, replaces the old FX box */}
           <FormixLogo size={20} variant="color" aria-hidden="true" />
           <span className="hidden text-sm font-semibold tracking-tight text-foreground sm:inline">Formix</span>
@@ -85,7 +85,7 @@ export function TopBar({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-accent/10"
+              className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
             >
               <span className="truncate">{activeProject?.title ?? "Select project"}</span>
               <ChevronDown className="h-3.5 w-3.5 flex-none text-muted-foreground" />

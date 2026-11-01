@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
   // Tailwind v4: CSS custom properties use () not [] syntax: bg-(--var) not bg-(--var)
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-all duration-150 ease-out disabled:pointer-events-none disabled:opacity-40 disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-(--accent-primary)/50 focus-visible:ring-offset-2",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-all duration-150 ease-out motion-reduce:transform-none disabled:pointer-events-none disabled:opacity-40 disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-(--accent-primary)/50 focus-visible:ring-offset-2",
   {
     variants: {
       variant: {
@@ -14,16 +14,16 @@ const buttonVariants = cva(
         // Text uses --on-accent (white in light, text-primary in dark per
         // design.md §Buttons) so the fill/ink contrast stays correct both ways.
         default:
-          'bg-(--accent-primary) text-(--on-accent) font-[500] shadow-(--shadow-btn-primary) hover:bg-(--accent-primary-hover) hover:shadow-(--shadow-btn-primary-hover) hover:scale-[1.02] active:scale-[0.98]',
+          'bg-(--accent-primary) text-(--on-accent) font-[500] shadow-(--shadow-btn-primary) hover:bg-(--accent-primary-hover) hover:shadow-(--shadow-btn-primary-hover) active:scale-[0.98]',
         destructive:
           'bg-(--accent-danger) text-white hover:opacity-90 active:scale-[0.98]',
         // Transparent at rest, --bg-subtle on hover
         outline:
           'border border-(--border-hairline-strong) bg-transparent text-(--ink-primary) hover:bg-(--bg-subtle) active:scale-[0.98]',
         secondary:
-          'bg-(--bg-subtle) text-(--ink-primary) hover:opacity-80',
+          'bg-(--bg-subtle) text-(--ink-primary) hover:opacity-80 active:scale-[0.98]',
         ghost:
-          'text-(--ink-primary) hover:bg-(--bg-subtle)',
+          'text-(--ink-primary) hover:bg-(--bg-subtle) active:scale-[0.98]',
         link:
           'text-(--accent-primary) underline-offset-4 hover:underline',
       },

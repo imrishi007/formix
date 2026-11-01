@@ -345,6 +345,7 @@
     min-height: 100%;
     overflow-x: hidden;
     font-family: var(--font-geist), 'Geist', 'Inter Tight', -apple-system, sans-serif;
+    font-optical-sizing: auto;
     transition: background-color 200ms ease-out, color 200ms ease-out;
   }
   html {
@@ -474,7 +475,6 @@
     transition: box-shadow 150ms ease-out, transform 150ms ease-out, background 150ms ease-out;
   }
   .btn-primary:hover {
-    transform: scale(1.02);
     box-shadow: var(--shadow-btn-primary-hover);
     background: var(--accent-primary-hover);
   }
@@ -494,7 +494,6 @@
     transition: box-shadow 150ms ease-out, transform 150ms ease-out;
   }
   .btn-primary-gradient:hover {
-    transform: scale(1.02);
     box-shadow: var(--shadow-btn-primary-hover);
   }
   .btn-primary-gradient:active {
@@ -815,4 +814,40 @@ html.theme-transitioning *::after {
     color 200ms ease-out,
     border-color 200ms ease-out,
     box-shadow 200ms ease-out !important;
+}
+
+/* Keep the same hierarchy for people who prefer less movement or blur. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+  html.theme-transitioning,
+  html.theme-transitioning *,
+  html.theme-transitioning *::before,
+  html.theme-transitioning *::after {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .glass-panel,
+  .card-base,
+  .glass-card {
+    border-color: var(--ink-tertiary);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-panel {
+    background: var(--bg-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-color: var(--border-hairline-strong);
+  }
 }

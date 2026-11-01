@@ -55,7 +55,7 @@ export function HomeNav() {
     <header className="fixed inset-x-0 top-0 z-50 flex justify-center">
       {/* ── Nav pill: transparent on top, glass floating pill on scroll ── */}
       <nav
-        className={`flex items-center justify-between transition-all duration-300 ease-out ${
+        className={`flex items-center justify-between transition-[margin,padding,background-color,box-shadow] duration-300 ease-out ${
           scrolled || open
             ? // Floating glass pill — the design.md Glassmorphism spec
               "glass-panel mx-4 mt-4 max-w-[1100px] w-full rounded-(--radius-xl) px-5 py-3"
@@ -73,7 +73,7 @@ export function HomeNav() {
         </Link>
 
         {/* ── Desktop nav links ──────────────────────────────────────── */}
-        <nav className="hidden flex-1 items-center justify-center gap-10 md:flex lg:gap-12">
+        <nav className="hidden flex-1 items-center justify-center gap-1 md:flex">
           {LINKS.map((link) => {
             const sectionId = link.href.startsWith("#") ? link.href.slice(1) : "";
             const isActive = sectionId && activeSection === sectionId;
@@ -81,19 +81,13 @@ export function HomeNav() {
               <a
                 key={link.label}
                 href={link.href}
-                className={`group relative whitespace-nowrap text-sm font-medium tracking-[0.03em] transition-colors duration-150 ${
+                className={`relative whitespace-nowrap rounded-[10px] px-3 py-2 text-sm font-medium transition-[color,background-color] duration-150 ${
                   isActive
-                    ? "text-(--accent-primary)"
-                    : "text-(--ink-secondary) hover:text-(--ink-primary)"
+                    ? "bg-(--accent-primary-tint) text-(--accent-primary)"
+                    : "text-(--ink-secondary) hover:bg-(--bg-subtle) hover:text-(--ink-primary)"
                 }`}
               >
                 {link.label}
-                {/* Underline indicator for active / hover */}
-                <span
-                  className={`absolute -bottom-0.5 left-0 h-[1.5px] bg-(--accent-primary) transition-all duration-200 ${
-                    isActive ? "w-full" : "w-0 group-hover:w-full"
-                  }`}
-                />
               </a>
             );
           })}
@@ -115,7 +109,7 @@ export function HomeNav() {
               <Link
                 href="/dashboard"
                 id="nav-cta-dashboard"
-                className="inline-flex items-center gap-2 rounded-(--radius-md) bg-(--accent-primary) px-5 py-2.5 text-sm font-semibold text-(--on-accent) shadow-(--shadow-btn-primary) transition-all duration-150 hover:scale-[1.02] hover:bg-(--accent-primary-hover) active:scale-[0.98]"
+                className="inline-flex items-center gap-2 rounded-(--radius-md) bg-(--accent-primary) px-5 py-2.5 text-sm font-semibold text-(--on-accent) shadow-(--shadow-btn-primary) transition-[background-color,box-shadow,transform] duration-150 hover:bg-(--accent-primary-hover) active:scale-[0.98]"
               >
                 <LayoutDashboard className="size-4" />
                 Dashboard
@@ -133,7 +127,7 @@ export function HomeNav() {
               <Link
                 href="/editor/demo"
                 id="nav-cta-editor"
-                className="inline-flex items-center rounded-(--radius-md) bg-(--accent-primary) px-5 py-2.5 text-sm font-semibold text-(--on-accent) shadow-(--shadow-btn-primary) transition-all duration-150 hover:scale-[1.02] hover:bg-(--accent-primary-hover) active:scale-[0.98]"
+                className="inline-flex items-center rounded-(--radius-md) bg-(--accent-primary) px-5 py-2.5 text-sm font-semibold text-(--on-accent) shadow-(--shadow-btn-primary) transition-[background-color,box-shadow,transform] duration-150 hover:bg-(--accent-primary-hover) active:scale-[0.98]"
               >
                 Open Editor
               </Link>
@@ -149,7 +143,7 @@ export function HomeNav() {
             type="button"
             onClick={() => setOpen((p) => !p)}
             aria-label={open ? "Close menu" : "Open menu"}
-            className="flex h-10 w-10 flex-none items-center justify-center rounded-(--radius-sm) text-(--ink-primary)"
+            className="flex h-10 w-10 flex-none items-center justify-center rounded-(--radius-sm) text-(--ink-primary) transition-colors hover:bg-(--bg-subtle) active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent-primary)/40"
           >
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>

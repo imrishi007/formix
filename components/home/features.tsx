@@ -1,6 +1,5 @@
 ﻿"use client";
 
-import { motion } from "framer-motion";
 import { Eye, GitBranch, Layers, Sparkles, Terminal, Zap } from "lucide-react";
 
 const FEATURES = [
@@ -56,13 +55,9 @@ export function Features() {
         </div>
 
         <div className="mt-20 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((f, i) => (
-            <motion.div
+          {FEATURES.map((f) => (
+            <div
               key={f.title}
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-60px" }}
-              transition={{ duration: 0.6, delay: (i % 3) * 0.08, ease: [0.16, 1, 0.3, 1] }}
               className="card-base p-7"
             >
               <span
@@ -73,7 +68,7 @@ export function Features() {
               </span>
               <h3 className="mt-5 text-lg font-semibold text-(--ink-primary)">{f.title}</h3>
               <p className="mt-2 text-base leading-relaxed text-(--ink-secondary)">{f.desc}</p>
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>
