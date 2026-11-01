@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { deriveComputedValues, numericVariables } from "../lib/forml-runtime";
+import { deriveComputedValues, numericVariables, pruneInactiveRepeatEntries } from "../lib/forml-runtime";
 
 const number = (value: number) => ({ type: "NumberLiteral", value });
 const identifier = (name: string) => ({ type: "IdentifierExpr", name });
@@ -43,5 +43,25 @@ describe("Forml computed runtime", () => {
     assert.deepEqual(numericVariables({
       varDeclarations: [{ name: "tax", value: { valueKind: "number", numberValue: 0.18 } }],
     }), { tax: 0.18 });
+  });
+
+  it("removes hidden repeat answers when the respondent lowers the count", () => {
+    const statements = [{
+      type: "RepeatGroup",
+      countRef: "book_count",
+      fields: [{ name: "title" }, { name: "genres" }],
+    }];
+    const values = {
+      book_count: "1",
+      title_repeat_0: "Visible",
+      title_repeat_1: "Removed",
+      genres_repeat_1__Fiction: "true",
+      unrelated: "keep",
+    };
+    assert.deepEqual(pruneInactiveRepeatEntries(statements, values, values), {
+      book_count: "1",
+      title_repeat_0: "Visible",
+      unrelated: "keep",
+    });
   });
 });

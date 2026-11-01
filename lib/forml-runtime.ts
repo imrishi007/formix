@@ -120,3 +120,54 @@ export function deriveComputedValues(
     resolved[key] === undefined ? [] : [[key, resolved[key]]]
   ));
 }
+
+interface RepeatFieldLimit {
+  baseName: string;
+  count: number;
+}
+
+function collectRepeatLimits(
+  statements: FormlRuntimeNode[],
+  values: Record<string, string>,
+): RepeatFieldLimit[] {
+  const limits: RepeatFieldLimit[] = [];
+  for (const statement of statements) {
+    const type = statement.type as string;
+    if (type === "RepeatGroup") {
+      const raw = Number.parseInt(values[statement.countRef as string] ?? "0", 10);
+      const count = Math.min(Math.max(Number.isNaN(raw) ? 0 : raw, 0), 20);
+      for (const field of (statement.fields as FormlRuntimeNode[]) ?? []) {
+        limits.push({ baseName: field.name as string, count });
+      }
+    } else if (type === "Conditional") {
+      limits.push(...collectRepeatLimits([
+        ...((statement.then as FormlRuntimeNode[]) ?? []),
+        ...((statement.else as FormlRuntimeNode[]) ?? []),
+      ], values));
+    } else if (type === "Section" || type === "Layout") {
+      limits.push(...collectRepeatLimits(
+        (statement.statements as FormlRuntimeNode[]) ?? [],
+        values,
+      ));
+    }
+  }
+  return limits;
+}
+
+/** Remove answers belonging to repeat items that are no longer visible. */
+export function pruneInactiveRepeatEntries<T>(
+  statements: FormlRuntimeNode[],
+  values: Record<string, string>,
+  entries: Record<string, T>,
+): Record<string, T> {
+  const limits = collectRepeatLimits(statements, values);
+  if (limits.length === 0) return entries;
+
+  return Object.fromEntries(Object.entries(entries).filter(([key]) => {
+    for (const { baseName, count } of limits) {
+      const match = key.match(new RegExp(`^${baseName}_repeat_(\\d+)(?:__.*)?$`));
+      if (match) return Number(match[1]) < count;
+    }
+    return true;
+  }));
+}

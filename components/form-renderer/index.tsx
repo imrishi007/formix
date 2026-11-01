@@ -16,7 +16,7 @@
 
 import { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronRight, Paperclip, X } from "lucide-react";
+import { ChevronRight, Minus, Paperclip, Plus, X } from "lucide-react";
 import { acceptToHtmlAttr, formatBytes } from "@/lib/forml-validate";
 import { deriveComputedValues } from "@/lib/forml-runtime";
 
@@ -416,6 +416,31 @@ export function RenderStatements({
 
           return (
             <div key={key} className="space-y-3">
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {count} {count === 1 ? "item" : "items"}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onChange(countRef, String(Math.max(0, count - 1)))}
+                    disabled={count === 0}
+                    aria-label={`Remove last ${countRef.replaceAll("_", " ")} item`}
+                    className="rounded-md border border-border bg-background p-1.5 text-muted-foreground transition-colors hover:border-accent/40 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Minus className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onChange(countRef, String(Math.min(20, count + 1)))}
+                    disabled={count === 20}
+                    aria-label={`Add ${countRef.replaceAll("_", " ")} item`}
+                    className="rounded-md border border-border bg-background p-1.5 text-muted-foreground transition-colors hover:border-accent/40 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
               {count === 0 && (
                 <div className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-muted/50 px-4 py-3">
                   <span className="text-[18px] text-muted-foreground/60">↑</span>

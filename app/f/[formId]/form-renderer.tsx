@@ -12,7 +12,7 @@ import {
 import { getForm, submitForm, submitFormWithFiles, type PublicFormResponse } from "@/lib/api";
 import { useFormValidation } from "@/hooks/use-form-validation";
 import { formHasFileFields } from "@/lib/forml-validate";
-import { deriveComputedValues, numericVariables } from "@/lib/forml-runtime";
+import { deriveComputedValues, numericVariables, pruneInactiveRepeatEntries } from "@/lib/forml-runtime";
 
 type SubmitState = "idle" | "submitting" | "success" | "redirecting" | "error";
 
@@ -119,9 +119,11 @@ export function FormRenderer({ formId }: { formId: string }) {
     setSubmitState("submitting");
     setSubmitError(null);
     try {
+      const submittedValues = pruneInactiveRepeatEntries(allStatements, effectiveValues, effectiveValues);
+      const submittedFiles = pruneInactiveRepeatEntries(allStatements, effectiveValues, files);
       const result = hasFileFields
-        ? await submitFormWithFiles(formId, effectiveValues, files, sessionId ?? undefined)
-        : await submitForm(formId, effectiveValues, sessionId ?? undefined);
+        ? await submitFormWithFiles(formId, submittedValues, submittedFiles, sessionId ?? undefined)
+        : await submitForm(formId, submittedValues, sessionId ?? undefined);
       setSubmissionId(result.submission_id);
 
       if (result.next_form_id) {
@@ -139,7 +141,7 @@ export function FormRenderer({ formId }: { formId: string }) {
           : "Submission failed — please try again.",
       );
     }
-  }, [schema, formId, effectiveValues, files, hasFileFields, sessionId, submitState, validateAll, router]);
+  }, [schema, formId, allStatements, effectiveValues, files, hasFileFields, sessionId, submitState, validateAll, router]);
 
   const formTitle = schema?.compiled_schema
     ? ((schema.compiled_schema.name as string) ?? schema.title)
