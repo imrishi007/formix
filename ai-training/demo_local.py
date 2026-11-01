@@ -15,6 +15,8 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
+from repair_guidance import grammar_hints
+
 ROOT = Path(__file__).resolve().parents[1]
 FALLBACK_BASE_MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct"
 SYSTEM_PROMPT = (
@@ -141,12 +143,17 @@ def repair_prompt(source: str, diagnostics: list[dict], attempt: int) -> str:
         for item in diagnostics
         if item.get("severity") == "error"
     ]
-    return (
-        f"Repair attempt {attempt}. Correct this Forml so it passes the Formix compiler. "
-        "Preserve the requested form and return complete Forml source only.\n\n"
-        "Compiler diagnostics:\n" + ("\n".join(errors) or "No specific diagnostic was returned.")
-        + "\n\nCurrent Forml source:\n" + source
-    )
+    instructions = [
+        f"Repair attempt {attempt}. Correct this Forml so it passes the Formix compiler.",
+        "Preserve the requested form and return complete Forml source only.",
+        "Do not add fields, comments, or prose to describe the repair.",
+        *grammar_hints(diagnostics),
+        "Compiler diagnostics:",
+        "\n".join(errors) or "No specific diagnostic was returned.",
+        "Current Forml source:",
+        source,
+    ]
+    return "\n".join(instructions)
 
 
 def answer(model, tokenizer, compiler: Path, request: str, max_repairs: int, max_new_tokens: int) -> None:
