@@ -88,6 +88,11 @@ def load_model(model_name: str, adapter: Path | None):
     )
     if adapter:
         model = PeftModel.from_pretrained(model, str(adapter))
+    # Greedy decoding ignores sampling parameters; clear inherited defaults so
+    # Transformers does not emit misleading warnings during the Kaggle run.
+    model.generation_config.temperature = None
+    model.generation_config.top_p = None
+    model.generation_config.top_k = None
     model.eval()
     return model, tokenizer
 
@@ -199,12 +204,20 @@ def run_suite(
         present = set(re.findall(r"\bfield\s+([A-Za-z_]\w*)\s*:", source))
         expected = set(row.get("expected_fields", []))
         coverage = len(present & expected) / len(expected) if expected else 1.0
+        precision = len(present & expected) / len(present) if present else (1.0 if not expected else 0.0)
+        unexpected = sorted(present - expected)
+        exact_field_set = present == expected
         patterns = row.get("required_patterns", [])
         matched_patterns = sum(bool(re.search(pattern, source, flags=re.MULTILINE)) for pattern in patterns)
         pattern_coverage = matched_patterns / len(patterns) if patterns else 1.0
         baseline = edit_baseline(row["prompt"]) if row.get("task") == "edit" else None
         unchanged_edit = baseline is not None and normalized_source(source) == normalized_source(baseline)
-        intent_success = bool(result.get("success")) and coverage == 1.0 and pattern_coverage == 1.0 and not unchanged_edit
+        intent_success = (
+            bool(result.get("success"))
+            and exact_field_set
+            and pattern_coverage == 1.0
+            and not unchanged_edit
+        )
         records.append({
             "id": row["id"],
             "task": row["task"],
@@ -213,6 +226,9 @@ def run_suite(
             "valid_after_repair": bool(result.get("success")),
             "repair_turns": repair_turns,
             "field_coverage": coverage,
+            "field_precision": precision,
+            "unexpected_fields": unexpected,
+            "exact_field_set": exact_field_set,
             "required_pattern_coverage": pattern_coverage,
             "unchanged_edit": unchanged_edit,
             "intent_success": intent_success,
@@ -231,6 +247,8 @@ def run_suite(
         "first_pass_compile_rate": sum(r["initial_valid"] for r in records) / count,
         "compile_rate_after_repairs": sum(r["valid_after_repair"] for r in records) / count,
         "mean_field_coverage": sum(r["field_coverage"] for r in records) / count,
+        "mean_field_precision": sum(r["field_precision"] for r in records) / count,
+        "exact_field_set_rate": sum(r["exact_field_set"] for r in records) / count,
         "mean_required_pattern_coverage": sum(r["required_pattern_coverage"] for r in records) / count,
         "intent_success_rate": sum(r["intent_success"] for r in records) / count,
         "unchanged_edit_rate": (
@@ -258,6 +276,7 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=120, help="Examples per model; use 0 for the full test set")
     parser.add_argument("--max-new-tokens", type=int, default=700)
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--adapter-only", action="store_true", help="Skip the base-model pass to save demonstration-training time")
     args = parser.parse_args()
     if not torch.cuda.is_available():
         raise SystemExit("A CUDA GPU is required for model evaluation.")
@@ -314,10 +333,11 @@ def main() -> None:
         "independent_challenge_examples": challenge_count,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    report["base_model_results"] = base_results or run_suite(
-        args.model, None, rows, args.compiler.resolve(), args.max_repairs,
-        args.max_new_tokens, args.batch_size, "base model",
-    )
+    if not args.adapter_only:
+        report["base_model_results"] = base_results or run_suite(
+            args.model, None, rows, args.compiler.resolve(), args.max_repairs,
+            args.max_new_tokens, args.batch_size, "base model",
+        )
     # Persist the completed baseline before loading the adapter. If the second
     # model fails to load or runs out of memory, the baseline is still useful.
     args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -327,6 +347,8 @@ def main() -> None:
     )
     args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
     for key in ("base_model_results", "fine_tuned_results"):
+        if key not in report:
+            continue
         result = report[key]
         print(key, json.dumps({k: v for k, v in result.items() if k != "records"}, indent=2))
 

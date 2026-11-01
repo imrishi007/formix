@@ -41,15 +41,16 @@ Do not put a GitHub token in a public notebook.
 
 1. checks that CUDA is available;
 2. builds the native Forml compiler;
-3. generates 1,600 creation targets, 1,600 edit targets, and compiler-grounded repair targets;
+3. generates 1,400 unique creation targets, 1,400 unique edit targets, and compiler-grounded repair targets;
 4. validates every target and all independent challenge references;
-5. QLoRA-trains the 3.09B model for two epochs with rank 32 adapters;
-6. evaluates the base and fine-tuned model on held-out plus challenge prompts;
-7. refuses to publish an adapter that fails compiler and intent thresholds;
-8. creates `/kaggle/working/formix/formix-v2-artifacts.zip`.
+5. QLoRA-trains the 3.09B model for one epoch with rank 32 adapters and a hard 55-minute training limit;
+6. evaluates the adapter on held-out plus challenge prompts, including unexpected-field detection;
+7. refuses to recommend an adapter that fails compiler and intent thresholds;
+8. always creates `formix-v2-artifacts.zip`, even when the quality gate rejects the adapter.
 
-Expect this to take substantially longer than the old 1.5B run. Do not stop at
-the training-loss line: the run is successful only when it prints:
+Training is capped at 55 minutes; dataset generation and evaluation add extra
+time. Do not stop at the training-loss line: the run is successful only when
+it prints:
 
 ```text
 V2 adapter passed its quality gate. Download formix-v2-artifacts.zip
@@ -65,8 +66,9 @@ Download `formix-v2-artifacts.zip` from Kaggle's Files panel. It contains:
 - `quality_gate.json` — the pass/fail decision;
 - `dataset_summary.json` — dataset and grammar provenance.
 
-Do not replace the working local adapter if `quality_gate.json` says `false`.
-Keep the old adapter until v2 has also passed a local smoke demonstration.
+Download the ZIP even when `quality_gate.json` says `false`; rejected output
+contains the per-prompt failures needed for diagnosis. Do not replace the
+working local adapter until v2 also passes a local smoke demonstration.
 
 ## 5. Test v2 locally
 

@@ -12,6 +12,8 @@ def metrics(**overrides):
         "first_pass_compile_rate": 0.95,
         "compile_rate_after_repairs": 0.99,
         "mean_field_coverage": 0.98,
+        "mean_field_precision": 0.98,
+        "exact_field_set_rate": 0.90,
         "mean_required_pattern_coverage": 0.97,
         "intent_success_rate": 0.90,
         "unchanged_edit_rate": 0.01,
@@ -36,3 +38,10 @@ def test_quality_gate_rejects_valid_code_that_ignores_prompts():
     assert result["passed"] is False
     failed = {item["metric"] for item in result["checks"] if not item["passed"]}
     assert "intent_success_rate" in failed
+
+
+def test_adapter_only_report_still_enforces_absolute_quality():
+    result = evaluate_report({"fine_tuned_results": metrics(mean_field_precision=0.70)})
+    assert result["passed"] is False
+    failed = {item["metric"] for item in result["checks"] if not item["passed"]}
+    assert "mean_field_precision" in failed

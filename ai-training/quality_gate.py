@@ -12,6 +12,8 @@ LIMITS = {
     "first_pass_compile_rate": (0.90, "min"),
     "compile_rate_after_repairs": (0.97, "min"),
     "mean_field_coverage": (0.95, "min"),
+    "mean_field_precision": (0.95, "min"),
+    "exact_field_set_rate": (0.85, "min"),
     "mean_required_pattern_coverage": (0.95, "min"),
     "intent_success_rate": (0.85, "min"),
     "unchanged_edit_rate": (0.05, "max"),
@@ -19,7 +21,7 @@ LIMITS = {
 
 
 def evaluate_report(report: dict) -> dict:
-    base = report["base_model_results"]
+    base = report.get("base_model_results")
     tuned = report["fine_tuned_results"]
     checks = []
     for metric, (limit, direction) in LIMITS.items():
@@ -29,16 +31,17 @@ def evaluate_report(report: dict) -> dict:
 
     # Fine-tuning is not allowed to trade instruction-following for syntax.
     # A two-point tolerance accounts for sampling noise in the finite test set.
-    for metric in ("first_pass_compile_rate", "intent_success_rate"):
-        base_value = float(base.get(metric, 0.0))
-        tuned_value = float(tuned.get(metric, 0.0))
-        checks.append({
-            "metric": f"{metric}_vs_base",
-            "value": tuned_value,
-            "limit": base_value - 0.02,
-            "direction": "min",
-            "passed": tuned_value >= base_value - 0.02,
-        })
+    if base:
+        for metric in ("first_pass_compile_rate", "intent_success_rate"):
+            base_value = float(base.get(metric, 0.0))
+            tuned_value = float(tuned.get(metric, 0.0))
+            checks.append({
+                "metric": f"{metric}_vs_base",
+                "value": tuned_value,
+                "limit": base_value - 0.02,
+                "direction": "min",
+                "passed": tuned_value >= base_value - 0.02,
+            })
 
     return {"passed": all(item["passed"] for item in checks), "checks": checks}
 

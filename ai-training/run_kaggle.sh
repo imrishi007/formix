@@ -9,8 +9,33 @@ cd "$ROOT"
 COMPILER="forml-compiler/build/forml_compiler"
 DATA="ai-training/data-v2"
 OUTPUT="ai-training/output-v2"
-COUNT="${DATASET_COUNT:-1600}"
+COUNT="${DATASET_COUNT:-1400}"
 MODEL="${FORMIX_BASE_MODEL:-Qwen/Qwen2.5-Coder-3B-Instruct}"
+ARCHIVE="formix-v2-artifacts.zip"
+
+# Preserve a rejected adapter too: failed runs are the input to the next
+# iteration, and Kaggle working storage disappears when the runtime resets.
+archive_artifacts() {
+  rm -f "$ARCHIVE"
+  local paths=()
+  local candidates=(
+    "$OUTPUT/adapter"
+    "$OUTPUT/training_metadata.json"
+    "$OUTPUT/evaluation.json"
+    "$OUTPUT/quality_gate.json"
+    "$DATA/dataset_summary.json"
+    "$DATA/test.jsonl"
+    "ai-training/challenge.jsonl"
+  )
+  for path in "${candidates[@]}"; do
+    [[ -e "$path" ]] && paths+=("$path")
+  done
+  if (( ${#paths[@]} )); then
+    zip -r "$ARCHIVE" "${paths[@]}"
+    echo "Preserved available artifacts at $ROOT/$ARCHIVE"
+  fi
+}
+trap archive_artifacts EXIT
 
 # Fail before compiling or generating thousands of examples if Kaggle started
 # a CPU-only session. nvidia-smi is useful for display, but PyTorch's CUDA
@@ -47,10 +72,11 @@ python ai-training/train.py \
   --data "$DATA" \
   --output "$OUTPUT" \
   --model "$MODEL" \
-  --epochs 2 \
-  --learning-rate 1e-4 \
+  --epochs 1 \
+  --learning-rate 8e-5 \
   --max-length 3072 \
-  --lora-rank 32
+  --lora-rank 32 \
+  --max-runtime-minutes 55
 python ai-training/evaluate.py \
   --compiler "$COMPILER" \
   --data "$DATA" \
@@ -60,15 +86,8 @@ python ai-training/evaluate.py \
   --limit 120 \
   --max-new-tokens 700 \
   --batch-size 4 \
+  --adapter-only \
   --output "$OUTPUT/evaluation.json"
 python ai-training/quality_gate.py "$OUTPUT/evaluation.json" --output "$OUTPUT/quality_gate.json"
-
-rm -f formix-v2-artifacts.zip
-zip -r formix-v2-artifacts.zip \
-  "$OUTPUT/adapter" \
-  "$OUTPUT/training_metadata.json" \
-  "$OUTPUT/evaluation.json" \
-  "$OUTPUT/quality_gate.json" \
-  "$DATA/dataset_summary.json"
 
 echo "V2 adapter passed its quality gate. Download formix-v2-artifacts.zip"

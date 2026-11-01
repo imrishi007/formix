@@ -340,6 +340,29 @@ def compiler_result(compiler: Path, source: str) -> dict:
         raise RuntimeError(f"Compiler did not return JSON: {run.stdout[:500]}") from error
 
 
+def split_validation_by_completion(
+    rows: list[dict], validation_count: int, rng: random.Random
+) -> tuple[list[dict], list[dict]]:
+    """Split whole normalized-target groups so validation cannot memorize them."""
+    completion_groups: dict[str, list[dict]] = {}
+    for item in rows:
+        normalized = re.sub(r"\s+", "", item["completion"])
+        key = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+        completion_groups.setdefault(key, []).append(item)
+    groups = list(completion_groups.values())
+    rng.shuffle(groups)
+    # Singletons make the requested size precise while repeated advanced
+    # recipes remain represented in training.
+    groups.sort(key=len)
+    validation, retained_train = [], []
+    for group in groups:
+        if len(validation) < validation_count:
+            validation.extend(group)
+        else:
+            retained_train.extend(group)
+    return retained_train, validation
+
+
 def request_example(rng: random.Random, index: int, forced_recipe: dict | None = None) -> dict:
     if forced_recipe is not None or rng.random() < 0.30:
         recipe = forced_recipe or rng.choice(COMPLEX_RECIPES)
@@ -448,6 +471,7 @@ def main() -> None:
 
     rng = random.Random(args.seed)
     examples: list[dict] = []
+    seen_examples: set[tuple[str, str]] = set()
     attempts = 0
     # Guarantee at least one example of every hand-authored EBNF construct,
     # even when the requested dataset is small for a quick smoke run.
@@ -457,13 +481,20 @@ def main() -> None:
         if not checked.get("success"):
             raise RuntimeError(f"Canonical recipe {recipe['scenario']} is not accepted by the compiler: {checked.get('diagnostics')}")
         examples.append(candidate)
+        seen_examples.add((candidate["prompt"], candidate["completion"]))
     while len(examples) < args.count:
         attempts += 1
         candidate = request_example(rng, len(examples))
+        signature = (candidate["prompt"], candidate["completion"])
+        if signature in seen_examples:
+            if attempts > args.count * 20:
+                raise RuntimeError("Could not generate enough unique examples; expand the recipe vocabulary.")
+            continue
         if not compiler_result(compiler, candidate["completion"]).get("success"):
             continue
         examples.append(candidate)
-        if attempts > args.count * 4:
+        seen_examples.add(signature)
+        if attempts > args.count * 20:
             raise RuntimeError("Too many compiler-rejected generated targets; inspect the grammar templates.")
 
     # The exact malformed source and diagnostic come from the real compiler;
@@ -475,11 +506,20 @@ def main() -> None:
             repairs.append(repair)
 
     edits = []
-    for idx in range(args.count):
-        edit = edit_example(rng, idx)
+    seen_edits: set[tuple[str, str]] = set()
+    edit_attempt = 0
+    while len(edits) < args.count:
+        edit = edit_example(rng, edit_attempt)
+        edit_attempt += 1
+        signature = (edit["prompt"], edit["completion"])
+        if signature in seen_edits:
+            if edit_attempt > args.count * 20:
+                raise RuntimeError("Could not generate enough unique edit examples.")
+            continue
         if not compiler_result(compiler, edit["completion"]).get("success"):
             raise RuntimeError(f"Edit target is not accepted by the compiler: {edit['id']}")
         edits.append(edit)
+        seen_edits.add(signature)
 
     # Split by scenario family to make the test set include unseen form types.
     scenario_names = sorted({item["scenario"] for item in examples})
@@ -498,8 +538,10 @@ def main() -> None:
     rng.shuffle(train)
     rng.shuffle(test)
     validation_count = max(1, len(train) // 10)
-    validation = train[:validation_count]
-    train = train[validation_count:]
+    # Hold out complete normalized-target groups. This prevents near-identical
+    # completions from making teacher-forced validation loss look perfect while
+    # free generation still fails.
+    train, validation = split_validation_by_completion(train, validation_count, rng)
 
     for name, rows in (("train.jsonl", train), ("validation.jsonl", validation), ("test.jsonl", test)):
         with (args.output / name).open("w", encoding="utf-8") as handle:

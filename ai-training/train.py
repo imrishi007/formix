@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 import torch
@@ -15,13 +16,20 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     Trainer,
+    TrainerCallback,
     TrainingArguments,
 )
 
 
 SYSTEM_PROMPT = (
-    "You write Forml, the Formix form DSL. Return only complete Forml source code. "
-    "Follow the request and compiler diagnostics. Use only syntax in the Forml grammar."
+    "You write Forml, the Formix form DSL. Return only one complete Forml program: "
+    "no Markdown fences, explanation, JSON, or prose. Include every requested field "
+    "and do not invent unrelated fields. Preserve all existing fields during edits. "
+    "A field is `field name: type`, where type is text, integer, float, email, date, "
+    "boolean, url, select, radio, checkbox, or upload. Put choices inside the field "
+    "as `option \"Label\"`. UI syntax is `ui { label: \"Label\" }`; validation "
+    "syntax is `validate { required min: 1 max: 10 }`. Close every opened brace. "
+    "Follow compiler diagnostics exactly and use only canonical Forml grammar."
 )
 BASE_MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct"
 MAX_LENGTH = 3072
@@ -94,17 +102,30 @@ class CausalPadding:
         }
 
 
+class TimeBudgetCallback(TrainerCallback):
+    """Stop cleanly before Kaggle's requested wall-clock training budget."""
+
+    def __init__(self, minutes: float):
+        self.deadline = time.monotonic() + minutes * 60
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if time.monotonic() >= self.deadline:
+            control.should_training_stop = True
+        return control
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=Path, default=Path("ai-training/data"))
     parser.add_argument("--output", type=Path, default=Path("ai-training/output"))
     parser.add_argument("--model", default=BASE_MODEL)
-    parser.add_argument("--epochs", type=float, default=2)
+    parser.add_argument("--epochs", type=float, default=1)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--grad-accum", type=int, default=8)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--max-length", type=int, default=MAX_LENGTH)
     parser.add_argument("--lora-rank", type=int, default=32)
+    parser.add_argument("--max-runtime-minutes", type=float, default=55)
     args = parser.parse_args()
     if not torch.cuda.is_available():
         raise SystemExit("A CUDA GPU is required. In Kaggle, enable a GPU accelerator and restart the session.")
@@ -112,6 +133,8 @@ def main() -> None:
 
     if args.max_length < 512:
         parser.error("--max-length must be at least 512")
+    if args.max_runtime_minutes <= 0 or args.max_runtime_minutes > 60:
+        parser.error("--max-runtime-minutes must be in the range (0, 60]")
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -177,6 +200,7 @@ def main() -> None:
         train_dataset=train_dataset,
         eval_dataset=validation_dataset,
         data_collator=CausalPadding(tokenizer),
+        callbacks=[TimeBudgetCallback(args.max_runtime_minutes)],
     )
     result = trainer.train()
     trainer.save_model(str(args.output / "adapter"))
@@ -189,6 +213,7 @@ def main() -> None:
         "learning_rate": args.learning_rate,
         "max_length": args.max_length,
         "lora_rank": args.lora_rank,
+        "max_runtime_minutes": args.max_runtime_minutes,
         "gpu": torch.cuda.get_device_name(0),
         "train_metrics": result.metrics,
     }
