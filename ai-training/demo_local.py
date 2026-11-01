@@ -15,7 +15,7 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-from repair_guidance import grammar_hints
+from repair_guidance import grammar_hints, intent_diagnostics
 from train import SYSTEM_PROMPT
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -155,19 +155,21 @@ def repair_prompt(source: str, diagnostics: list[dict], attempt: int) -> str:
 def answer(model, tokenizer, compiler: Path, request: str, max_repairs: int, max_new_tokens: int) -> None:
     source = generate(model, tokenizer, request, max_new_tokens)
     result = compile_source(compiler, source)
+    intent_errors = intent_diagnostics(request, source)
     for attempt in range(1, max_repairs + 1):
-        if result.get("success"):
+        if result.get("success") and not intent_errors:
             break
-        errors = result.get("diagnostics", [])
+        errors = [*result.get("diagnostics", []), *intent_errors]
         print(f"Compiler rejected output; requesting repair {attempt}/{max_repairs} …", flush=True)
         source = generate(model, tokenizer, repair_prompt(source, errors, attempt), max_new_tokens)
         result = compile_source(compiler, source)
+        intent_errors = intent_diagnostics(request, source)
 
     print("\n--- Generated Forml ---")
     print(source)
     print("--- Compiler result ---")
-    print("PASS" if result.get("success") else "FAIL")
-    for diagnostic in result.get("diagnostics", []):
+    print("PASS" if result.get("success") and not intent_errors else "FAIL")
+    for diagnostic in [*result.get("diagnostics", []), *intent_errors]:
         print(
             f"{diagnostic.get('severity', 'error').upper()} "
             f"{diagnostic.get('line', 0)}:{diagnostic.get('column', 0)} "
