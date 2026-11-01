@@ -138,6 +138,7 @@ def repair_prompt(source: str, diagnostics: list[dict], attempt: int) -> str:
     lines = [
         f"Compiler repair attempt {attempt}. Fix the Forml source so it passes the Formix compiler.",
         "Preserve the requested form and return the complete corrected source only.",
+        "Do not add fields, comments, or prose to describe the repair.",
         "Compiler diagnostics:",
     ]
     lines.extend(
