@@ -65,3 +65,14 @@ def test_conditional_normalizer_removes_foreign_then_keyword():
     normalized = normalize_known_dialects("Create an age conditional", source)
     assert "if age >= 18 {" in normalized
     assert " then " not in normalized
+
+
+def test_computed_field_normalizer_adds_compute_keyword():
+    source = '  field total: float = quantity * unit_price\n    ui { label: "Total" }'
+    normalized = normalize_known_dialects("Create an order calculator", source)
+    assert "field total: float compute = quantity * unit_price" in normalized
+
+
+def test_unexpected_assignment_diagnostic_adds_computed_field_hint():
+    hints = "\n".join(grammar_hints([diagnostic("Unexpected token '=' in statement position")]))
+    assert "field total: float compute = quantity * unit_price" in hints

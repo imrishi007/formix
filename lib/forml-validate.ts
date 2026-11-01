@@ -20,6 +20,23 @@ function isEmpty(value: string): boolean {
   return value.trim() === "";
 }
 
+/** Accept a normal web address with or without an explicit scheme.
+ *  Respondents commonly type `example.com`; requiring them to know that an
+ *  HTML URL input expects `https://` is needless friction. */
+function isValidWebAddress(value: string): boolean {
+  const trimmed = value.trim();
+  const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  try {
+    const parsed = new URL(candidate);
+    return ["http:", "https:"].includes(parsed.protocol)
+      && (parsed.hostname === "localhost" || parsed.hostname.includes("."));
+  } catch {
+    return false;
+  }
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -284,10 +301,8 @@ export function validateField(
 
   // ── url ───────────────────────────────────────────────────────────────────
   if (fieldType === "url") {
-    try {
-      new URL(value);
-    } catch {
-      return `${label} must be a valid URL (e.g. https://example.com).`;
+    if (!isValidWebAddress(value)) {
+      return `${label} must be a valid web address (e.g. example.com).`;
     }
   }
 

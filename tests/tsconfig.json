@@ -24,6 +24,7 @@
     "target": "ES2022",
     "module": "commonjs",
     "moduleResolution": "node",
+    "jsx": "react-jsx",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "strict": true,
@@ -35,5 +36,5 @@
     },
     "types": ["node"]
   },
-  "include": ["*.test.ts", "../lib/ai-loop.ts", "../lib/forml-diff.ts"]
+  "include": ["*.test.ts", "../lib/ai-loop.ts", "../lib/forml-diff.ts", "../lib/forml-validate.ts"]
 }

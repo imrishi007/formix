@@ -13,6 +13,14 @@ def normalize_known_dialects(request: str, source: str) -> str:
         source,
         flags=re.IGNORECASE,
     )
+    # Some code models put an expression directly after the field type. Forml
+    # spells the same intent with the explicit `compute` keyword.
+    source = re.sub(
+        r"^(?P<prefix>\s*field\s+[A-Za-z_]\w*\s*:\s*(?:integer|float))\s*=\s*(?P<expr>[^\n]+)$",
+        r"\g<prefix> compute = \g<expr>",
+        source,
+        flags=re.MULTILINE,
+    )
     if not re.search(
         r"\b(how many|number|count|entered|ask(?:ing)?|input)\b",
         request,
@@ -76,7 +84,11 @@ def grammar_hints(diagnostics: list[dict]) -> list[str]:
             'Canonical upload example: field resume: upload { accept: pdf,document required maxSize: "10MB" }',
             "Do not use MIME arrays, max_size, or byte arithmetic.",
         ])
-    if "after 'compute'" in messages or "math expression" in messages:
+    if (
+        "after 'compute'" in messages
+        or "math expression" in messages
+        or "unexpected token '='" in messages
+    ):
         hints.extend([
             "Canonical computed field: field total: float compute = quantity * unit_price",
             "Use compute = expression, never compute braces.",

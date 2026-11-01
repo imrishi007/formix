@@ -317,9 +317,10 @@ export function DynamicField({
           type={
             fieldType === "email" ? "email"
             : fieldType === "date" ? "date"
-            : fieldType === "url"  ? "url"
             : "text"
           }
+          inputMode={fieldType === "url" ? "url" : undefined}
+          autoCapitalize={fieldType === "url" ? "none" : undefined}
           value={value}
           onChange={(e) => onChange(nameKey, e.target.value)}
           onBlur={() => onBlur?.(nameKey)}
