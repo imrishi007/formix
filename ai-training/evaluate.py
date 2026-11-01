@@ -18,6 +18,7 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from repair_guidance import grammar_hints
 from train import BASE_MODEL, SYSTEM_PROMPT
 
 
@@ -139,8 +140,12 @@ def repair_prompt(source: str, diagnostics: list[dict], attempt: int) -> str:
         f"Compiler repair attempt {attempt}. Fix the Forml source so it passes the Formix compiler.",
         "Preserve the requested form and return the complete corrected source only.",
         "Do not add fields, comments, or prose to describe the repair.",
-        "Compiler diagnostics:",
     ]
+    # Keep the generation-time system prompt identical to training. Add narrow
+    # grammar reminders only after the compiler identifies a known dialect
+    # mismatch, so valid first-pass generations are never destabilized.
+    lines.extend(grammar_hints(diagnostics))
+    lines.append("Compiler diagnostics:")
     lines.extend(
         f"line {item.get('line', 0)}, column {item.get('column', item.get('col', 0))}: {item.get('message', 'compiler error')}"
         for item in diagnostics

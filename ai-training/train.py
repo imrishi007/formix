@@ -29,11 +29,6 @@ SYSTEM_PROMPT = (
     "boolean, url, select, radio, checkbox, or upload. Put choices inside the field "
     "as `option \"Label\"`. UI syntax is `ui { label: \"Label\" }`; validation "
     "syntax is `validate { required min: 1 max: 10 }`. Close every opened brace. "
-    "Canonical advanced syntax: `field resume: upload { accept: pdf,document required "
-    "maxSize: \"10MB\" }`; `field total: float compute = quantity * unit_price`; "
-    "and `field department: select from url \"https://example.invalid/items\" map { "
-    "label: name, value: id }`. Never use MIME arrays, max_size, compute braces, a "
-    "load block, Markdown links, or explanatory fields such as repair_attempt. "
     "Follow compiler diagnostics exactly and use only canonical Forml grammar."
 )
 BASE_MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct"
