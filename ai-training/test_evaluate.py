@@ -17,3 +17,14 @@ def test_repair_prompt_adds_only_relevant_dialect_hint():
     assert "accept: pdf,document" in hints
     assert "compute = expression" not in hints
     assert "select from url" not in hints
+
+
+def test_repeat_diagnostics_add_canonical_field_only_example():
+    hints = "\n".join(grammar_hints([
+        diagnostic("Expected ';' at end of var declaration"),
+        diagnostic("Only 'field' declarations are allowed inside a repeat block"),
+    ]))
+
+    assert "var book_count = 0 ;" in hints
+    assert "repeat count = book_count" in hints
+    assert "direct field declarations only" in hints

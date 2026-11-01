@@ -16,14 +16,10 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from repair_guidance import grammar_hints
+from train import SYSTEM_PROMPT
 
 ROOT = Path(__file__).resolve().parents[1]
 FALLBACK_BASE_MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct"
-SYSTEM_PROMPT = (
-    "You write Forml, the Formix form DSL. Return only complete Forml source code. "
-    "Use the supplied request and, when present, compiler diagnostics. "
-    "Do not invent syntax outside the Forml grammar."
-)
 
 
 def resolve_adapter(path: Path) -> Path:
