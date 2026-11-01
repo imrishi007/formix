@@ -14,7 +14,7 @@ From the repository root, confirm:
 
 ```powershell
 nvidia-smi
-Test-Path .\ai-training\output\adapter\adapter_config.json
+Test-Path .\ai-training\output-v2\adapter\adapter_config.json
 Test-Path .\forml-compiler\build\forml_compiler.exe
 python -c "import torch; print('CUDA:', torch.cuda.is_available())"
 ```
@@ -32,7 +32,7 @@ python -m pip install -r .\ai-training\requirements.txt
 pnpm install
 ```
 
-The first run may download `Qwen/Qwen2.5-Coder-1.5B-Instruct` from Hugging
+The first run may download `Qwen/Qwen2.5-Coder-3B-Instruct` from Hugging
 Face. Do that before meeting your professor. The adapter ZIP is not the base
 model. If the laptop cannot load it reliably, use a Kaggle GPU for the
 terminal-only demo in `ai-training/README.md`; connecting a remote Kaggle
@@ -49,7 +49,7 @@ Open three PowerShell windows at the repository root. Leave each one running.
 $env:FORMIX_LOCAL_MODEL_KEY = 'local-demo-only'
 $env:HF_HUB_OFFLINE = '1' # use after the base model has been downloaded once
 $env:TRANSFORMERS_OFFLINE = '1'
-python .\ai-training\serve_local.py --adapter .\ai-training\output\adapter
+python .\ai-training\serve_local.py --adapter .\ai-training\output-v2\adapter
 ```
 
 Wait for `Formix model ready at http://127.0.0.1:8765/v1`. Check

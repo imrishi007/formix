@@ -57,6 +57,12 @@ forml-compiler/build/
 # Unit test build output (node --test fixtures compiled via tests/tsconfig.json)
 tests/.build/
 
+# Local/Kaggle model artifacts are large runtime outputs, never source.
+ai-training/output-v2/
+ai-training/data-v2/
+/formix-v2-artifacts.zip
+/formix-v2-passed-artifacts.zip
+
 # OS
 .DS_Store
 Thumbs.db
