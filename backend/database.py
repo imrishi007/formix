@@ -19,9 +19,13 @@ def _normalise_database_url(url: str) -> str:
     """Match provider URLs to the PostgreSQL driver installed by Formix."""
     url = url.strip()
     if url.startswith("postgres://"):
-        # Some providers still hand out the legacy scheme.
-        url = url.replace("postgres://", "postgresql://", 1)
-    if url.startswith("postgresql+psycopg://"):
+        # Some providers still hand out the legacy scheme. Be explicit about
+        # the driver because SQLAlchemy 2.1 defaults plain PostgreSQL URLs to
+        # psycopg v3, while Formix installs psycopg2-binary.
+        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    elif url.startswith("postgresql+psycopg://"):
         # Render/Neon may explicitly select psycopg v3, while Formix installs
         # psycopg2-binary. Keep one driver dependency instead of installing a
         # second PostgreSQL adapter solely to accept this URL spelling.

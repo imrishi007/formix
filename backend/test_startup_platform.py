@@ -52,7 +52,12 @@ def _publish(db, environment: str, name: str):
 
 
 def test_database_url_uses_the_installed_postgres_driver():
-    assert _normalise_database_url("postgres://user:pass@host/db") == "postgresql://user:pass@host/db"
+    assert _normalise_database_url("postgres://user:pass@host/db") == (
+        "postgresql+psycopg2://user:pass@host/db"
+    )
+    assert _normalise_database_url("postgresql://user:pass@host/db") == (
+        "postgresql+psycopg2://user:pass@host/db"
+    )
     assert _normalise_database_url("postgresql+psycopg://user:pass@host/db") == (
         "postgresql+psycopg2://user:pass@host/db"
     )
