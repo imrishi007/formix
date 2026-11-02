@@ -15,11 +15,21 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SQLITE_URL = f"sqlite:///{os.path.join(_HERE, 'formix.db')}"
 
-_env_url = os.environ.get("DATABASE_URL", "").strip()
-if _env_url.startswith("postgres://"):
-    # Some providers (Neon, Heroku) hand out the legacy scheme; SQLAlchemy 2.x
-    # requires the "postgresql://" form.
-    _env_url = _env_url.replace("postgres://", "postgresql://", 1)
+def _normalise_database_url(url: str) -> str:
+    """Match provider URLs to the PostgreSQL driver installed by Formix."""
+    url = url.strip()
+    if url.startswith("postgres://"):
+        # Some providers still hand out the legacy scheme.
+        url = url.replace("postgres://", "postgresql://", 1)
+    if url.startswith("postgresql+psycopg://"):
+        # Render/Neon may explicitly select psycopg v3, while Formix installs
+        # psycopg2-binary. Keep one driver dependency instead of installing a
+        # second PostgreSQL adapter solely to accept this URL spelling.
+        url = url.replace("postgresql+psycopg://", "postgresql+psycopg2://", 1)
+    return url
+
+
+_env_url = _normalise_database_url(os.environ.get("DATABASE_URL", ""))
 
 DATABASE_URL = _env_url or _SQLITE_URL
 

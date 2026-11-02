@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend import models  # noqa: E402
 from backend.database import Base  # noqa: E402
+from backend.database import _normalise_database_url  # noqa: E402
 from backend.deps import get_form_or_403, get_project_or_403  # noqa: E402
 from backend.routers import drafts, forms, releases, webhooks  # noqa: E402
 from backend.schemas import DraftSaveRequest, PublishRequest, RollbackRequest, WebhookCreate  # noqa: E402
@@ -48,6 +49,14 @@ def _publish(db, environment: str, name: str):
         db,
         db.get(models.User, "owner"),
     )
+
+
+def test_database_url_uses_the_installed_postgres_driver():
+    assert _normalise_database_url("postgres://user:pass@host/db") == "postgresql://user:pass@host/db"
+    assert _normalise_database_url("postgresql+psycopg://user:pass@host/db") == (
+        "postgresql+psycopg2://user:pass@host/db"
+    )
+    assert _normalise_database_url("sqlite:///local.db") == "sqlite:///local.db"
 
 
 def test_preview_does_not_replace_production_and_rollback_is_instant(db):
