@@ -2,8 +2,13 @@
 
 \usepackage[margin=25mm]{geometry}
 \usepackage[T1]{fontenc}
-\usepackage{lmodern}
+% Palatino's wider, more open letterforms give the report a polished academic
+% feel while remaining comfortable to read in dense technical sections.
+\usepackage{newpxtext}
+\usepackage{newpxmath}
+\usepackage[scaled=0.95]{inconsolata}
 \usepackage{microtype}
+\setlength{\emergencystretch}{1em}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{tabularx}
@@ -18,8 +23,9 @@
 \lstdefinestyle{forml}{basicstyle=\ttfamily\small,breaklines=true,frame=single,columns=fullflexible,keepspaces=true,showstringspaces=false}
 \graphicspath{{figures/}}
 
-\title{Grammar-Grounded Form Generation with QLoRA and Compiler Feedback}
-\author{Rishi \\ Final-Year Computer Science Project}
+\title{Grammar-Grounded Form Generation with QLoRA and Compiler Feedback\\[0.5em]
+\large Final-Year Project Report}
+\author{Rishi Raval\\Roll No.: 1AUA23BCS155\\Adani University\\Faculty: Krupali Donda}
 \date{\today}
 
 \begin{document}
@@ -29,9 +35,6 @@
 This project studies a constrained generative-AI task: translating natural-language form requirements into Forml, a domain-specific language (DSL) used by Formix. A Qwen2.5-Coder-1.5B-Instruct causal language model is adapted with parameter-efficient QLoRA fine-tuning on compiler-checked synthetic examples. A hand-written Forml compiler acts as the validity oracle during dataset construction, evaluation, and an optional generate--compile--repair loop. On a held-out, scenario-based set of 420 examples, the base model compiled 1.19\% of first outputs and 3.81\% after two repair turns; the adapted model compiled 73.33\% on its first output and 73.33\% after repair. The study also reports expected-field coverage, training configuration, compiler role, limitations, and reproducibility details. The benchmark is grammar-grounded and synthetic, so these results measure performance on this project benchmark rather than broad real-world form-generation ability.
 \end{abstract}
 
-\tableofcontents
-\newpage
-
 \section{Problem and project goal}
 Formix lets users describe forms as code. Forml is its small, structured DSL for fields, validation, layout, conditional behavior, and form actions. The project goal is to adapt a code-capable language model to translate a human request into complete Forml source, then rely on the actual Formix compiler to decide whether the output is valid. This separates two roles: the neural model proposes code; deterministic compiler software checks it.
 
@@ -40,6 +43,7 @@ The work is a focused generative-AI application rather than training a foundatio
 \section{Forml and its EBNF grammar}
 Forml is a domain-specific language (DSL): a compact language designed for a specific job, here describing forms. Its EBNF specification describes which token sequences are legal. In EBNF, a production defines a rule, alternatives are separated by \texttt{|}, square brackets mean optional, and braces mean repetition (zero or more times).
 
+\noindent\begin{minipage}{\linewidth}
 For example, the core shape is:
 \begin{lstlisting}[style=forml]
 form = "form" STRING "{" { statement } [ action_block ] "}" ;
@@ -48,6 +52,7 @@ statement = field | section | repeat_group | conditional
 field = "field" IDENTIFIER ":" type [ ui_block ]
         [ validation_block ] [ compute_block ] [ trigger_block ] ;
 \end{lstlisting}
+\end{minipage}
 
 This says that a form starts with the keyword \texttt{form}, has a quoted name, and contains zero or more statements, optionally followed by an action block. A field has a name and type, with optional user-interface, validation, computation, or trigger details. Other grammar rules describe pages, reusable groups, upload/select fields, expressions, conditions, and actions. The full grammar is maintained in \texttt{forml-compiler/EBNF\_grammar.md} (version 1.1); this report shows only the idea, not every production.
 
@@ -65,7 +70,7 @@ form "Event Signup Form" {
 \section{System design}
 \begin{figure}[H]
 \centering
-\fbox{\parbox{0.91\linewidth}{\centering Natural-language request $\rightarrow$ Qwen base model + LoRA adapter $\rightarrow$ Forml candidate $\rightarrow$ hand-written Formix compiler $\rightarrow$ pass / structured diagnostics $\rightarrow$ optional model repair}}}
+\fbox{\parbox{0.91\linewidth}{\centering Natural-language request $\rightarrow$ Qwen base model + LoRA adapter $\rightarrow$ Forml candidate $\rightarrow$ hand-written Formix compiler $\rightarrow$ pass / structured diagnostics $\rightarrow$ optional model repair}}
 \caption{Generation and compiler-feedback validation flow. The compiler, not a hosted language model, determines validity.}
 \end{figure}
 
@@ -79,7 +84,7 @@ The model has two components in this experiment: the frozen pretrained base weig
 \section{Dataset construction}
 The dataset generator creates paired natural-language requests and Forml completions, plus repair examples. It produces 1,200 generation examples and attempts to create 1,200 related repair examples. Before inclusion, a target completion must pass the native Formix compiler. A repair input is deliberately corrupted and must fail compilation; its target is the corresponding valid source, and the prompt includes real compiler diagnostics.
 
-The generated records include task type, scenario family, expected field names, and grammar-feature labels. The split used in this run contains 1,782 training examples, 198 validation examples, and 420 test examples (2,400 total). Scenario families are held out for testing to reduce direct leakage of recipe templates across splits. The generator uses seed 42. The exact grammar file is hashed into the generated dataset summary when the dataset is created.
+The generated records include task type, scenario family, expected field names, and grammar feature labels. The split used in this run contains 1,782 training examples, 198 validation examples, and 420 test examples (2,400 total). Scenario families are held out for testing to reduce direct leakage of recipe templates across splits. The generator uses seed 42. The exact grammar file is hashed into the generated dataset summary when the dataset is created.
 
 \paragraph{Dataset limitation.} These are synthetic, grammar-grounded examples generated from templates and compositional field recipes. A scenario split reduces near-duplicate leakage but does not make the test requests human-authored or independent of the generator's design. This should be stated when interpreting the benchmark. A stronger next experiment would add a manually written prompt set and have reviewers score requirement satisfaction.
 
@@ -112,15 +117,7 @@ Final training loss & 0.01193 \\
 \end{tabularx}
 \end{table}
 
-The training loss is the trainer's aggregate training metric; it is not the held-out compiler success rate and should not be interpreted as a quality score. The metadata saved with the run does not include per-step loss history or the final validation loss, so this draft does not invent a learning curve or validation metric. If Kaggle retained the Trainer checkpoint's \texttt{trainer\_state.json}, the plotting script can optionally graph its logged loss values.
-
-\IfFileExists{figures/training_loss.png}{
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.82\linewidth]{training_loss.png}
-\caption{Training and (when logged) validation loss from the Hugging Face Trainer state.}
-\end{figure}
-}{\noindent\emph{Training-curve figure pending: include \texttt{training\_loss.png} only if the Kaggle checkpoint retains logged loss history.}}
+The aggregate training loss is not a held-out quality score. Per-step loss history and final validation loss were not retained in the run metadata, so no learning curve or validation metric is reported.
 
 \section{Evaluation protocol and metrics}
 The evaluation compares the base model and the adapted model on the same 420 held-out examples. Both use FP16, batch size 8, and up to 350 generated tokens per pass. For each example, generated source is sent to the native Formix compiler. Invalid outputs are offered up to two compiler-feedback repair turns. The evaluator records:
@@ -148,30 +145,16 @@ The adapted model's first-pass compile rate is 72.14 percentage points higher on
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.88\linewidth]{compile_rates.png}
-\caption{Compiler acceptance before and after the repair cycle. Generated by the Kaggle plotting script from the saved evaluation JSON.}
+\includegraphics[width=0.68\linewidth]{compile_rates.png}
+\caption{Compiler acceptance before and after up to two repair turns.}
 \label{fig:compile}
 \end{figure}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.82\linewidth]{field_coverage.png}
+\includegraphics[width=0.65\linewidth]{field_coverage.png}
 \caption{Mean expected-field coverage. This is lexical identifier overlap, not a semantic correctness measure.}
 \label{fig:coverage}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.95\linewidth]{scenario_breakdown.png}
-\caption{Per-scenario results, generated from individual evaluation records.}
-\label{fig:scenario}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.88\linewidth]{task_breakdown.png}
-\caption{Results grouped by generation and repair task, when both task types occur in the test set.}
-\label{fig:task}
 \end{figure}
 
 \section{Demonstration}
@@ -180,24 +163,7 @@ The project can be demonstrated in a Kaggle notebook or a CUDA-enabled local env
 This is evidence that the end-to-end inference and compiler integration work for that example. It is not evidence that every generated form is correct; the held-out benchmark is the quantitative evaluation.
 
 \section{Reproducibility and artifacts}
-The repository contains the dataset generator, training script, evaluator, local demo, compiler, adapter configuration, and training metadata. Kaggle should retain and export the evaluation JSON, dataset summary (including grammar hash and held-out scenarios), and any Trainer state before its session storage is discarded. The graph script in \texttt{docs/genai-report/make\_figures.py} consumes the evaluation JSON and writes PNG figures and CSV summaries. Copy the generated PNGs into this report's \texttt{figures/} directory before uploading the project to Overleaf.
-
-\begin{table}[H]
-\centering
-\caption{Artifacts to preserve with the final submission.}
-\begin{tabularx}{\linewidth}{lX}
-\toprule
-Artifact & Purpose \\
-\midrule
-Adapter files & Learned LoRA weights and adapter configuration; requires the named base model \\
-\texttt{training\_metadata.json} & Run configuration and aggregate trainer metrics \\
-Evaluation JSON & Per-example outputs, compiler decisions, scenario/task labels, and aggregates \\
-Dataset summary and grammar hash & Split sizes, seed, held-out scenario families, grammar identity \\
-PNG charts and CSV summary & Reproducible report figures and machine-readable metrics \\
-Compiler source / build instructions & Deterministic validity judge used in dataset construction and evaluation \\
-\bottomrule
-\end{tabularx}
-\end{table}
+The repository contains the dataset generator, training script, evaluator, local demo, compiler, adapter configuration, and training metadata. Reproduction requires the named base model, learned adapter, evaluation JSON, and dataset summary with the grammar hash, seed, and held-out scenarios. The script \texttt{docs/genai-report/make\_figures.py} generates PNG charts and CSV summaries from the evaluation JSON. These artifacts and compiler build instructions should accompany the submission.
 
 \section{Limitations and next steps}
 The benchmark is synthetic and limited to one DSL and one generated test split. Field coverage is based on a regular expression and does not verify field type, labels, validation rules, conditional behavior, or whether the form fully meets a human request. Compiler acceptance verifies implementation-defined syntax and semantics, not user intent. Only one fine-tuning configuration and one base model were evaluated. The aggregate training loss is unusually low relative to this small synthetic corpus and may reflect the templated nature of the task; it must not be presented as evidence of generalization by itself. Repair success of zero for the adapted model indicates a weakness worth investigating, rather than hiding.

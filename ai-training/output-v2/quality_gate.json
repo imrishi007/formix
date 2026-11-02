@@ -1,0 +1,61 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "metric": "first_pass_compile_rate",
+      "value": 0.9696969696969697,
+      "limit": 0.9,
+      "direction": "min",
+      "passed": true
+    },
+    {
+      "metric": "compile_rate_after_repairs",
+      "value": 0.9772727272727273,
+      "limit": 0.97,
+      "direction": "min",
+      "passed": true
+    },
+    {
+      "metric": "mean_field_coverage",
+      "value": 0.9962121212121212,
+      "limit": 0.95,
+      "direction": "min",
+      "passed": true
+    },
+    {
+      "metric": "mean_field_precision",
+      "value": 0.9962121212121212,
+      "limit": 0.95,
+      "direction": "min",
+      "passed": true
+    },
+    {
+      "metric": "exact_field_set_rate",
+      "value": 0.9924242424242424,
+      "limit": 0.85,
+      "direction": "min",
+      "passed": true
+    },
+    {
+      "metric": "mean_required_pattern_coverage",
+      "value": 0.9621212121212122,
+      "limit": 0.95,
+      "direction": "min",
+      "passed": true
+    },
+    {
+      "metric": "intent_success_rate",
+      "value": 0.9545454545454546,
+      "limit": 0.85,
+      "direction": "min",
+      "passed": true
+    },
+    {
+      "metric": "unchanged_edit_rate",
+      "value": 0.0,
+      "limit": 0.05,
+      "direction": "max",
+      "passed": true
+    }
+  ]
+}

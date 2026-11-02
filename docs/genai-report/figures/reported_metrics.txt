@@ -1,0 +1,4 @@
+Evaluation set: 420 examples per model
+Base: first-pass compile 1.19%, after repairs 3.81%, field coverage 29.61%
+Fine-tuned: first-pass compile 73.33%, after repairs 73.33%, field coverage 93.10%
+Dataset split: train 1782, validation 198, test 420

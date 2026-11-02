@@ -1,0 +1,19 @@
+{
+  "base_model": "Qwen/Qwen2.5-Coder-3B-Instruct",
+  "training_examples": 3467,
+  "validation_examples": 385,
+  "epochs": 1.0,
+  "learning_rate": 8e-05,
+  "max_length": 3072,
+  "lora_rank": 32,
+  "max_runtime_minutes": 55.0,
+  "gpu": "Tesla T4",
+  "train_metrics": {
+    "train_runtime": 3428.4851,
+    "train_samples_per_second": 1.011,
+    "train_steps_per_second": 0.127,
+    "total_flos": 2.1984153846718464e+16,
+    "train_loss": 0.011216839260105749,
+    "epoch": 0.976059994231324
+  }
+}

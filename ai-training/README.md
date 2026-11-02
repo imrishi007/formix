@@ -2,6 +2,8 @@
 
 This folder contains a reproducible Kaggle workflow for fine-tuning a code model to translate requests into Forml, edit existing forms, and repair Forml rejected by the compiler. For the stronger 3B v2 run, follow [KAGGLE_V2.md](KAGGLE_V2.md).
 
+The accepted model, metrics, retained evidence, and artifact policy are documented in [FINAL_MODEL.md](FINAL_MODEL.md).
+
 ## One flow of work
 
 1. Put a writable checkout of this repository under `/kaggle/working/formix` (copy an attached, read-only Kaggle input there if needed), enable a GPU accelerator, and restart the session. Check the GPU with `!nvidia-smi` and `!python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else torch.version.cuda)"`; Kaggle's available accelerator can vary. If `nvidia-smi` is missing or CUDA is false, do not install/train yet—select GPU under Notebook settings → Accelerator, save, and restart.
