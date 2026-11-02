@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertCircle, CheckCircle2, Loader2, RefreshCw, ArrowRight } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, RefreshCw, ArrowRight } from "lucide-react";
 import {
   RenderStatements,
   type ASTNode,
@@ -12,7 +12,7 @@ import {
 import { getForm, submitForm, submitFormWithFiles, type PublicFormResponse } from "@/lib/api";
 import { useFormValidation } from "@/hooks/use-form-validation";
 import { formHasFileFields } from "@/lib/forml-validate";
-import { deriveComputedValues, numericVariables, pruneInactiveRepeatEntries } from "@/lib/forml-runtime";
+import { deriveComputedValues, formPageSteps, numericVariables, pruneInactiveRepeatEntries } from "@/lib/forml-runtime";
 
 type SubmitState = "idle" | "submitting" | "success" | "redirecting" | "error";
 
@@ -30,6 +30,7 @@ export function FormRenderer({ formId }: { formId: string }) {
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
 
   // Fetch published form schema on mount. Carrying forward ?session= keeps a
   // respondent's answers correlated across a chained (form -> next_form) flow.
@@ -64,15 +65,18 @@ export function FormRenderer({ formId }: { formId: string }) {
     setFiles((prev) => ({ ...prev, [key]: selected }));
   }, []);
 
-  // Flatten pages + root statements into a single list for rendering.
-  const allStatements = useMemo<ASTNode[]>(() => {
-    if (!schema?.compiled_schema) return [];
-    const ast = schema.compiled_schema;
-    const pages    = (ast.pages    as ASTNode[]) ?? [];
-    const stmts    = (ast.statements as ASTNode[]) ?? [];
-    const pageStmts = pages.flatMap((p) => (p.statements as ASTNode[]) ?? []);
-    return [...pageStmts, ...stmts];
-  }, [schema]);
+  const pageSteps = useMemo(
+    () => formPageSteps(schema?.compiled_schema ?? null),
+    [schema],
+  );
+  const allStatements = useMemo<ASTNode[]>(
+    () => pageSteps.flatMap((page) => page.statements),
+    [pageSteps],
+  );
+  const currentStep = pageSteps[Math.min(pageIndex, Math.max(pageSteps.length - 1, 0))];
+  const visibleStatements = currentStep?.statements ?? [];
+  const hasMultiplePages = pageSteps.length > 1;
+  const isLastPage = pageIndex >= pageSteps.length - 1;
 
   const variables = useMemo(
     () => numericVariables(schema?.compiled_schema ?? null),
@@ -86,7 +90,7 @@ export function FormRenderer({ formId }: { formId: string }) {
   // ── Validation ────────────────────────────────────────────────────────────
   // Starts clean — nothing is pre-touched, so a freshly opened (or reopened)
   // form never shows errors until the respondent actually interacts with it.
-  const { errors, touched, markTouched, validateAll, resetValidation } =
+  const { errors, touched, markTouched, validateAll, validateSubset, resetValidation } =
     useFormValidation(allStatements, effectiveValues, files);
 
   // Chained multi-form flows (Form.next_form_id) reuse this same component
@@ -98,16 +102,28 @@ export function FormRenderer({ formId }: { formId: string }) {
     if (prevFormId.current !== null && prevFormId.current !== formId) {
       setFormValues({});
       setFiles({});
+      setPageIndex(0);
       resetValidation();
     }
     prevFormId.current = formId;
   }, [formId, resetValidation]);
 
-  const errorCount = Object.keys(errors).length;
+  const errorCount = Object.keys(errors).filter((key) => touched[key]).length;
 
   const hasFileFields = useMemo(() => formHasFileFields(allStatements), [allStatements]);
 
   const hasTouched = Object.keys(touched).length > 0;
+
+  const goToNextPage = useCallback(() => {
+    if (Object.keys(validateSubset(visibleStatements)).length > 0) return;
+    setPageIndex((current) => Math.min(current + 1, pageSteps.length - 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [pageSteps.length, validateSubset, visibleStatements]);
+
+  const goToPreviousPage = useCallback(() => {
+    setPageIndex((current) => Math.max(0, current - 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!schema || submitState === "submitting") return;
@@ -231,6 +247,7 @@ export function FormRenderer({ formId }: { formId: string }) {
             onClick={() => {
               setFormValues({});
               setFiles({});
+              setPageIndex(0);
               resetValidation();
               setSubmitState("idle");
               setSubmitError(null);
@@ -279,18 +296,42 @@ export function FormRenderer({ formId }: { formId: string }) {
                   {fieldCount} {fieldCount === 1 ? "field" : "fields"}
                 </span>
               )}
+              {hasMultiplePages && (
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Step {pageIndex + 1} of {pageSteps.length}
+                </span>
+              )}
             </div>
             <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
               {formTitle}
             </h1>
+            {hasMultiplePages && (
+              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-border/70" role="progressbar" aria-valuemin={1} aria-valuemax={pageSteps.length} aria-valuenow={pageIndex + 1}>
+                <div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: `${((pageIndex + 1) / pageSteps.length) * 100}%` }} />
+              </div>
+            )}
           </div>
 
           {/* Fields */}
           <div className="space-y-5 px-7 py-7">
             <AnimatePresence>
-              {allStatements.length > 0 ? (
-                <RenderStatements
-                  stmts={allStatements}
+              {visibleStatements.length > 0 ? (
+                <motion.div
+                  key={`page-${pageIndex}`}
+                  initial={{ opacity: 0, x: 12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -12 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-5"
+                >
+                  {currentStep?.name && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Current step</p>
+                      <h2 className="mt-1 text-lg font-semibold text-foreground">{currentStep.name}</h2>
+                    </div>
+                  )}
+                  <RenderStatements
+                  stmts={visibleStatements}
                   values={effectiveValues}
                   onChange={handleChange}
                   onBlur={markTouched}
@@ -299,7 +340,8 @@ export function FormRenderer({ formId }: { formId: string }) {
                   files={files}
                   onFileChange={handleFileChange}
                   variables={variables}
-                />
+                  />
+                </motion.div>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   No fields found in this form.
@@ -341,22 +383,35 @@ export function FormRenderer({ formId }: { formId: string }) {
               )}
             </AnimatePresence>
 
-            <button
-              id="submit-form-btn"
-              type="button"
-              onClick={handleSubmit}
-              disabled={submitState === "submitting"}
-              className="w-full rounded-lg bg-accent py-3 text-sm font-semibold text-accent-foreground shadow-sm transition-all duration-150 hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {submitState === "submitting" ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Submitting…
-                </span>
-              ) : (
-                "Submit Response"
+            <div className="flex gap-2">
+              {hasMultiplePages && pageIndex > 0 && (
+                <button type="button" onClick={goToPreviousPage} className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:border-accent/40 hover:text-accent">
+                  <ArrowLeft className="h-4 w-4" /> Back
+                </button>
               )}
-            </button>
+              {!isLastPage ? (
+                <button type="button" onClick={goToNextPage} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent py-3 text-sm font-semibold text-accent-foreground shadow-sm transition-all duration-150 hover:opacity-90 active:scale-[0.99]">
+                  Continue <ArrowRight className="h-4 w-4" />
+                </button>
+              ) : (
+                <button
+                  id="submit-form-btn"
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={submitState === "submitting"}
+                  className="flex-1 rounded-lg bg-accent py-3 text-sm font-semibold text-accent-foreground shadow-sm transition-all duration-150 hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {submitState === "submitting" ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Submitting…
+                    </span>
+                  ) : (
+                    "Submit Response"
+                  )}
+                </button>
+              )}
+            </div>
           </div>
         </motion.div>
 

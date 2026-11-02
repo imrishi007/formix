@@ -29,6 +29,8 @@ export interface FormValidationState {
   /** Mark all field keys as touched and return the current error map.
    *  Use before form submission to surface all errors at once. */
   validateAll: () => Record<string, string>;
+  /** Validate one page/step and touch only its invalid fields. */
+  validateSubset: (subset: ASTNode[]) => Record<string, string>;
   /** Reset touched state (e.g. after successful submission). */
   resetValidation: () => void;
 }
@@ -67,9 +69,19 @@ export function useFormValidation(
     return errors;
   }, [errors, values]);
 
+  const validateSubset = useCallback((subset: ASTNode[]): Record<string, string> => {
+    const subsetErrors = validateForm(subset, values, files);
+    setTouched((previous) => {
+      const next = { ...previous };
+      Object.keys(subsetErrors).forEach((key) => { next[key] = true; });
+      return next;
+    });
+    return subsetErrors;
+  }, [values, files]);
+
   const resetValidation = useCallback(() => {
     setTouched({});
   }, []);
 
-  return { errors, touched, markTouched, validateAll, resetValidation };
+  return { errors, touched, markTouched, validateAll, validateSubset, resetValidation };
 }

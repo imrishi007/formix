@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { deriveComputedValues, numericVariables, pruneInactiveRepeatEntries } from "../lib/forml-runtime";
+import { deriveComputedValues, formPageSteps, numericVariables, pruneInactiveRepeatEntries } from "../lib/forml-runtime";
 
 const number = (value: number) => ({ type: "NumberLiteral", value });
 const identifier = (name: string) => ({ type: "IdentifierExpr", name });
@@ -63,5 +63,24 @@ describe("Forml computed runtime", () => {
       title_repeat_0: "Visible",
       unrelated: "keep",
     });
+  });
+});
+
+describe("Forml page runtime", () => {
+  it("creates real steps and keeps root fields on the first page", () => {
+    const steps = formPageSteps({
+      statements: [{ type: "Field", name: "application_id" }],
+      pages: [
+        { name: "Personal", statements: [{ type: "Field", name: "full_name" }] },
+        { name: "Work", statements: [{ type: "Field", name: "organization" }] },
+      ],
+    });
+    assert.deepEqual(steps.map((step) => ({
+      name: step.name,
+      fields: step.statements.map((field) => field.name),
+    })), [
+      { name: "Personal", fields: ["application_id", "full_name"] },
+      { name: "Work", fields: ["organization"] },
+    ]);
   });
 });

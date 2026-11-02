@@ -1,5 +1,25 @@
 export type FormlRuntimeNode = Record<string, unknown>;
 
+export interface FormPageStep {
+  name: string | null;
+  statements: FormlRuntimeNode[];
+}
+
+/** Convert the compiler root into respondent-facing steps without losing root fields. */
+export function formPageSteps(ast: FormlRuntimeNode | null): FormPageStep[] {
+  if (!ast) return [];
+  const root = (ast.statements as FormlRuntimeNode[]) ?? [];
+  const pages = (ast.pages as FormlRuntimeNode[]) ?? [];
+  if (pages.length === 0) return [{ name: null, statements: root }];
+  return pages.map((page, index) => ({
+    name: (page.name as string) || `Page ${index + 1}`,
+    statements: [
+      ...(index === 0 ? root : []),
+      ...((page.statements as FormlRuntimeNode[]) ?? []),
+    ],
+  }));
+}
+
 /** Evaluate the compiler's condition AST against current respondent values. */
 export function evaluateCondition(
   condition: FormlRuntimeNode,
