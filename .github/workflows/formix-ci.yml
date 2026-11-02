@@ -1,0 +1,21 @@
+name: Formix verification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Verify canonical FormL fixture with the production WASM compiler
+        run: npm run forml:check -- forml-compiler/tests/fixtures/12_book_catalog.forml

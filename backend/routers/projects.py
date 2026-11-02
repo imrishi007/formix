@@ -11,13 +11,14 @@ All routes require authentication (get_current_user dependency).
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
 from ..deps import get_form_or_403 as _get_form_or_403
 from ..deps import get_project_or_403 as _get_project_or_403
-from ..models import Form, Project, User
+from ..models import Form, Project, ProjectMember, User
 from ..schemas import (
     FormCreateInProject,
     FormCreateResponse,
@@ -55,7 +56,9 @@ def list_projects(
     """Return all projects owned by the current user, newest first."""
     return (
         db.query(Project)
-        .filter(Project.owner_id == current_user.id)
+        .outerjoin(ProjectMember, ProjectMember.project_id == Project.id)
+        .filter(or_(Project.owner_id == current_user.id, ProjectMember.user_id == current_user.id))
+        .distinct()
         .order_by(Project.created_at.desc())
         .all()
     )
@@ -88,7 +91,7 @@ def create_form_in_project(
     Create a new form inside the specified project.
     403 if the current user is not the project owner.
     """
-    _get_project_or_403(project_id, current_user, db)
+    _get_project_or_403(project_id, current_user, db, "editor")
 
     form = Form(
         project_id=project_id,
@@ -130,7 +133,7 @@ def delete_project(
     current_user: User = Depends(get_current_user),
 ):
     """Delete a project and (via cascade) all of its forms and submissions."""
-    project = _get_project_or_403(project_id, current_user, db)
+    project = _get_project_or_403(project_id, current_user, db, "owner")
     db.delete(project)
     db.commit()
 
@@ -143,7 +146,7 @@ def delete_form(
     current_user: User = Depends(get_current_user),
 ):
     """Delete a single form (and, via cascade, its submissions)."""
-    _get_project_or_403(project_id, current_user, db)
+    _get_project_or_403(project_id, current_user, db, "editor")
     form = db.query(Form).filter(Form.id == form_id, Form.project_id == project_id).first()
     if not form:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
@@ -169,7 +172,7 @@ def link_form(
         and belong to the same owner.
       - A form cannot link to itself.
     """
-    source = _get_form_or_403(form_id, current_user, db)
+    source = _get_form_or_403(form_id, current_user, db, "editor")
 
     if body.next_form_id is None:
         # Unlink
@@ -190,10 +193,10 @@ def link_form(
                             detail="Target form not found")
 
     target_project = db.query(Project).filter(Project.id == target.project_id).first()
-    if not target_project or target_project.owner_id != current_user.id:
+    if not target_project or target_project.id != source.project_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Target form does not belong to the same owner",
+            detail="Target form must belong to the same project",
         )
 
     source.next_form_id = body.next_form_id

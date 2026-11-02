@@ -43,6 +43,7 @@ import { EditorPane, type EditorControl } from "@/components/workspace/editor-pa
 import { PreviewPane } from "@/components/workspace/preview-pane";
 import { DiagnosticsPanel, type ConsoleLogEntry } from "@/components/workspace/diagnostics-panel";
 import { PublishDialog } from "@/components/workspace/publish-dialog";
+import { PlatformSettingsDialog } from "@/components/workspace/platform-settings-dialog";
 import { SubmissionsPanel } from "@/components/workspace/submissions-panel";
 import { AiPanel } from "@/components/workspace/ai-panel";
 import { RenameSuggestion } from "@/components/workspace/rename-suggestion";
@@ -456,10 +457,13 @@ export function WorkspaceShell() {
   const [publishState, setPublishState] = useState<PublishState>("idle");
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [publishedEmbed, setPublishedEmbed] = useState<string | null>(null);
+  const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
+  const [publishedEnvironment, setPublishedEnvironment] = useState<"preview" | "production">("production");
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showSubmissions, setShowSubmissions] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
-  const handlePublish = useCallback(async () => {
+  const handlePublish = useCallback(async (environment: "preview" | "production") => {
     if (!activeFormId || !wasmReady) return;
     const result = compile(source);
     if (!result.ok || !result.ast) {
@@ -471,12 +475,14 @@ export function WorkspaceShell() {
     appendLog({ level: "info", message: "Publishing…" });
     try {
       await updateForm(activeFormId, { forml_source: source, compiled_schema: result.ast });
-      const published = await publishForm(activeFormId, result.ast, window.location.origin);
+      const published = await publishForm(activeFormId, result.ast, window.location.origin, { environment });
       setPublishedUrl(published.public_url);
       setPublishedEmbed(published.embed_snippet);
+      setPublishedVersion(published.version);
+      setPublishedEnvironment(published.environment);
       setPublishState("done");
       setShowPublishModal(true);
-      appendLog({ level: "success", message: `Published → ${published.public_url}` });
+      appendLog({ level: "success", message: `Released v${published.version} to ${published.environment} → ${published.public_url}` });
       if (activeProjectId) await reloadProjectDetail(activeProjectId);
     } catch (err) {
       setPublishState("error");
@@ -553,6 +559,7 @@ export function WorkspaceShell() {
         onPublish={handlePublish}
         publishState={publishState}
         onOpenSubmissions={() => setShowSubmissions(true)}
+        onOpenSettings={() => setShowSettings(true)}
         canPublish={!!activeFormId && compilePhase === "valid"}
         aiOpen={aiOpen}
         onToggleAi={() => setAiOpen((p) => !p)}
@@ -706,8 +713,11 @@ export function WorkspaceShell() {
       <AnimatePresence>
         {showPublishModal && publishedUrl && publishedEmbed && (
           <PublishDialog
+            formId={activeFormId!}
             url={publishedUrl}
             embed={publishedEmbed}
+            version={publishedVersion ?? 0}
+            environment={publishedEnvironment}
             onClose={() => { setShowPublishModal(false); setPublishState("idle"); }}
           />
         )}
@@ -719,6 +729,13 @@ export function WorkspaceShell() {
         formTitle={activeFormTitle}
         open={showSubmissions}
         onOpenChange={setShowSubmissions}
+      />
+
+      <PlatformSettingsDialog
+        projectId={activeProjectId}
+        formId={activeFormId}
+        open={showSettings}
+        onOpenChange={setShowSettings}
       />
 
       <AlertDialog open={!!renameConfirm} onOpenChange={(o) => { if (!o) setRenameConfirm(null); }}>

@@ -13,15 +13,25 @@ projects/forms/submissions (no cross-user data is ever visible).
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import case, func
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
-from ..models import Form, Project, Submission, User
+from ..models import Form, Project, ProjectMember, Submission, User
 from ..schemas import AnalyticsDayCount, DashboardActivity, DashboardFormRow, DashboardSummary
 
 router = APIRouter(tags=["dashboard"])
+
+
+def _accessible_project_ids(db: Session, user_id: str):
+    return (
+        db.query(Project.id.label("id"))
+        .outerjoin(ProjectMember, ProjectMember.project_id == Project.id)
+        .filter(or_(Project.owner_id == user_id, ProjectMember.user_id == user_id))
+        .distinct()
+        .subquery()
+    )
 
 
 @router.get("/dashboard/summary", response_model=DashboardSummary)
@@ -30,9 +40,11 @@ def dashboard_summary(
     current_user: User = Depends(get_current_user),
 ):
     """Cross-project totals for the current user."""
+    accessible = _accessible_project_ids(db, current_user.id)
+    can_access = Project.id.in_(select(accessible.c.id))
     total_projects = (
         db.query(func.count(Project.id))
-        .filter(Project.owner_id == current_user.id)
+        .filter(can_access)
         .scalar()
     ) or 0
 
@@ -44,7 +56,7 @@ def dashboard_summary(
             func.coalesce(func.sum(case((Form.is_published == True, 1), else_=0)), 0),
         )
         .join(Project, Form.project_id == Project.id)
-        .filter(Project.owner_id == current_user.id)
+        .filter(can_access)
         .one()
     )
 
@@ -61,7 +73,7 @@ def dashboard_summary(
         )
         .join(Form, Submission.form_id == Form.id)
         .join(Project, Form.project_id == Project.id)
-        .filter(Project.owner_id == current_user.id)
+        .filter(can_access)
         .one()
     )
 
@@ -85,10 +97,12 @@ def dashboard_forms(
     annotated with its submission count and most recent response time —
     backs the dashboard's form list table (one call, no N+1 per-form fetch).
     """
+    accessible = _accessible_project_ids(db, current_user.id)
+    can_access = Project.id.in_(select(accessible.c.id))
     rows = (
         db.query(Form, Project.title)
         .join(Project, Form.project_id == Project.id)
-        .filter(Project.owner_id == current_user.id)
+        .filter(can_access)
         .order_by(Form.updated_at.desc())
         .all()
     )
@@ -101,7 +115,7 @@ def dashboard_forms(
         )
         .join(Form, Submission.form_id == Form.id)
         .join(Project, Form.project_id == Project.id)
-        .filter(Project.owner_id == current_user.id)
+        .filter(can_access)
         .group_by(Submission.form_id)
         .all()
     )
@@ -142,12 +156,14 @@ def dashboard_activity(
     """
     now = datetime.now(timezone.utc)
     start = (now - timedelta(days=29)).replace(hour=0, minute=0, second=0, microsecond=0)
+    accessible = _accessible_project_ids(db, current_user.id)
+    can_access = Project.id.in_(select(accessible.c.id))
 
     # ── forms_by_day ──────────────────────────────────────────────────────────
     form_rows = (
         db.query(Form.created_at)
         .join(Project, Form.project_id == Project.id)
-        .filter(Project.owner_id == current_user.id, Form.created_at >= start)
+        .filter(can_access, Form.created_at >= start)
         .all()
     )
     forms_by_day: dict[str, int] = {}
@@ -160,7 +176,7 @@ def dashboard_activity(
         db.query(Submission.submitted_at)
         .join(Form, Submission.form_id == Form.id)
         .join(Project, Form.project_id == Project.id)
-        .filter(Project.owner_id == current_user.id, Submission.submitted_at >= start)
+        .filter(can_access, Submission.submitted_at >= start)
         .all()
     )
     submissions_by_day: dict[str, int] = {}
@@ -184,7 +200,7 @@ def dashboard_activity(
         )
         .join(Form, Submission.form_id == Form.id)
         .join(Project, Form.project_id == Project.id)
-        .filter(Project.owner_id == current_user.id)
+        .filter(can_access)
         .group_by(Submission.form_id)
         .order_by(func.count(Submission.id).desc())
         .limit(5)

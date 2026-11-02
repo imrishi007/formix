@@ -22,6 +22,7 @@ import io
 import json
 import logging
 import re
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -46,6 +47,7 @@ from ..models import (
     DUPLICATE_MODE_SINGLE_PER_EMAIL,
     DUPLICATE_MODE_SINGLE_PER_SESSION,
     Form,
+    FormRelease,
     FormView,
     Submission,
     User,
@@ -65,6 +67,7 @@ from ..schemas import (
     SubmitRequest,
     SubmitResponse,
 )
+from ..webhooks import deliver_webhook_delivery, enqueue_webhooks
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["forms"])
@@ -229,7 +232,24 @@ def _resolve_started_at(
 DUPLICATE_EMAIL_MESSAGE = "You have already submitted this form."
 
 
-def _reject_if_duplicate(form: Form, session_id: Optional[str], data: dict, db: Session) -> None:
+def _production_release(form: Form, db: Session) -> Optional[FormRelease]:
+    if not form.active_production_release_id:
+        return None
+    return db.query(FormRelease).filter(FormRelease.id == form.active_production_release_id).first()
+
+
+def _production_schema(form: Form, db: Session) -> Any:
+    release = _production_release(form, db)
+    return release.compiled_schema if release else form.compiled_schema
+
+
+def _reject_if_duplicate(
+    form: Form,
+    session_id: Optional[str],
+    data: dict,
+    db: Session,
+    schema: Any = None,
+) -> None:
     """
     Enforce Form.duplicate_mode:
       - "multiple"            — no restriction ("None"); always passes.
@@ -263,7 +283,7 @@ def _reject_if_duplicate(form: Form, session_id: Optional[str], data: dict, db: 
 
     if mode == DUPLICATE_MODE_SINGLE_PER_EMAIL:
         email_field_name = next(
-            (f.get("name") for f in _collect_field_defs(form.compiled_schema) if f.get("fieldType") == "email"),
+            (f.get("name") for f in _collect_field_defs(schema or form.compiled_schema) if f.get("fieldType") == "email"),
             None,
         )
         if not email_field_name:
@@ -537,6 +557,7 @@ def _persist_submission(
     browser: Optional[str] = None,
     device: Optional[str] = None,
     started_at: Optional[datetime] = None,
+    schema: Any = None,
 ) -> SubmitResponse:
     """
     Shared tail end of both submit endpoints (JSON and multipart): insert the
@@ -544,6 +565,7 @@ def _persist_submission(
     """
     submission = Submission(
         form_id=form.id,
+        form_release_id=form.active_production_release_id,
         respondent_session_id=session_id,
         data=data,
         user_agent=user_agent,
@@ -555,7 +577,14 @@ def _persist_submission(
     db.commit()
     db.refresh(submission)
 
-    action = (form.compiled_schema or {}).get("action") if form.compiled_schema else None
+    delivery_ids = enqueue_webhooks(submission, db)
+    if delivery_ids:
+        db.commit()
+        for delivery_id in delivery_ids:
+            background_tasks.add_task(deliver_webhook_delivery, delivery_id)
+
+    effective_schema = schema or form.compiled_schema
+    action = (effective_schema or {}).get("action") if effective_schema else None
     webhook_url = action.get("endpoint") if isinstance(action, dict) else None
     if webhook_url:
         background_tasks.add_task(
@@ -607,11 +636,15 @@ def get_form(
         db.add(FormView(form_id=form.id, session_id=session_id))
         db.commit()
 
+    release = _production_release(form, db)
+
     return PublicFormResponse(
         id=form.id,
         title=form.title,
-        compiled_schema=form.compiled_schema,
+        compiled_schema=release.compiled_schema if release else form.compiled_schema,
         session_id=session_id,
+        release_id=release.id if release else None,
+        version=release.version if release else None,
     )
 
 
@@ -646,11 +679,15 @@ async def submit_form(
     if not form:
         raise HTTPException(status_code=404, detail="Form not found or not published")
 
-    _reject_if_duplicate(form, body.session_id, body.data, db)
+    if body.website:
+        raise HTTPException(status_code=422, detail="Submission rejected")
+
+    production_schema = _production_schema(form, db)
+    _reject_if_duplicate(form, body.session_id, body.data, db, production_schema)
 
     # ── Required-field validation ──────────────────────────────────────────────
-    if form.compiled_schema:
-        missing = _find_missing_required(form.compiled_schema, body.data)
+    if production_schema:
+        missing = _find_missing_required(production_schema, body.data)
         if missing:
             raise HTTPException(
                 status_code=422,
@@ -664,6 +701,7 @@ async def submit_form(
     return _persist_submission(
         form, body.data, body.session_id, background_tasks, db,
         user_agent=user_agent, browser=browser, device=device, started_at=started_at,
+        schema=production_schema,
     )
 
 
@@ -714,7 +752,8 @@ async def submit_form_multipart(
     session_id_raw = form_data.get("session_id")
     session_id = session_id_raw if isinstance(session_id_raw, str) and session_id_raw else None
 
-    _reject_if_duplicate(form, session_id, data, db)
+    production_schema = _production_schema(form, db)
+    _reject_if_duplicate(form, session_id, data, db, production_schema)
 
     # Optional client-supplied ISO-8601 timestamp, same semantics as
     # SubmitRequest.started_at on the JSON endpoint above.
@@ -745,8 +784,8 @@ async def submit_form_multipart(
     for field_name, metas in file_meta.items():
         data[field_name] = metas
 
-    if form.compiled_schema:
-        missing = _find_missing_required(form.compiled_schema, data)
+    if production_schema:
+        missing = _find_missing_required(production_schema, data)
         if missing:
             raise HTTPException(
                 status_code=422,
@@ -760,6 +799,7 @@ async def submit_form_multipart(
     return _persist_submission(
         form, data, session_id, background_tasks, db,
         user_agent=user_agent, browser=browser, device=device, started_at=started_at,
+        schema=production_schema,
     )
 
 
@@ -801,7 +841,7 @@ def update_form(
     `title` is optional and only ever sent when the author explicitly accepts
     the workspace's rename suggestion — never inferred or changed implicitly.
     """
-    form = get_form_or_403(form_id, current_user, db)
+    form = get_form_or_403(form_id, current_user, db, "editor")
     form.forml_source = body.forml_source
     if body.compiled_schema is not None:
         form.compiled_schema = body.compiled_schema
@@ -828,23 +868,48 @@ def publish_form(
     Returns the public URL and iframe embed snippet.
     Auth-guarded: the requesting user must own the form's parent project.
     """
-    form = get_form_or_403(form_id, current_user, db)
+    get_form_or_403(form_id, current_user, db, "editor")
+    # Serialize concurrent releases so version numbers remain monotonic.
+    form = db.query(Form).filter(Form.id == form_id).with_for_update().one()
+
+    form.release_counter += 1
+    release = FormRelease(
+        form_id=form.id,
+        version=form.release_counter,
+        forml_source=form.forml_source,
+        compiled_schema=body.compiled_schema,
+        created_by_id=current_user.id,
+        note=(body.note or "").strip()[:280] or None,
+    )
+    db.add(release)
+    db.flush()
 
     form.compiled_schema = body.compiled_schema
-    form.is_published = True
+    if body.environment == "preview":
+        form.active_preview_release_id = release.id
+        form.preview_token = form.preview_token or secrets.token_urlsafe(32)
+    else:
+        form.active_production_release_id = release.id
+        form.is_published = True
     db.commit()
 
     base = body.base_url.rstrip("/")
-    public_url = f"{base}/f/{form_id}"
+    public_url = (
+        f"{base}/preview/f/{form_id}?token={form.preview_token}"
+        if body.environment == "preview"
+        else f"{base}/f/{form_id}"
+    )
     embed_snippet = (
-        f'<iframe src="{public_url}" '
-        f'width="100%" height="600" frameborder="0" '
-        f'style="border:none;"></iframe>'
+        f'<div data-formix-form="{form_id}"></div>'
+        f'<script async src="{base}/formix-embed.js"></script>'
     )
     return PublishResponse(
         form_id=form_id,
         public_url=public_url,
         embed_snippet=embed_snippet,
+        environment=body.environment,
+        release_id=release.id,
+        version=release.version,
     )
 
 
@@ -861,7 +926,7 @@ def unpublish_form(
     back on, it doesn't lose anything.
     Auth-guarded: the requesting user must own the form's parent project.
     """
-    form = get_form_or_403(form_id, current_user, db)
+    form = get_form_or_403(form_id, current_user, db, "editor")
     form.is_published = False
     db.commit()
     return {"ok": True, "is_published": False}
@@ -906,7 +971,7 @@ def duplicate_form(
     deliberately NOT copied — a duplicate starts as a fresh, unlinked draft.
     Auth-guarded: the requesting user must own the form's parent project.
     """
-    source = get_form_or_403(form_id, current_user, db)
+    source = get_form_or_403(form_id, current_user, db, "editor")
 
     copy = Form(
         project_id=source.project_id,
@@ -1113,7 +1178,7 @@ def delete_response(
     which clears every submission at once for the "Rename & Delete" flow).
     Auth-guarded: the requesting user must own the form's parent project.
     """
-    form = get_form_or_403(form_id, current_user, db)
+    form = get_form_or_403(form_id, current_user, db, "editor")
 
     submission = (
         db.query(Submission)
@@ -1142,7 +1207,7 @@ def delete_all_responses(
     choose "Rename & Delete" — this endpoint clears the submissions first.
     Auth-guarded: the requesting user must own the form's parent project.
     """
-    form = get_form_or_403(form_id, current_user, db)
+    form = get_form_or_403(form_id, current_user, db, "editor")
 
     deleted = (
         db.query(Submission)

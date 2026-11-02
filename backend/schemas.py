@@ -104,6 +104,27 @@ class ProjectDetail(BaseModel):
         from_attributes = True
 
 
+ProjectRole = Literal["owner", "editor", "viewer"]
+
+
+class ProjectMemberCreate(BaseModel):
+    email: str
+    role: Literal["editor", "viewer"] = "viewer"
+
+
+class ProjectMemberUpdate(BaseModel):
+    role: Literal["editor", "viewer"]
+
+
+class ProjectMemberResponse(BaseModel):
+    id: str
+    user_id: str
+    email: str
+    name: Optional[str] = None
+    role: ProjectRole
+    created_at: datetime
+
+
 # ── Form create / update (within a project) ───────────────────────────────────
 
 class FormCreateInProject(BaseModel):
@@ -165,12 +186,33 @@ class FormDetail(BaseModel):
 class PublishRequest(BaseModel):
     compiled_schema: Any   # the full AST from the WASM compiler
     base_url: str          # window.location.origin from the author's browser
+    environment: Literal["preview", "production"] = "production"
+    note: Optional[str] = None
 
 
 class PublishResponse(BaseModel):
     form_id: str
     public_url: str
     embed_snippet: str
+    environment: Literal["preview", "production"] = "production"
+    release_id: str
+    version: int
+
+
+class FormReleaseResponse(BaseModel):
+    id: str
+    form_id: str
+    version: int
+    note: Optional[str] = None
+    created_by_id: str
+    created_at: datetime
+    active_in: list[Literal["preview", "production"]] = []
+
+
+class RollbackRequest(BaseModel):
+    release_id: str
+    environment: Literal["preview", "production"] = "production"
+    base_url: str
 
 
 # ── Public form (respondent view) ─────────────────────────────────────────────
@@ -180,6 +222,8 @@ class PublicFormResponse(BaseModel):
     title: str
     compiled_schema: Any
     session_id: str   # minted here if not supplied via ?session= query param
+    release_id: Optional[str] = None
+    version: Optional[int] = None
 
 
 # ── Submissions ───────────────────────────────────────────────────────────────
@@ -191,6 +235,9 @@ class SubmitRequest(BaseModel):
     # clients that track it themselves. If omitted, the server derives it from
     # FormView (first GET /forms/{id} for this session) when available.
     started_at: Optional[datetime] = None
+    # Empty for humans. Bots that blindly populate every input are rejected.
+    website: Optional[str] = None
+    resume_token: Optional[str] = None
 
 
 class SubmitResponse(BaseModel):
@@ -203,12 +250,56 @@ class SubmitResponse(BaseModel):
 class SubmissionRecord(BaseModel):
     id: str
     form_id: str
+    form_release_id: Optional[str] = None
     respondent_session_id: Optional[str] = None
     data: dict[str, Any]
     browser: Optional[str] = None
     device: Optional[str] = None
     started_at: Optional[datetime] = None
     submitted_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DraftSaveRequest(BaseModel):
+    data: dict[str, Any]
+    current_page: int = 0
+    resume_token: Optional[str] = None
+
+
+class DraftResponse(BaseModel):
+    resume_token: str
+    data: dict[str, Any]
+    current_page: int
+    expires_at: datetime
+
+
+class WebhookCreate(BaseModel):
+    url: str
+
+
+class WebhookResponse(BaseModel):
+    id: str
+    form_id: str
+    url: str
+    enabled: bool
+    secret: Optional[str] = None
+    created_at: datetime
+
+
+class WebhookDeliveryResponse(BaseModel):
+    id: str
+    webhook_id: str
+    submission_id: str
+    event: str
+    status: str
+    attempt_count: int
+    response_status: Optional[int] = None
+    last_error: Optional[str] = None
+    next_attempt_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
+    created_at: datetime
 
     class Config:
         from_attributes = True
