@@ -13,7 +13,7 @@ Tables:
 
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.types import JSON
 from sqlalchemy.orm import relationship
 
@@ -70,6 +70,7 @@ class User(Base):
     )
 
     projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
+    project_memberships = relationship("ProjectMember", back_populates="user", cascade="all, delete-orphan")
 
 
 # ── Projects ──────────────────────────────────────────────────────────────────
@@ -90,6 +91,23 @@ class Project(Base):
 
     owner = relationship("User", back_populates="projects")
     forms = relationship("Form", back_populates="project", cascade="all, delete-orphan")
+    members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
+
+
+class ProjectMember(Base):
+    """A project collaborator. The project owner is intentionally not duplicated here."""
+
+    __tablename__ = "project_members"
+    __table_args__ = (UniqueConstraint("project_id", "user_id", name="uq_project_members_project_user"),)
+
+    id         = Column(String, primary_key=True, default=_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id    = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role       = Column(String(16), nullable=False, default="viewer")  # editor | viewer
+    created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
+
+    project = relationship("Project", back_populates="members")
+    user = relationship("User", back_populates="project_memberships")
 
 
 # ── Forms ─────────────────────────────────────────────────────────────────────
@@ -119,6 +137,13 @@ class Form(Base):
     # How repeat submissions from the same respondent session are handled —
     # see DUPLICATE_MODES above. Enforced in routers/forms.py at submit time.
     duplicate_mode  = Column(String, default=DUPLICATE_MODE_MULTIPLE, nullable=False)
+    # Draft source/schema stay on this row for backwards compatibility. Each
+    # preview/production publish creates an immutable FormRelease and only the
+    # active release ids below move, which makes rollback a constant-time update.
+    preview_token                = Column(String(64), nullable=True, unique=True)
+    active_preview_release_id    = Column(String, nullable=True, index=True)
+    active_production_release_id = Column(String, nullable=True, index=True)
+    release_counter              = Column(Integer, default=0, nullable=False)
     created_at      = Column(DateTime(timezone=True), default=_now, nullable=False)
     updated_at      = Column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
 
@@ -128,6 +153,9 @@ class Form(Base):
                                foreign_keys="Submission.form_id")
     ai_messages = relationship("AiChatMessage", back_populates="form",
                                cascade="all, delete-orphan")
+    releases = relationship("FormRelease", back_populates="form", cascade="all, delete-orphan")
+    drafts = relationship("FormDraft", back_populates="form", cascade="all, delete-orphan")
+    webhooks = relationship("WebhookEndpoint", back_populates="form", cascade="all, delete-orphan")
     next_form   = relationship("Form", remote_side="Form.id", foreign_keys=[next_form_id])
 
 
@@ -157,6 +185,7 @@ class Submission(Base):
 
     id                    = Column(String, primary_key=True, default=_uuid)
     form_id               = Column(String, ForeignKey("forms.id"), nullable=False, index=True)
+    form_release_id       = Column(String, ForeignKey("form_releases.id"), nullable=True, index=True)
     respondent_session_id = Column(String, nullable=True, index=True)
     data                  = Column(JSON,   nullable=False)
     user_agent            = Column(Text,   nullable=True)
@@ -166,6 +195,79 @@ class Submission(Base):
     submitted_at          = Column(DateTime(timezone=True), default=_now, nullable=False)
 
     form = relationship("Form", back_populates="submissions", foreign_keys=[form_id])
+
+
+class FormRelease(Base):
+    """Immutable compiler-verified snapshot promoted to preview or production."""
+
+    __tablename__ = "form_releases"
+    __table_args__ = (UniqueConstraint("form_id", "version", name="uq_form_releases_form_version"),)
+
+    id              = Column(String, primary_key=True, default=_uuid)
+    form_id         = Column(String, ForeignKey("forms.id", ondelete="CASCADE"), nullable=False, index=True)
+    version         = Column(Integer, nullable=False)
+    forml_source    = Column(Text, nullable=False)
+    compiled_schema = Column(JSON, nullable=False)
+    created_by_id   = Column(String, ForeignKey("users.id"), nullable=False)
+    note            = Column(String(280), nullable=True)
+    created_at      = Column(DateTime(timezone=True), default=_now, nullable=False)
+
+    form = relationship("Form", back_populates="releases", foreign_keys=[form_id])
+
+
+class FormDraft(Base):
+    """Respondent progress stored behind a high-entropy resume token."""
+
+    __tablename__ = "form_drafts"
+
+    id           = Column(String, primary_key=True, default=_uuid)
+    form_id      = Column(String, ForeignKey("forms.id", ondelete="CASCADE"), nullable=False, index=True)
+    release_id   = Column(String, ForeignKey("form_releases.id"), nullable=True)
+    resume_token = Column(String(96), unique=True, nullable=False, index=True)
+    data         = Column(JSON, nullable=False, default=dict)
+    current_page = Column(Integer, default=0, nullable=False)
+    created_at   = Column(DateTime(timezone=True), default=_now, nullable=False)
+    updated_at   = Column(DateTime(timezone=True), default=_now, onupdate=_now, nullable=False)
+    expires_at   = Column(DateTime(timezone=True), nullable=False)
+
+    form = relationship("Form", back_populates="drafts")
+
+
+class WebhookEndpoint(Base):
+    """Author-configured destination. Secrets are used only for HMAC signatures."""
+
+    __tablename__ = "webhook_endpoints"
+
+    id         = Column(String, primary_key=True, default=_uuid)
+    form_id    = Column(String, ForeignKey("forms.id", ondelete="CASCADE"), nullable=False, index=True)
+    url        = Column(Text, nullable=False)
+    secret     = Column(String(128), nullable=False)
+    enabled    = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
+
+    form = relationship("Form", back_populates="webhooks")
+    deliveries = relationship("WebhookDelivery", back_populates="webhook", cascade="all, delete-orphan")
+
+
+class WebhookDelivery(Base):
+    """Durable delivery record; failed requests can be inspected and replayed."""
+
+    __tablename__ = "webhook_deliveries"
+
+    id              = Column(String, primary_key=True, default=_uuid)
+    webhook_id      = Column(String, ForeignKey("webhook_endpoints.id", ondelete="CASCADE"), nullable=False, index=True)
+    submission_id   = Column(String, ForeignKey("submissions.id", ondelete="CASCADE"), nullable=False, index=True)
+    event            = Column(String(64), default="submission.created", nullable=False)
+    payload          = Column(JSON, nullable=False)
+    status           = Column(String(16), default="pending", nullable=False, index=True)
+    attempt_count    = Column(Integer, default=0, nullable=False)
+    response_status  = Column(Integer, nullable=True)
+    last_error       = Column(Text, nullable=True)
+    next_attempt_at  = Column(DateTime(timezone=True), nullable=True)
+    delivered_at     = Column(DateTime(timezone=True), nullable=True)
+    created_at       = Column(DateTime(timezone=True), default=_now, nullable=False)
+
+    webhook = relationship("WebhookEndpoint", back_populates="deliveries")
 
 
 # ── AI chat history (per form, server-side) ────────────────────────────────────

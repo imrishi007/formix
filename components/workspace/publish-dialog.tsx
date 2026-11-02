@@ -6,9 +6,10 @@
  * snippet. Restyled version of the old PublishModal from demo-ide-shell.tsx.
  */
 
-import { useState } from "react";
-import { Copy, ExternalLink, Globe } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Copy, ExternalLink, Globe, History, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { getFormReleases, rollbackForm, type FormRelease } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -17,13 +18,34 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-export function PublishDialog({ url, embed, onClose }: {
+export function PublishDialog({ formId, url, embed, version = 0, environment = "production", onClose }: {
+  formId?: string;
   url: string;
   embed: string;
+  version?: number;
+  environment?: "preview" | "production";
   onClose: () => void;
 }) {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedEmbed, setCopiedEmbed] = useState(false);
+  const [releases, setReleases] = useState<FormRelease[]>([]);
+  const [rollingBack, setRollingBack] = useState<string | null>(null);
+
+  useEffect(() => { if (formId) void getFormReleases(formId).then(setReleases).catch(() => undefined); }, [formId]);
+
+  const rollback = async (release: FormRelease) => {
+    if (!formId) return;
+    setRollingBack(release.id);
+    try {
+      await rollbackForm(formId, release.id, environment, window.location.origin);
+      setReleases(await getFormReleases(formId));
+      toast.success(`Rolled ${environment} back to v${release.version}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Rollback failed");
+    } finally {
+      setRollingBack(null);
+    }
+  };
 
   const copy = (text: string, setFlag: (v: boolean) => void) => {
     navigator.clipboard.writeText(text).then(
@@ -46,8 +68,8 @@ export function PublishDialog({ url, embed, onClose }: {
               <Globe className="h-4 w-4 text-(--accent-primary)" />
             </div>
             <div>
-              <DialogTitle>Form Published</DialogTitle>
-              <DialogDescription>Share the link or embed it anywhere</DialogDescription>
+              <DialogTitle>{version > 0 ? `Release v${version} published` : "Form published"}</DialogTitle>
+              <DialogDescription>{environment === "preview" ? "Private preview environment" : "Live production environment"}</DialogDescription>
             </div>
           </div>
         </DialogHeader>
@@ -91,6 +113,30 @@ export function PublishDialog({ url, embed, onClose }: {
           <span className="sr-only" role="status" aria-live="polite">
             {copiedUrl ? "Public link copied to clipboard" : copiedEmbed ? "Embed snippet copied to clipboard" : ""}
           </span>
+
+          {releases.length > 0 && (
+            <div>
+              <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-(--ink-tertiary)">
+                <History className="h-3.5 w-3.5" /> Release history
+              </p>
+              <div className="max-h-36 divide-y divide-border overflow-y-auto rounded-lg border border-border">
+                {releases.slice(0, 8).map((release) => (
+                  <div key={release.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                    <div>
+                      <span className="font-semibold text-foreground">v{release.version}</span>
+                      <span className="ml-2 text-muted-foreground">{new Date(release.created_at).toLocaleString()}</span>
+                      {release.active_in.length > 0 && <span className="ml-2 text-accent">{release.active_in.join(" + ")}</span>}
+                    </div>
+                    {!release.active_in.includes(environment) && (
+                      <button type="button" disabled={rollingBack === release.id} onClick={() => rollback(release)} className="inline-flex items-center gap-1 text-accent hover:opacity-75 disabled:opacity-50">
+                        <RotateCcw className="h-3 w-3" /> Roll back
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <a
             href={url}

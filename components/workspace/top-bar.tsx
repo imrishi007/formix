@@ -7,7 +7,7 @@
  */
 
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Loader2, Play, CheckCircle2, AlertCircle, Globe, Inbox, LayoutDashboard, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Play, CheckCircle2, AlertCircle, Globe, Inbox, LayoutDashboard, Sparkles, Settings } from "lucide-react";
 import type { ProjectResponse } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { FormixLogo } from "@/components/brand/formix-logo";
@@ -41,6 +41,7 @@ export function TopBar({
   canPublish,
   aiOpen,
   onToggleAi,
+  onOpenSettings,
 }: {
   projects: ProjectResponse[];
   activeProjectId: string | null;
@@ -50,12 +51,13 @@ export function TopBar({
   saveState: SaveState;
   wasmReady: boolean;
   onManualCompile: () => void;
-  onPublish: () => void;
+  onPublish: (environment: "preview" | "production") => void;
   publishState: PublishState;
   onOpenSubmissions: () => void;
   canPublish: boolean;
   aiOpen: boolean;
   onToggleAi: () => void;
+  onOpenSettings: () => void;
 }) {
   const activeProject = projects.find((p) => p.id === activeProjectId);
 
@@ -151,21 +153,31 @@ export function TopBar({
           <Inbox className="h-3.5 w-3.5" /> Submissions
         </Button>
 
+        <Button variant="ghost" size="sm" onClick={onOpenSettings}>
+          <Settings className="h-3.5 w-3.5" /> Settings
+        </Button>
+
         <Button asChild variant="ghost" size="sm">
           <Link href="/dashboard">
             <LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
           </Link>
         </Button>
 
-        <Button
-          size="sm"
-          onClick={onPublish}
-          disabled={!canPublish || publishState === "publishing"}
-          title={!canPublish ? "Fix compile errors before publishing" : "Publish form"}
-        >
-          {publishState === "publishing" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
-          {publishState === "publishing" ? "Publishing…" : "Publish"}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" disabled={!canPublish || publishState === "publishing"} title={!canPublish ? "Fix compile errors before publishing" : "Create a verified release"}>
+              {publishState === "publishing" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
+              {publishState === "publishing" ? "Publishing…" : "Release"}
+              <ChevronDown className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Publish environment</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onPublish("preview")}>Preview release</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onPublish("production")}>Production release</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
       </div>
     </header>

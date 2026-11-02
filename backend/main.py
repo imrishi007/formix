@@ -19,6 +19,7 @@ Database schema:
 
 import logging
 import os
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -45,6 +46,11 @@ from .routers import dashboard as dashboard_router
 from .routers import ai as ai_router
 from .routers import profile as profile_router
 from .routers import oauth as oauth_router
+from .routers import drafts as drafts_router
+from .routers import releases as releases_router
+from .routers import teams as teams_router
+from .routers import webhooks as webhooks_router
+from .webhooks import webhook_retry_worker
 
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
@@ -92,7 +98,13 @@ async def lifespan(app: FastAPI):
         log.error("Alembic migration error (continuing): %s", exc, exc_info=True)
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    yield
+    stop_webhook_worker = asyncio.Event()
+    webhook_task = asyncio.create_task(webhook_retry_worker(stop_webhook_worker))
+    try:
+        yield
+    finally:
+        stop_webhook_worker.set()
+        await webhook_task
 
 
 app = FastAPI(
@@ -159,6 +171,10 @@ app.include_router(dashboard_router.router)   # /dashboard/summary
 app.include_router(ai_router.router)          # /ai/forms/* chat + history
 app.include_router(profile_router.router)     # /profile
 app.include_router(oauth_router.router)       # /auth/oauth/google, /auth/oauth/github
+app.include_router(releases_router.router)    # immutable releases + preview + rollback
+app.include_router(drafts_router.router)      # anonymous save-and-resume
+app.include_router(teams_router.router)       # project collaborators and roles
+app.include_router(webhooks_router.router)    # signed durable webhooks
 
 # Serves respondent-uploaded files (resumes, photos, etc.) back by their
 # stored URL — mounted after the routers so /forms/* etc. still take priority.

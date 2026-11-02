@@ -1,8 +1,23 @@
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import nextTypescript from "eslint-config-next/typescript";
 
+const coreWithAdvisoryReactRules = nextCoreWebVitals.map((config) =>
+  config.plugins?.["react-hooks"]
+    ? {
+        ...config,
+        rules: {
+          ...config.rules,
+          // These React Compiler rules are advisory for the existing
+          // load-on-mount patterns. Keep them visible without blocking CI.
+          "react-hooks/set-state-in-effect": "warn",
+          "react-hooks/preserve-manual-memoization": "warn",
+        },
+      }
+    : config,
+);
+
 const eslintConfig = [
-  ...nextCoreWebVitals,
+  ...coreWithAdvisoryReactRules,
   ...nextTypescript,
   {
     ignores: [
@@ -15,20 +30,6 @@ const eslintConfig = [
       "backend/**",
       "tests/.build/**",
     ],
-  },
-  {
-    rules: {
-      // These React Compiler rules are advisory, not correctness bugs: the
-      // "load on mount" effect (`if (!user) return; load();`) and the
-      // "sync one state field on mount" effect are idiomatic patterns used
-      // throughout this codebase (including pre-existing/vendored code this
-      // pass doesn't own). Fixing every occurrence would mean re-architecting
-      // data-loading around Suspense/`use()`, which is out of scope for a
-      // no-new-features cleanup pass. Kept as warnings so real regressions
-      // are still visible without failing `next build`.
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/preserve-manual-memoization": "warn",
-    },
   },
 ];
 

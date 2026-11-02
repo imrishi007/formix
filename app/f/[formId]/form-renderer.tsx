@@ -4,22 +4,24 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, RefreshCw, ArrowRight } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, RefreshCw, ArrowRight, Copy, Save } from "lucide-react";
 import {
   RenderStatements,
   type ASTNode,
 } from "@/components/form-renderer";
-import { getForm, submitForm, submitFormWithFiles, type PublicFormResponse } from "@/lib/api";
+import { deleteDraft, getForm, getPreviewForm, loadDraft, saveDraft, submitForm, submitFormWithFiles, type PublicFormResponse } from "@/lib/api";
 import { useFormValidation } from "@/hooks/use-form-validation";
 import { formHasFileFields } from "@/lib/forml-validate";
 import { deriveComputedValues, formPageSteps, numericVariables, pruneInactiveRepeatEntries } from "@/lib/forml-runtime";
 
 type SubmitState = "idle" | "submitting" | "success" | "redirecting" | "error";
 
-export function FormRenderer({ formId }: { formId: string }) {
+export function FormRenderer({ formId, previewToken }: { formId: string; previewToken?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const incomingSession = searchParams.get("session") ?? undefined;
+  const incomingResume = searchParams.get("resume") ?? undefined;
+  const embedded = searchParams.get("embed") === "1";
 
   const [schema,      setSchema]      = useState<PublicFormResponse | null>(null);
   const [sessionId,   setSessionId]   = useState<string | null>(null);
@@ -31,6 +33,20 @@ export function FormRenderer({ formId }: { formId: string }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
+  const [resumeToken, setResumeToken] = useState<string | undefined>(incomingResume);
+  const [draftState, setDraftState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  useEffect(() => {
+    if (!embedded || window.parent === window) return;
+    const sendHeight = () => window.parent.postMessage(
+      { type: "formix:resize", formId, height: document.documentElement.scrollHeight },
+      "*",
+    );
+    const observer = new ResizeObserver(sendHeight);
+    observer.observe(document.documentElement);
+    sendHeight();
+    return () => observer.disconnect();
+  }, [embedded, formId]);
 
   // Fetch published form schema on mount. Carrying forward ?session= keeps a
   // respondent's answers correlated across a chained (form -> next_form) flow.
@@ -39,12 +55,30 @@ export function FormRenderer({ formId }: { formId: string }) {
     setLoading(true);
     setNotFound(false);
 
-    getForm(formId, incomingSession)
+    const fetchForm = previewToken
+      ? getPreviewForm(formId, previewToken, incomingSession)
+      : getForm(formId, incomingSession);
+    fetchForm
       .then((data) => {
         if (!cancelled) {
           setSchema(data);
           setSessionId(data.session_id);
-          setLoading(false);
+          if (incomingResume && !previewToken) {
+            loadDraft(formId, incomingResume).then((draft) => {
+              if (cancelled) return;
+              setFormValues(draft.data);
+              setPageIndex(draft.current_page);
+              setDraftState("saved");
+              setLoading(false);
+            }).catch(() => {
+              if (!cancelled) {
+                setResumeToken(undefined);
+                setLoading(false);
+              }
+            });
+          } else {
+            setLoading(false);
+          }
         }
       })
       .catch((err) => {
@@ -55,7 +89,24 @@ export function FormRenderer({ formId }: { formId: string }) {
       });
 
     return () => { cancelled = true; };
-  }, [formId, incomingSession]);
+  }, [formId, incomingResume, incomingSession, previewToken]);
+
+  useEffect(() => {
+    if (!schema || previewToken || Object.keys(formValues).length === 0) return;
+    setDraftState("saving");
+    const timeout = window.setTimeout(() => {
+      saveDraft(formId, formValues, pageIndex, resumeToken)
+        .then((draft) => {
+          setResumeToken(draft.resume_token);
+          setDraftState("saved");
+          const url = new URL(window.location.href);
+          url.searchParams.set("resume", draft.resume_token);
+          window.history.replaceState({}, "", url);
+        })
+        .catch(() => setDraftState("error"));
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [formId, formValues, pageIndex, previewToken, resumeToken, schema]);
 
   const handleChange = useCallback((key: string, val: string) => {
     setFormValues((prev) => ({ ...prev, [key]: val }));
@@ -141,6 +192,7 @@ export function FormRenderer({ formId }: { formId: string }) {
         ? await submitFormWithFiles(formId, submittedValues, submittedFiles, sessionId ?? undefined)
         : await submitForm(formId, submittedValues, sessionId ?? undefined);
       setSubmissionId(result.submission_id);
+      if (resumeToken) void deleteDraft(formId, resumeToken);
 
       if (result.next_form_id) {
         setSubmitState("redirecting");
@@ -157,7 +209,7 @@ export function FormRenderer({ formId }: { formId: string }) {
           : "Submission failed — please try again.",
       );
     }
-  }, [schema, formId, allStatements, effectiveValues, files, hasFileFields, sessionId, submitState, validateAll, router]);
+  }, [schema, formId, allStatements, effectiveValues, files, hasFileFields, sessionId, submitState, validateAll, router, resumeToken]);
 
   const formTitle = schema?.compiled_schema
     ? ((schema.compiled_schema.name as string) ?? schema.title)
@@ -267,7 +319,7 @@ export function FormRenderer({ formId }: { formId: string }) {
   return (
     <div className="min-h-screen bg-background px-4 py-16">
       {/* Formix badge */}
-      <div className="fixed left-4 top-4 z-10">
+      {!embedded && <div className="fixed left-4 top-4 z-10">
         <Link
           href="/"
           className="inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-card/90 px-2.5 py-1 text-xs font-semibold text-accent shadow-sm backdrop-blur transition-colors hover:border-accent/40"
@@ -275,9 +327,14 @@ export function FormRenderer({ formId }: { formId: string }) {
           <span className="h-1.5 w-1.5 rounded-full bg-accent" />
           Formix
         </Link>
-      </div>
+      </div>}
 
       <div className="mx-auto w-full max-w-[540px]">
+        {previewToken && (
+          <div className="mb-4 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-foreground">
+            Preview environment — responses are disabled until this release is promoted to production.
+          </div>
+        )}
         {/* Form card */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -398,7 +455,7 @@ export function FormRenderer({ formId }: { formId: string }) {
                   id="submit-form-btn"
                   type="button"
                   onClick={handleSubmit}
-                  disabled={submitState === "submitting"}
+                  disabled={submitState === "submitting" || !!previewToken}
                   className="flex-1 rounded-lg bg-accent py-3 text-sm font-semibold text-accent-foreground shadow-sm transition-all duration-150 hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {submitState === "submitting" ? (
@@ -412,6 +469,21 @@ export function FormRenderer({ formId }: { formId: string }) {
                 </button>
               )}
             </div>
+            {!previewToken && resumeToken && (
+              <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <Save className="h-3.5 w-3.5" />
+                  {draftState === "saving" ? "Saving progress…" : draftState === "error" ? "Could not save progress" : "Progress saved"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(window.location.href)}
+                  className="inline-flex items-center gap-1.5 font-medium text-accent hover:opacity-75"
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copy resume link
+                </button>
+              </div>
+            )}
           </div>
         </motion.div>
 

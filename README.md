@@ -33,6 +33,10 @@ Formix is a developer tool for defining forms as code. You write a `.forml` file
 | **Live rendering** | Shared React renderer drives both the IDE preview and the public form page |
 | **Formix AI** | In-editor assistant that generates, explains, fixes, and improves FormL |
 | **Auth** | Email/password + Google/GitHub OAuth, JWT sessions, password reset via SMTP |
+| **Collaboration** | Project owner, editor, and viewer roles with existing-account invitations |
+| **Releases** | Immutable preview/production releases, shareable preview links, and one-click rollback |
+| **Delivery** | Durable signed webhooks with retry history and manual replay |
+| **Distribution** | Public links, a no-dependency embed script, save-and-resume responses, and CI validation |
 | **Backend** | FastAPI + PostgreSQL (SQLite locally), Alembic migrations, single source of truth for form submissions |
 
 ---
@@ -181,15 +185,16 @@ The frontend runs at `http://localhost:3000`.
 formix/
 ├── app/                 Next.js pages (App Router)
 │   ├── editor/          Authoring IDE — Monaco editor + live WASM preview
-│   ├── f/[formId]/      Public respondent page
+│   ├── f/[formId]/      Public respondent page with anonymous save-and-resume
+│   ├── preview/         Token-protected preview-release page
 │   └── auth/            Login, register, password reset
 ├── components/
 │   ├── form-renderer/   Shared renderer for IDE preview and public page
 │   └── brand/           Formix logo, theme toggle, profile menu
 ├── lib/                 API client, FormL helpers, AI engine
 ├── backend/             FastAPI service
-│   ├── routers/         auth.py, forms.py, projects.py, oauth.py
-│   ├── models.py        SQLAlchemy tables: users, projects, forms, submissions
+│   ├── routers/         Auth, projects, teams, forms, releases, drafts, webhooks
+│   ├── models.py        SQLAlchemy tables including releases, drafts, and deliveries
 │   └── emailer.py       Password-reset emails over SMTP
 ├── forml-compiler/      The compiler — C++20 → WebAssembly
 │   ├── src/             Lexer, parser, semantic analyzer, JSON serializer, WASM bridge
@@ -228,6 +233,16 @@ For the WASM build (and its JS glue), see `forml-compiler/build.bat`. The compil
 cd backend && python -m pytest -q
 ```
 
+FormL files can also be compiler-checked in local scripts and pull requests without starting
+the web application:
+
+```bash
+npm run forml:check -- path/to/form.forml
+```
+
+The included GitHub Actions workflow runs the frontend tests, production build, and canonical
+FormL fixture validation for every push and pull request.
+
 ---
 
 ## Deployment
@@ -235,6 +250,17 @@ cd backend && python -m pytest -q
 - **Frontend** → Vercel. Set `NEXT_PUBLIC_API_URL` to the backend origin.
 - **Backend** → Render (or any FastAPI host). Set `DATABASE_URL`, `FORMIX_JWT_SECRET`, `ALLOWED_ORIGINS`, SMTP vars, and OAuth credentials in the dashboard. Reference: [`render.yaml`](render.yaml).
 - **Database** → Neon/PostgreSQL with Alembic migrations.
+
+Apply database migrations before starting a backend version that contains new models:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+This release adds project memberships, immutable form releases, resumable drafts, configured
+webhook endpoints, and webhook-delivery history. The migration is additive; existing published
+forms continue to use their stored schema until a new production release is published.
 
 `GET /health` on the backend returns `{"status": "ok", "version": "..."}` — used to confirm deploys.
 

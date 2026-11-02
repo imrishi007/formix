@@ -149,6 +149,19 @@ export interface PublishResponse {
   form_id: string;
   public_url: string;
   embed_snippet: string;
+  environment: "preview" | "production";
+  release_id: string;
+  version: number;
+}
+
+export interface FormRelease {
+  id: string;
+  form_id: string;
+  version: number;
+  note?: string | null;
+  created_by_id: string;
+  created_at: string;
+  active_in: Array<"preview" | "production">;
 }
 
 export interface PublicFormResponse {
@@ -156,6 +169,45 @@ export interface PublicFormResponse {
   title: string;
   compiled_schema: Record<string, unknown>;
   session_id: string;
+  release_id?: string | null;
+  version?: number | null;
+}
+
+export interface SavedDraft {
+  resume_token: string;
+  data: Record<string, string>;
+  current_page: number;
+  expires_at: string;
+}
+
+export interface ProjectMember {
+  id: string;
+  user_id: string;
+  email: string;
+  name?: string | null;
+  role: "owner" | "editor" | "viewer";
+  created_at: string;
+}
+
+export interface WebhookEndpoint {
+  id: string;
+  form_id: string;
+  url: string;
+  enabled: boolean;
+  secret?: string | null;
+  created_at: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  webhook_id: string;
+  submission_id: string;
+  event: string;
+  status: string;
+  attempt_count: number;
+  response_status?: number | null;
+  last_error?: string | null;
+  created_at: string;
 }
 
 export interface SubmitResponse {
@@ -512,11 +564,73 @@ export function publishForm(
   id: string,
   compiledSchema: unknown,
   baseUrl: string,
+  options?: { environment?: "preview" | "production"; note?: string },
 ): Promise<PublishResponse> {
   return request<PublishResponse>(`/forms/${id}/publish`, {
     method: "POST",
-    body: JSON.stringify({ compiled_schema: compiledSchema, base_url: baseUrl }),
+    body: JSON.stringify({
+      compiled_schema: compiledSchema,
+      base_url: baseUrl,
+      environment: options?.environment ?? "production",
+      note: options?.note,
+    }),
   });
+}
+
+export function getFormReleases(id: string): Promise<FormRelease[]> {
+  return request<FormRelease[]>(`/forms/${id}/releases`);
+}
+
+export function rollbackForm(
+  id: string,
+  releaseId: string,
+  environment: "preview" | "production",
+  baseUrl: string,
+): Promise<PublishResponse> {
+  return request<PublishResponse>(`/forms/${id}/rollback`, {
+    method: "POST",
+    body: JSON.stringify({ release_id: releaseId, environment, base_url: baseUrl }),
+  });
+}
+
+export function getProjectMembers(projectId: string): Promise<ProjectMember[]> {
+  return request<ProjectMember[]>(`/projects/${projectId}/members`);
+}
+
+export function addProjectMember(projectId: string, email: string, role: "editor" | "viewer"): Promise<ProjectMember> {
+  return request<ProjectMember>(`/projects/${projectId}/members`, {
+    method: "POST", body: JSON.stringify({ email, role }),
+  });
+}
+
+export function updateProjectMember(projectId: string, memberId: string, role: "editor" | "viewer"): Promise<ProjectMember> {
+  return request<ProjectMember>(`/projects/${projectId}/members/${memberId}`, {
+    method: "PATCH", body: JSON.stringify({ role }),
+  });
+}
+
+export function removeProjectMember(projectId: string, memberId: string): Promise<void> {
+  return request<void>(`/projects/${projectId}/members/${memberId}`, { method: "DELETE" });
+}
+
+export function getWebhooks(formId: string): Promise<WebhookEndpoint[]> {
+  return request<WebhookEndpoint[]>(`/forms/${formId}/webhooks`);
+}
+
+export function createWebhook(formId: string, url: string): Promise<WebhookEndpoint> {
+  return request<WebhookEndpoint>(`/forms/${formId}/webhooks`, { method: "POST", body: JSON.stringify({ url }) });
+}
+
+export function deleteWebhook(formId: string, webhookId: string): Promise<void> {
+  return request<void>(`/forms/${formId}/webhooks/${webhookId}`, { method: "DELETE" });
+}
+
+export function getWebhookDeliveries(formId: string): Promise<WebhookDelivery[]> {
+  return request<WebhookDelivery[]>(`/forms/${formId}/webhook-deliveries?limit=20`);
+}
+
+export function replayWebhookDelivery(formId: string, deliveryId: string): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>(`/forms/${formId}/webhook-deliveries/${deliveryId}/replay`, { method: "POST" });
 }
 
 /** Take a form offline. Existing submissions and compiled_schema are kept —
@@ -789,6 +903,32 @@ export function updateProfile(payload: ProfileUpdate): Promise<UserResponse> {
 export function getForm(id: string, session?: string): Promise<PublicFormResponse> {
   const query = session ? `?session=${encodeURIComponent(session)}` : "";
   return request<PublicFormResponse>(`/forms/${id}${query}`);
+}
+
+export function getPreviewForm(id: string, token: string, session?: string): Promise<PublicFormResponse> {
+  const params = new URLSearchParams({ token });
+  if (session) params.set("session", session);
+  return request<PublicFormResponse>(`/forms/${id}/preview?${params}`);
+}
+
+export function saveDraft(
+  formId: string,
+  data: Record<string, string>,
+  currentPage: number,
+  resumeToken?: string,
+): Promise<SavedDraft> {
+  return request<SavedDraft>(`/forms/${formId}/draft`, {
+    method: "PUT",
+    body: JSON.stringify({ data, current_page: currentPage, resume_token: resumeToken }),
+  });
+}
+
+export function loadDraft(formId: string, resumeToken: string): Promise<SavedDraft> {
+  return request<SavedDraft>(`/forms/${formId}/draft/${encodeURIComponent(resumeToken)}`);
+}
+
+export function deleteDraft(formId: string, resumeToken: string): Promise<void> {
+  return request<void>(`/forms/${formId}/draft/${encodeURIComponent(resumeToken)}`, { method: "DELETE" });
 }
 
 /**
