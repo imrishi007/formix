@@ -1,6 +1,8 @@
 \documentclass[12pt,a4paper,oneside]{report}
 
-\usepackage[a4paper,left=32mm,right=25mm,top=25mm,bottom=25mm]{geometry}
+% The supplied university template uses an A4 sheet with a wider binding edge.
+\usepackage[a4paper,left=32.5mm,right=25.4mm,top=25.4mm,bottom=25.4mm,
+  headheight=15pt,headsep=8mm,footskip=12mm]{geometry}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{newtxtext,newtxmath}
@@ -16,6 +18,7 @@
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit}
 \usepackage{fancyhdr}
 \usepackage{titlesec}
+\usepackage{needspace}
 \usepackage[hidelinks]{hyperref}
 \usepackage{bookmark}
 \usepackage[numbers,sort&compress]{natbib}
@@ -53,16 +56,32 @@
   captionpos=b
 }
 
-\setstretch{1.5}
-\setlength{\parindent}{12mm}
-\setlength{\parskip}{0pt}
-\setlist{nosep,leftmargin=8mm}
-\captionsetup{font=small,labelfont=bf}
+\setstretch{1.42}
+\setlength{\parindent}{10mm}
+\setlength{\parskip}{2pt plus 0.5pt minus 0.5pt}
+\setlength{\emergencystretch}{2em}
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.16}
+\setlist{leftmargin=8mm,itemsep=2pt,topsep=4pt,parsep=0pt}
+\captionsetup{font=small,labelfont=bf,skip=5pt}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.82}
+\clubpenalty=10000
+\widowpenalty=10000
+\displaywidowpenalty=10000
+\raggedbottom
 \titleformat{\chapter}[display]
   {\normalfont\bfseries\centering\fontsize{16}{19}\selectfont}
   {\MakeUppercase{\chaptertitlename}\ \thechapter}{5pt}{\MakeUppercase}
 \titleformat{\section}{\normalfont\bfseries\fontsize{14}{17}\selectfont}{\thesection}{0.7em}{}
 \titleformat{\subsection}{\normalfont\bfseries\fontsize{12}{15}\selectfont}{\thesubsection}{0.7em}{}
+\titlespacing*{\chapter}{0pt}{-6pt}{18pt}
+\titlespacing*{\section}{0pt}{14pt plus 2pt minus 2pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt plus 2pt minus 1pt}{4pt}
 
 \pagestyle{fancy}
 \fancyhf{}
@@ -71,12 +90,13 @@
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0pt}
 \setlength{\headheight}{15pt}
+\urlstyle{same}
 
 \newcommand{\formix}{\textsc{Formix}}
 \newcommand{\forml}{\textsc{FormL}}
 \newcommand{\student}{Rishi Raval}
 \newcommand{\enrolment}{1AUA23BCS155}
-\newcommand{\guide}{Ms. Ambika Sewaniya}
+\newcommand{\guide}{Ms. Krishna Hingrajiya}
 \newcommand{\department}{Department of CSE (AI--ML)}
 \newcommand{\university}{Adani University}
 \newcommand{\signatureline}[1]{\par\vspace{13mm}\noindent\rule{60mm}{0.4pt}\\#1}
@@ -184,8 +204,8 @@ This is to certify that \student\ (\enrolment), a student of B.Tech CSE (AI--ML)
 Forms-as-Code Platform'' under my supervision. To the best of my knowledge, the work fulfils
 the academic requirements prescribed for the project.
 \vspace{15mm}
-\begin{tabularx}{\textwidth}{X X}
-\rule{60mm}{0.4pt} & \rule{60mm}{0.4pt}\\
+\begin{tabularx}{\textwidth}{@{}X X@{}}
+\rule{50mm}{0.4pt} & \rule{50mm}{0.4pt}\\
 \guide & Head of Department\\
 Project Guide & \department
 \end{tabularx}
@@ -459,8 +479,8 @@ errors, enabling the editor and AI repair loop to show several problems in a sin
 
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}[node distance=7mm, every node/.style={font=\small},
-stage/.style={draw,rounded corners,minimum width=26mm,minimum height=10mm,align=center,fill=blue!5}]
+\begin{tikzpicture}[node distance=5mm, every node/.style={font=\small},
+stage/.style={draw,rounded corners,minimum width=23mm,minimum height=10mm,align=center,fill=blue!5}]
 \node[stage] (source) {FormL\\source};
 \node[stage,right=of source] (lexer) {Lexer\\tokens};
 \node[stage,right=of lexer] (parser) {Parser\\AST};
@@ -629,14 +649,14 @@ accepted it. A \emph{delivery} is one persisted webhook transmission attempt rec
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[node distance=7mm, every node/.style={font=\small},
-step/.style={draw,rounded corners,fill=black!2,minimum width=43mm,minimum height=8mm,align=center},
+processstep/.style={draw,rounded corners,fill=black!2,minimum width=43mm,minimum height=8mm,align=center},
 decision/.style={draw,diamond,aspect=2.1,fill=orange!7,align=center}]
-\node[step] (prompt) {Enter prompt or edit source};
-\node[step,below=of prompt] (generate) {Generate candidate FormL};
-\node[step,below=of generate] (compile) {Compile with FormL compiler};
+\node[processstep] (prompt) {Enter prompt or edit source};
+\node[processstep,below=of prompt] (generate) {Generate candidate FormL};
+\node[processstep,below=of generate] (compile) {Compile with FormL compiler};
 \node[decision,below=9mm of compile] (valid) {Valid?};
-\node[step,below left=9mm and 14mm of valid] (repair) {Return diagnostics to repair loop};
-\node[step,below right=9mm and 14mm of valid] (preview) {Render verified preview};
+\node[processstep,below left=9mm and 14mm of valid] (repair) {Return diagnostics to repair loop};
+\node[processstep,below right=9mm and 14mm of valid] (preview) {Render verified preview};
 \draw[-{Latex}] (prompt)--(generate);
 \draw[-{Latex}] (generate)--(compile);
 \draw[-{Latex}] (compile)--(valid);
@@ -783,6 +803,39 @@ preview and public forms, reducing visual divergence.
 \end{figure}
 
 \section{Implementation}
+The implemented platform now covers the complete form lifecycle rather than only source
+editing. Table~\ref{tab:feature-inventory} records the current feature set in one place; the
+subsections that follow explain the compiler, release, integration, response, and AI paths in
+more detail.
+
+\begin{longtable}{>{\bfseries}p{0.22\textwidth}p{0.68\textwidth}}
+\caption{Current Formix feature inventory}\label{tab:feature-inventory}\\
+\toprule
+Area & Implemented capability\\
+\midrule
+\endfirsthead
+\multicolumn{2}{l}{\small\itshape Table~\thetable\ continued from the previous page}\\
+\toprule
+Area & Implemented capability\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+FormL language & Typed fields; UI metadata; validation; select, radio, checkbox, upload and URL fields; pages, sections, rows and columns; reusable groups; variables; conditionals; repeats; computed values; URL-backed options; load/change/blur/submit triggers; and submission actions.\\
+Compiler & Hand-written C++20 lexer, recursive-descent parser, AST, semantic analyser, diagnostic collection, JSON serializer, native fixtures, command-line verification, and an Emscripten WebAssembly bridge.\\
+Authoring workspace & Monaco source editor, project explorer, minimap, live compiler status, diagnostics, shared live preview, light/dark themes, documentation, examples, and keyboard-friendly editing.\\
+AI assistance & Natural-language generation, improve/fix/explain actions, multiple provider fallback, bounded compiler-guided repair, local/Kaggle demonstration flow, and the accepted Qwen2.5-Coder-3B QLoRA adapter with held-out quality-gate evidence.\\
+Identity and access & Email/password registration, sign-in, password reset, JWT sessions, Google and GitHub OAuth, linked identity handling, user profile, and project-level owner/editor/viewer permissions.\\
+Projects and forms & Project creation, multiple forms, form ordering and chaining, source persistence, compiled-schema persistence, duplication controls, and shared-project dashboard access.\\
+Release workflow & Immutable numbered releases, independent preview and production environments, token-protected preview links, production publishing, unpublishing, release history, and one-click rollback.\\
+Respondent experience & Public form URLs, client and server validation, conditional visibility, multi-page progress, repeated fields, computed answers, anonymous 30-day save-and-resume links, and submission confirmation.\\
+Distribution & Dependency-free website embed script, responsive iframe height messaging, shareable public links, and production/preview URL separation.\\
+Responses and analytics & Release-pinned submissions, response browser, individual response view, device/browser metadata, completion timing, aggregate dashboard, field summaries, trends, CSV export, and XLSX export.\\
+Integrations & Per-form webhook endpoints, event selection, one-time secret display, HMAC-SHA256 signatures, persisted attempts, exponential retry, delivery history, failure details, and manual replay.\\
+Security controls & Password hashing, central role checks, high-entropy preview/resume tokens, webhook literal-private-address rejection, submission honeypot, CORS configuration, environment-managed secrets, and one-time webhook secret disclosure.\\
+Quality and operations & Alembic migrations, PostgreSQL deployment with SQLite local checks, frontend tests, backend route/database checks, production builds, compiler fixture validation, GitHub Actions, health endpoint, Render/Vercel/Neon deployment guidance, and maintained FormL documentation.\\
+\end{longtable}
+
 \subsection{Language and Coding Characteristics}
 C++ compiler code uses value types and \texttt{std::unique\_ptr} ownership; user source errors
 are collected as diagnostics rather than exceptions. TypeScript supplies frontend contracts and
